@@ -52,8 +52,8 @@ export function isMarkdownPath(path: Path): boolean {
 }
 
 /**
- * Adds an `md` extension to any path without an extension or a path ending in
- * `.conflicted`, except to the empty path
+ * Adds an `md` extension to any path without a known extension, except to
+ * the empty path.
  * @param path The path to normalize. Cannot contain any position or header
  * addons
  */
@@ -62,27 +62,101 @@ function normalizePath(path: string): Path {
     path = path.slice(1);
   }
 
-  if (endsInExtension(path) || path === "") {
+  // PaperCutter: paths ending in .md or another known extension are left
+  // unchanged. All other paths get .md appended, including paths with periods
+  // like "foo.bar" or "multiple.periods", which are treated as page names,
+  // not file extensions.
+  //
+  // This list is the fork's escape hatch between "dotted page name" and
+  // "file with extension": anything people actually keep as a binary or
+  // attachment document belongs here (uploads, PWA capture shares and their
+  // links rely on it), while unknown suffixes stay part of the page name.
+  // Extend it when a feature starts handling a new file type.
+  const knownExtensions = [
+    // Markdown
+    ".md",
+    ".markdown",
+    // Documents
+    ".pdf",
+    ".txt",
+    ".rtf",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".ppt",
+    ".pptx",
+    ".odt",
+    ".ods",
+    ".odp",
+    ".epub",
+    // Images
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".webp",
+    ".heic",
+    ".heif",
+    ".avif",
+    ".bmp",
+    ".tif",
+    ".tiff",
+    ".ico",
+    // Audio
+    ".mp3",
+    ".wav",
+    ".aac",
+    ".m4a",
+    ".ogg",
+    ".opus",
+    ".flac",
+    // Video
+    ".mp4",
+    ".webm",
+    ".mov",
+    ".m4v",
+    ".mkv",
+    ".avi",
+    // Archives and binaries
+    ".zip",
+    ".tar",
+    ".gz",
+    ".bin",
+    ".dat",
+    ".wasm",
+    // Fonts
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+    // Data and config
+    ".log",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".csv",
+    ".tsv",
+    ".xml",
+    // Web and source
+    ".html",
+    ".css",
+    ".js",
+    ".ts",
+    ".jsx",
+    ".tsx",
+    ".vue",
+    ".svelte",
+  ];
+
+  const lowerPath = path.toLowerCase();
+  if (knownExtensions.some((ext) => lowerPath.endsWith(ext)) || path === "") {
     return path as Path;
   }
 
   return `${path}.md`;
-}
-
-function endsInExtension(path: string): boolean {
-  const dot = path.lastIndexOf(".");
-  if (dot < 1 || dot === path.length - 1) {
-    return false;
-  }
-  for (let i = dot + 1; i < path.length; i++) {
-    const c = path.charCodeAt(i);
-    const alphanumeric =
-      (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
-    if (!alphanumeric) {
-      return false;
-    }
-  }
-  return true;
 }
 
 /**
@@ -110,9 +184,16 @@ export function isValidPath(path: string): path is Path {
 
 /**
  * Shared reference grammar for parsing and validation; changes affect both.
+ *
+ * PaperCutter note: compared to upstream, the `(?!.*\.[a-zA-Z0-9]+\.md$)`
+ * lookahead was replaced with `(?!.*\/\.[^/]*\.md$)` so that markdown files
+ * with periods in their names (e.g. `foo.bookmark.md`) parse as pages; only
+ * hidden .md files (files in subdirectories starting with a dot) stay
+ * rejected. When merging upstream changes to this regex, keep that
+ * difference.
  */
 const refRegex =
-  /^(?<meta>\^)?(?<path>(?!.*\.[a-zA-Z0-9]+\.md$)(?!\/?(\.|\^))(?!.*(?:\/|^)\.{1,2}(?:\/|$)|.*\/{2})(?!.*(?:\]\]|\[\[))[^@#|<>$]*)(@(?<pos>\d+)|@[Ll](?<line>\d+)(?:[Cc](?<col>\d+))?|#\s*(?<header>.*)|\$(?<anchor>[A-Za-z_][A-Za-z0-9_/:-]*))?$/;
+  /^(?<meta>\^)?(?<path>(?!.*\/\.[^/]*\.md$)(?!\/?(\.|\^))(?!.*(?:\/|^)\.{1,2}(?:\/|$)|.*\/{2})(?!.*(?:\]\]|\[\[))[^@#|<>$]*)(@(?<pos>\d+)|@[Ll](?<line>\d+)(?:[Cc](?<col>\d+))?|#\s*(?<header>.*)|\$(?<anchor>[A-Za-z_][A-Za-z0-9_/:-]*))?$/;
 
 /**
  * Parses a reference string into a ref object.

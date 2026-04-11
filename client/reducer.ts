@@ -90,7 +90,13 @@ export default function reducer(
         }
         if (
           currentNameCandidates?.has(pageMeta.name) &&
-          parseToRef(pageMeta.name)?.path === currentPath
+          (parseToRef(pageMeta.name)?.path === currentPath ||
+            // PaperCutter: names with an unknown dot-suffix normalize to a
+            // `.md` path (`notes.v2` -> `notes.v2.md`), so a document whose
+            // name already is its verbatim path (open file `notes.v2`) would
+            // never match its meta. A name equal to the current path is a
+            // match by definition.
+            pageMeta.name === currentPath)
         ) {
           currPageMeta = pageMeta;
         }

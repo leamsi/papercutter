@@ -14,12 +14,19 @@ test("parseToRef() default cases", () => {
   expect(parseToRef("/foo")).toEqual({ path: "foo.md" });
   expect(parseToRef("foo/bar")).toEqual({ path: "foo/bar.md" });
   expect(parseToRef("foo.png")).toEqual({ path: "foo.png" });
+  // PaperCutter: capture attachments and other known document types keep
+  // their extension verbatim (see knownExtensions in ref.ts)
+  expect(parseToRef("Inbox/files/bytes.bin")).toEqual({
+    path: "Inbox/files/bytes.bin",
+  });
+  expect(parseToRef("photo.heic")).toEqual({ path: "photo.heic" });
   expect(parseToRef("foo.md")).toEqual({ path: "foo.md" });
   expect(parseToRef("foo.")).toEqual({ path: "foo..md" });
   expect(parseToRef("foo.tar.gz")).toEqual({ path: "foo.tar.gz" });
   expect(parseToRef("foo.c-d")).toEqual({ path: "foo.c-d.md" });
   expect(parseToRef("foo..")).toEqual({ path: "foo...md" });
-  expect(parseToRef(" .foo")).toEqual({ path: " .foo" });
+  // Paths without known extensions get .md appended
+  expect(parseToRef(" .foo")).toEqual({ path: " .foo.md" });
   expect(parseToRef("foo[bar")).toEqual({ path: "foo[bar.md" });
   expect(parseToRef("foo]bar")).toEqual({ path: "foo]bar.md" });
   expect(parseToRef("foo(bar")).toEqual({ path: "foo(bar.md" });
@@ -27,7 +34,12 @@ test("parseToRef() default cases", () => {
   expect(parseToRef("/bar/.../foo")).toEqual({ path: "bar/.../foo.md" });
 
   expect(parseToRef("/foo/.bar.md")).toEqual(null);
-  expect(parseToRef("foo.md.md")).toEqual(null);
+  // Markdown files with periods in the name are now allowed
+  expect(parseToRef("foo.md.md")).toEqual({ path: "foo.md.md" });
+  expect(parseToRef("foo.bookmark.md")).toEqual({ path: "foo.bookmark.md" });
+  expect(parseToRef("folder/nested.page.md")).toEqual({
+    path: "folder/nested.page.md",
+  });
   expect(parseToRef("/.../foo")).toEqual(null);
   expect(parseToRef("^.foo")).toEqual(null);
   expect(parseToRef(".foobar")).toEqual(null);
