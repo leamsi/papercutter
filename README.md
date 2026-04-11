@@ -4,7 +4,28 @@
 ![GitHub contributors](https://img.shields.io/github/contributors/silverbulletmd/silverbullet)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/silverbulletmd/silverbullet)
 
+# PaperCutter
+
+PaperCutter is a *personal* fork of [SilverBullet](https://silverbullet.md).
+Don't clone this, clone the original:
+<https://github.com/silverbulletmd/silverbullet>
+
+Things changed so far:
+
+* Hacky support for files with periods in their filenames (e.g., `foo.bookmark.md`)
+    * this was made by just ignoring some extensions (e.g., `.pdf`) or otherwise
+      appending `.md`
+
+Other things I want to change:
+
+* [ ] Make search work for markdown titles and subtitles as well as file names
+* [ ] Make link autocomplete complete markdown titles and subtitles
+* [ ] Markdown renderer outputs in-paragraph's linebreaks as html linebreaks. It
+  shouldn't! Fix this.
+
+
 # SilverBullet
+
 SilverBullet is a Programmable, Private, Browser-based, Open Source, Self Hosted, Personal Knowledge Database — a fancy term for a "notes app on steroids".
 
 _Yowza!_ That surely is a lot of adjectives to describe a browser-based Markdown editor programmable with Lua.
