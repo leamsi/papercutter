@@ -1,9 +1,3 @@
-![GitHub Repo stars](https://img.shields.io/github/stars/silverbulletmd/silverbullet)
-![Docker Pulls](https://img.shields.io/docker/pulls/zefhemel/silverbullet)
-![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/silverbulletmd/silverbullet/total)
-![GitHub contributors](https://img.shields.io/github/contributors/silverbulletmd/silverbullet)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/silverbulletmd/silverbullet)
-
 # PaperCutter
 
 PaperCutter is a *personal* fork of [SilverBullet](https://silverbullet.md).
