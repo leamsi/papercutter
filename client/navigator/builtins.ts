@@ -17,6 +17,7 @@ import {
   gitStatusView,
 } from "./views/revisions.ts";
 import { pagePicker } from "./views/pages.ts";
+import { headerPicker } from "./views/headers.ts";
 import { spaceTreeView } from "./views/space_tree.ts";
 import { tagPicker } from "./views/tags.ts";
 import type { BuiltinView } from "./views/types.ts";
@@ -31,6 +32,7 @@ async function isReadOnly(): Promise<boolean> {
 const views: Record<string, BuiltinView<any>> = {
   "std.pages": pagePicker,
   "std.anchors": anchorPicker,
+  "std.headers": headerPicker,
   "std.tags": tagPicker,
   "std.commands": commandPalette,
   "std.spaceTree": spaceTreeView,
