@@ -27,6 +27,11 @@ function recencyToBoost(lastModified: string): number {
 }
 
 // Page completion
+interface HeaderObject {
+  name: string;
+  page: string;
+}
+
 export async function pageComplete(completeEvent: CompleteEvent) {
   const isDocumentQuery = {
     objectVariable: "_",
@@ -62,6 +67,7 @@ export async function pageComplete(completeEvent: CompleteEvent) {
   const prefix = match[1];
 
   let allPages: (PageMeta | DocumentMeta)[] = [];
+  let allHeaders: HeaderObject[] = [];
 
   if (prefix.startsWith("^")) {
     // A carrot prefix means we're looking for a meta page
@@ -102,6 +108,10 @@ export async function pageComplete(completeEvent: CompleteEvent) {
           ),
       ])
     ).flat();
+
+    // PaperCutter: also complete headers, so `[[` and `[..](` offer the
+    // markdown titles and subtitles of pages across the space (like ZK's LSP).
+    allHeaders = await index.queryLuaObjects<HeaderObject>("header", {});
   }
 
   // Don't complete hidden pages
@@ -136,92 +146,130 @@ export async function pageComplete(completeEvent: CompleteEvent) {
 
   return {
     from: completeEvent.pos - prefix.length,
-    options: allPages.flatMap((pageMeta) => {
-      const completions: any[] = [];
-      const applyName = written(
-        pageMeta.name,
-        (pageMeta as PageMeta)._isAspiring === true,
-      );
-      const namePrefix = (pageMeta as PageMeta).pageDecoration?.prefix || "";
-      const cssClass = ((pageMeta as PageMeta).pageDecoration?.cssClasses || [])
-        .join(" ")
-        .replaceAll(/[^a-zA-Z0-9-_ ]/g, "");
+    options: [
+      ...allPages.flatMap((pageMeta) => {
+        const completions: any[] = [];
+        const applyName = written(
+          pageMeta.name,
+          (pageMeta as PageMeta)._isAspiring === true,
+        );
+        const namePrefix = (pageMeta as PageMeta).pageDecoration?.prefix || "";
+        const cssClass = (
+          (pageMeta as PageMeta).pageDecoration?.cssClasses || []
+        )
+          .join(" ")
+          .replaceAll(/[^a-zA-Z0-9-_ ]/g, "");
 
-      if (isWikilink) {
-        // A [[wikilink]]
-        const linkAlias = pageMeta.linkName || pageMeta.displayName;
-        const recencyBoost = pageMeta._isAspiring
-          ? -Infinity
-          : recencyToBoost(pageMeta.lastModified);
-        if (linkAlias) {
-          const decoratedName = namePrefix + linkAlias;
-          completions.push({
-            label: linkAlias,
-            displayLabel: decoratedName,
-            boost: recencyBoost,
-            apply:
-              pageMeta.tag === "template"
-                ? applyName
-                : `${applyName}|${linkAlias}`,
-            detail: pageMeta.linkName
-              ? `linkName for: ${pageMeta.name}`
-              : `displayName for: ${pageMeta.name}`,
-            type: "page",
-            cssClass,
-          });
-        }
-        if (Array.isArray(pageMeta.aliases)) {
-          for (const alias of pageMeta.aliases) {
-            const decoratedName = namePrefix + alias;
+        if (isWikilink) {
+          // A [[wikilink]]
+          const linkAlias = pageMeta.linkName || pageMeta.displayName;
+          const recencyBoost = pageMeta._isAspiring
+            ? -Infinity
+            : recencyToBoost(pageMeta.lastModified);
+          if (linkAlias) {
+            const decoratedName = namePrefix + linkAlias;
             completions.push({
-              label: `${alias}`,
+              label: linkAlias,
               displayLabel: decoratedName,
               boost: recencyBoost,
               apply:
                 pageMeta.tag === "template"
                   ? applyName
-                  : `${applyName}|${alias}`,
-              detail: `alias to: ${pageMeta.name}`,
+                  : `${applyName}|${linkAlias}`,
+              detail: pageMeta.linkName
+                ? `linkName for: ${pageMeta.name}`
+                : `displayName for: ${pageMeta.name}`,
               type: "page",
               cssClass,
             });
           }
-        }
-        const decoratedName = namePrefix + pageMeta.name;
-        completions.push({
-          label: pageMeta.name,
-          displayLabel: decoratedName,
-          boost: recencyBoost,
-          apply: applyName === pageMeta.name ? undefined : applyName,
-          detail: pageMeta.tags?.includes("non-existing")
-            ? "Linked but not created"
-            : undefined,
-          type: "page",
-          cssClass,
-        });
-      } else {
-        // A markdown link []()
-        let labelText = pageMeta.name;
-        let boost = recencyToBoost(pageMeta.lastModified);
-        // Relative path if in the same folder or a subfolder
-        if (folder.length > 0 && labelText.startsWith(folder)) {
-          labelText = labelText.slice(folder.length + 1);
-          boost += 5;
+          if (Array.isArray(pageMeta.aliases)) {
+            for (const alias of pageMeta.aliases) {
+              const decoratedName = namePrefix + alias;
+              completions.push({
+                label: `${alias}`,
+                displayLabel: decoratedName,
+                boost: recencyBoost,
+                apply:
+                  pageMeta.tag === "template"
+                    ? applyName
+                    : `${applyName}|${alias}`,
+                detail: `alias to: ${pageMeta.name}`,
+                type: "page",
+                cssClass,
+              });
+            }
+          }
+          const decoratedName = namePrefix + pageMeta.name;
+          completions.push({
+            label: pageMeta.name,
+            displayLabel: decoratedName,
+            boost: recencyBoost,
+            apply: applyName === pageMeta.name ? undefined : applyName,
+            detail: pageMeta.tags?.includes("non-existing")
+              ? "Linked but not created"
+              : undefined,
+            type: "page",
+            cssClass,
+          });
         } else {
-          // Absolute path otherwise
-          labelText = `/${labelText}`;
+          // A markdown link []()
+          let labelText = pageMeta.name;
+          let boost = recencyToBoost(pageMeta.lastModified);
+          // Relative path if in the same folder or a subfolder
+          if (folder.length > 0 && labelText.startsWith(folder)) {
+            labelText = labelText.slice(folder.length + 1);
+            boost += 5;
+          } else {
+            // Absolute path otherwise
+            labelText = `/${labelText}`;
+          }
+          completions.push({
+            label: labelText,
+            displayLabel: namePrefix + labelText,
+            boost: boost,
+            apply: labelText.includes(" ") ? `<${labelText}>` : labelText,
+            type: "page",
+            cssClass,
+          });
         }
-        completions.push({
-          label: labelText,
-          displayLabel: namePrefix + labelText,
-          boost: boost,
-          apply: labelText.includes(" ") ? `<${labelText}>` : labelText,
-          type: "page",
-          cssClass,
-        });
-      }
-      return completions;
-    }),
+        return completions;
+      }),
+      // PaperCutter: header completions. A header's target is its host page
+      // plus a `#header` ref; for wikilinks the display alias shows the
+      // header itself. Boost by the host page's recency, consistent with the
+      // page options above.
+      ...allHeaders.map((header) => {
+        // Find the page in allPages to get the lastModified timestamp
+        const page = allPages.find((p) => p.name === header.page) as PageMeta;
+        let linkTarget: string;
+        if (isWikilink) {
+          linkTarget = `${written(header.page, false)}#${header.name}|${header.name}`;
+        } else {
+          let pagePath = header.page;
+          // Relative path if in the same folder or a subfolder
+          if (folder.length > 0 && pagePath.startsWith(folder)) {
+            pagePath = pagePath.slice(folder.length + 1);
+          } else {
+            // Absolute path otherwise
+            pagePath = `/${pagePath}`;
+          }
+          linkTarget = `${pagePath}#${header.name}`;
+          // Wrap in <> if the target contains spaces
+          if (linkTarget.includes(" ")) {
+            linkTarget = `<${linkTarget}>`;
+          }
+        }
+        return {
+          label: header.name,
+          displayLabel: `${header.name} (${header.page})`,
+          type: "header",
+          apply: linkTarget,
+          detail: `Header in ${header.page}`,
+          boost: recencyToBoost(page?.lastModified ?? ""),
+        };
+      }),
+    ],
   };
 }
 

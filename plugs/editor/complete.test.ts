@@ -97,3 +97,58 @@ describe("footnoteComplete does not collide with [[^ wikilinks (#1966)", () => {
     expect(await footnoteComplete(makeCompleteEvent("[[CONFIG"))).toBeNull();
   });
 });
+
+// PaperCutter: header completions. `[[` and `[..](` completion offers the
+// markdown headers of pages across the space (like ZK's LSP).
+describe("pageComplete header completions", () => {
+  async function indexHeader(page: string, name: string): Promise<void> {
+    const obj = {
+      ref: `${page}@10`,
+      tag: "header",
+      name,
+      page,
+      pos: 10,
+      level: 1,
+      text: name,
+    };
+    await (globalThis as any).syscall("index.indexObjects", page, [obj]);
+  }
+
+  test("[[ offers headers with a wikilink target", async () => {
+    createMockSystem();
+    await indexHeader("My Page", "My Header");
+
+    const result = await pageComplete(makeCompleteEvent("[["));
+    expect(result).toBeTruthy();
+    const headerOption = result!.options.find((o) => o.type === "header");
+    expect(headerOption).toBeDefined();
+    expect(headerOption!.label).toBe("My Header");
+    expect(headerOption!.apply).toBe("My Page#My Header|My Header");
+    expect(headerOption!.detail).toBe("Header in My Page");
+  });
+
+  test("[..]( offers headers with a <>-wrapped target when it has spaces", async () => {
+    createMockSystem();
+    await indexHeader("My Page With Spaces", "My Header With Spaces");
+
+    const result = await pageComplete(
+      makeCompleteEvent("[Header](", "CurrentPage"),
+    );
+    expect(result).toBeTruthy();
+    const headerOption = result!.options.find((o) => o.type === "header");
+    expect(headerOption).toBeDefined();
+    // Should wrap in <> due to spaces
+    expect(headerOption!.apply).toBe(
+      "</My Page With Spaces#My Header With Spaces>",
+    );
+  });
+
+  test("[[^ (meta page caret) does not offer headers", async () => {
+    createMockSystem();
+    await indexHeader("My Page", "My Header");
+
+    const result = await pageComplete(makeCompleteEvent("[[^"));
+    expect(result).toBeTruthy();
+    expect(result!.options.find((o) => o.type === "header")).toBeUndefined();
+  });
+});
