@@ -568,6 +568,22 @@ export function registerEditorCommands(
     },
   });
   hook.registerCommand({
+    name: "Navigate: Header Picker",
+    // Ctrl-Shift-h is taken by "Navigate: Home"; Ctrl-Alt-h matches the
+    // Ctrl-Alt-* picker family (tags, mentions, links, commands).
+    key: "Ctrl-Alt-h",
+    menu: {
+      location: "navigate",
+      group: "2_picker",
+      order: 5,
+      label: "Header...",
+    },
+    run: async () => {
+      await client.openNavigatorView("std.headers");
+      return false;
+    },
+  });
+  hook.registerCommand({
     name: "Editor: Find in Page",
     key: "Ctrl-f",
     mac: "Cmd-f",
