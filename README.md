@@ -11,11 +11,15 @@ Things changed so far:
       appending `.md`
     * the extension list covers common attachment/media types too, so PWA
       captures and file uploads keep working
+* [*] Make search work for markdown titles and subtitles as well as file names
+    * added a new Header picker that loads file headers (using in-file order).
+    * Can also be used to navigate the local page
+* [*] Make link autocomplete complete markdown titles and subtitles
+    * `[[` and `[..](` auto complete's now include Markdown headers (like
+      [ZK](https://github.com/zk-org/zk)'s LSP).
 
 Other things I want to change:
 
-* [ ] Make search work for markdown titles and subtitles as well as file names
-* [ ] Make link autocomplete complete markdown titles and subtitles
 * [ ] Markdown renderer outputs in-paragraph's linebreaks as html linebreaks. It
   shouldn't! Fix this.
 
