@@ -156,6 +156,32 @@ export function NewUser({ onUnauthorized }: { onUnauthorized: () => void }) {
   }, []);
 
   const provider = authentication?.enabled ? authentication.active : null;
+  const emailField = (
+    <>
+      <label for="new-user-email">Email</label>
+      <Input
+        id="new-user-email"
+        type="email"
+        autocapitalize="off"
+        autocorrect="off"
+        spellcheck={false}
+        autocomplete="email"
+        value={email}
+        onInput={(event) => {
+          const value = event.currentTarget.value;
+          setEmail(value);
+          if (loginMethod === "sso" && !usernameEdited) {
+            setUsername(suggestUsernameFromEmail(value));
+          }
+        }}
+      />
+      <p class="sb-help-text">
+        {loginMethod === "sso"
+          ? "The provider must return this verified email address on first sign-in."
+          : "Used to attribute changes in revision history."}
+      </p>
+    </>
+  );
   return (
     <form
       onSubmit={(event) => {
@@ -205,6 +231,7 @@ export function NewUser({ onUnauthorized }: { onUnauthorized: () => void }) {
       {!provider && authentication && (
         <p class="sb-help-text">Enable an SSO provider to add SSO users.</p>
       )}
+      {loginMethod === "sso" && emailField}
       <label for="new-user-username">Username</label>
       <Input
         id="new-user-username"
@@ -244,28 +271,7 @@ export function NewUser({ onUnauthorized }: { onUnauthorized: () => void }) {
         value={fullName}
         onInput={(event) => setFullName(event.currentTarget.value)}
       />
-      <label for="new-user-email">Email</label>
-      <Input
-        id="new-user-email"
-        type="email"
-        autocapitalize="off"
-        autocorrect="off"
-        spellcheck={false}
-        autocomplete="email"
-        value={email}
-        onInput={(event) => {
-          const value = event.currentTarget.value;
-          setEmail(value);
-          if (loginMethod === "sso" && !usernameEdited) {
-            setUsername(suggestUsernameFromEmail(value));
-          }
-        }}
-      />
-      <p class="sb-help-text">
-        {loginMethod === "sso"
-          ? "The provider must return this verified email address on first sign-in."
-          : "Used to attribute changes in revision history."}
-      </p>
+      {loginMethod === "local" && emailField}
       <div class="row">
         <Button type="submit" variant="primary">
           Create user

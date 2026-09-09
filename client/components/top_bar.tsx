@@ -1,8 +1,8 @@
+import type { Notification } from "@silverbulletmd/silverbullet/type/client";
+import { Input } from "@silverbulletmd/silverbullet/ui";
 import type { ComponentChildren, FunctionalComponent } from "preact";
 import { createPortal } from "preact/compat";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import type { Notification } from "@silverbulletmd/silverbullet/type/client";
-import { Input } from "@silverbulletmd/silverbullet/ui";
 
 export type ActionButton = {
   icon: FunctionalComponent<any>;
