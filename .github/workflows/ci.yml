@@ -106,10 +106,7 @@ jobs:
           npm run check
           npm test
 
-  # Core's Rust suite, including the headless-Chrome runtime e2e tests. The
-  # client bundle has to exist on disk first: rust-embed serves from disk in
-  # debug builds, so without it the server has no client to hand the headless
-  # page.
+  # Debug rust-embed serves from disk, so runtime tests need a built client bundle.
   test-rust:
     runs-on: ubuntu-latest
     steps:
@@ -135,11 +132,7 @@ jobs:
       - name: Install Playwright browser (chromium)
         run: npx playwright install --with-deps chromium
 
-      # The runtime tests skip themselves when no browser is found, which would
-      # silently gut this job. Point them (and the servers they spawn) at
-      # Playwright's chromium explicitly: their skip guard reads CHROMIUM_PATH
-      # with the same precedence the server does, and refuses to skip at all
-      # when CI is set — so this job can no longer pass having exercised nothing.
+      # Point runtime tests at Playwright Chromium; CI must fail rather than skip them.
       - name: Resolve chromium path
         run: |
           echo "CHROMIUM_PATH=$(node -e "console.log(require('@playwright/test').chromium.executablePath())")" >> "$GITHUB_ENV"
@@ -166,9 +159,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Debug server (serves the client bundle from disk) — far faster to compile
-      # than the release build. The embedded-bundle path is covered by the
-      # separate test-e2e-release job below.
+      # Debug serves assets from disk; test-e2e-release covers embedded assets.
       - name: Build (debug server + client bundle)
         run: make build-e2e
 
@@ -228,9 +219,7 @@ jobs:
           path: test-results/
           retention-days: 7
 
-  # Compilation doesn't depend on the test suites, so the build runs in parallel
-  # with them instead of after — the test gate is enforced on the *publishing*
-  # jobs (release/docker) below, which keeps "nothing ships if tests fail".
+  # Compile alongside tests; publishing jobs enforce the test gate.
   build:
     needs: [config]
     if: needs.config.outputs.publish == 'true'
