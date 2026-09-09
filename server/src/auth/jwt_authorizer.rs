@@ -78,8 +78,11 @@ impl RequestAuthorizer for JwtAuthorizer {
             }
         }
         let cookie_name = scoped_auth_cookie_name(&request_host(ctx.headers), &self.url_prefix);
-        let candidate = cookie_value(ctx.headers, &cookie_name).or(bearer);
-        let claims = self.authenticator.verify_jwt(&candidate?).ok()?;
+        let claims = if let Some(cookie) = cookie_value(ctx.headers, &cookie_name) {
+            self.authenticator.verify_browser_jwt(&cookie).ok()?
+        } else {
+            self.authenticator.verify_jwt(&bearer?).ok()?
+        };
         if claims.token_use.is_some() {
             return None;
         }
@@ -208,7 +211,6 @@ mod tests {
         let auth = std::sync::Arc::new(Authenticator::from_secret_bytes(vec![3u8; 32], "h".into()));
         let token = auth.issue_jwt("alice", 3600).unwrap();
         let a = JwtAuthorizer::with_prefix(auth, String::new(), "/work".into());
-        // Scoped cookie: accepted.
         let mut h = HeaderMap::new();
         h.insert("host", HeaderValue::from_static("localhost"));
         h.insert(
@@ -216,7 +218,6 @@ mod tests {
             HeaderValue::from_str(&format!("auth_localhost_work={token}")).unwrap(),
         );
         assert!(a.is_authorized(&ctx(&h)));
-        // Unscoped cookie: rejected by the prefixed authorizer.
         let mut h2 = HeaderMap::new();
         h2.insert("host", HeaderValue::from_static("localhost"));
         h2.insert(
@@ -379,5 +380,88 @@ mod tests {
             })
             .expect("should authorize");
         assert_eq!(outcome.username, None);
+    }
+    #[test]
+    fn browser_sessions_reject_legacy_cookies_but_accept_device_bearers() {
+        let dir = tempfile::tempdir().unwrap();
+        let auth = Arc::new(
+            Authenticator::from_secret_bytes(vec![3u8; 32], "h".into()).with_browser_sessions(
+                Arc::new(crate::auth::BrowserSessions::load(dir.path()).unwrap()),
+            ),
+        );
+        let token = auth
+            .issue_token("river", None, None, Some("space-a"), 3600)
+            .unwrap();
+        let a = JwtAuthorizer::new(auth, String::new()).for_space("space-a");
+        let mut h = HeaderMap::new();
+        h.insert("host", "localhost".parse().unwrap());
+        h.insert("cookie", format!("auth_localhost={token}").parse().unwrap());
+        assert!(!a.is_authorized(&ctx(&h)));
+        h.remove("cookie");
+        h.insert("authorization", format!("Bearer {token}").parse().unwrap());
+        assert!(a.is_authorized(&ctx(&h)));
+    }
+
+    #[test]
+    fn browser_sessions_logout_revokes_all_hostnames_and_keeps_other_credentials() {
+        let dir = tempfile::tempdir().unwrap();
+        let auth = Arc::new(
+            Authenticator::from_secret_bytes(vec![3u8; 32], "h".into()).with_browser_sessions(
+                Arc::new(crate::auth::BrowserSessions::load(dir.path()).unwrap()),
+            ),
+        );
+        let first = auth
+            .issue_browser_jwt("river", Some("epoch-1".into()), None, 3600)
+            .unwrap();
+        let id = auth.verify_browser_jwt(&first).unwrap().session_id.unwrap();
+        let second_host = auth
+            .issue_browser_jwt_for_session("river", Some("epoch-1".into()), &id, 7200)
+            .unwrap();
+        assert!(auth.verify_jwt(&second_host).unwrap().exp <= auth.verify_jwt(&first).unwrap().exp);
+        let other_browser = auth
+            .issue_browser_jwt("river", Some("epoch-1".into()), None, 3600)
+            .unwrap();
+        let device = auth
+            .issue_token("river", Some("epoch-1".into()), None, Some("notes"), 3600)
+            .unwrap();
+        let epoch = Arc::new(std::sync::RwLock::new("epoch-1".to_string()));
+        let current_epoch = epoch.clone();
+        let authorizer = JwtAuthorizer::with_filter(
+            auth.clone(),
+            "api-secret".into(),
+            String::new(),
+            Box::new(move |claims| {
+                claims.credential_version.as_deref() == Some(current_epoch.read().unwrap().as_str())
+            }),
+        )
+        .for_space("notes");
+        let cookie_headers = |host: &str, token: &str| {
+            let mut h = HeaderMap::new();
+            h.insert("host", host.parse().unwrap());
+            h.insert(
+                "cookie",
+                format!("{}={token}", scoped_auth_cookie_name(host, ""))
+                    .parse()
+                    .unwrap(),
+            );
+            h
+        };
+        let first_headers = cookie_headers("login.example", &first);
+        let second_headers = cookie_headers("notes.example", &second_host);
+        let other_headers = cookie_headers("notes.example", &other_browser);
+        assert!(authorizer.is_authorized(&ctx(&first_headers)));
+        assert!(authorizer.is_authorized(&ctx(&second_headers)));
+        auth.revoke_browser_jwt(&first).unwrap();
+        assert!(!authorizer.is_authorized(&ctx(&first_headers)));
+        assert!(!authorizer.is_authorized(&ctx(&second_headers)));
+        assert!(authorizer.is_authorized(&ctx(&other_headers)));
+        let mut bearer = HeaderMap::new();
+        bearer.insert("authorization", format!("Bearer {device}").parse().unwrap());
+        assert!(authorizer.is_authorized(&ctx(&bearer)));
+        *epoch.write().unwrap() = "epoch-2".into();
+        assert!(!authorizer.is_authorized(&ctx(&other_headers)));
+        assert!(!authorizer.is_authorized(&ctx(&bearer)));
+        bearer.insert("authorization", "Bearer api-secret".parse().unwrap());
+        assert!(authorizer.is_authorized(&ctx(&bearer)));
     }
 }

@@ -33,6 +33,7 @@ uuid = { workspace = true }
 tower = { version = "0.5", features = ["util"] }
 notify = { workspace = true }
 tokio-stream = { workspace = true }
+openidconnect = { version = "4", default-features = false, features = ["reqwest", "rustls-tls"] }
 
 tempfile = "3"
 

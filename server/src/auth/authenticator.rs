@@ -1,4 +1,6 @@
+use crate::auth::BrowserSessions;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
@@ -9,6 +11,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     pub username: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub credential_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -22,6 +26,7 @@ pub struct Claims {
 /// Issues and verifies HS256 session tokens with a persisted signing secret.
 pub struct Authenticator {
     secret: Vec<u8>,
+    browser_sessions: Option<Arc<BrowserSessions>>,
     /// Base64 of 16 random bytes; stable across auth-config changes. Handed to
     /// the login page so the browser can derive a content-encryption key.
     salt: String,
@@ -31,8 +36,7 @@ pub struct Authenticator {
     pub(crate) config_hash: String,
 }
 
-/// On-disk shape of `.silverbullet.auth.json` (modernized; not compatible with
-/// the legacy format — existing deployments re-authenticate once).
+/// Persisted signing secret, configuration stamp, and encryption salt.
 #[derive(serde::Serialize, serde::Deserialize)]
 struct AuthFile {
     /// Base64 of the raw HS256 secret bytes.
@@ -62,9 +66,94 @@ impl Authenticator {
     pub fn from_parts(secret: Vec<u8>, salt: String, config_hash: String) -> Self {
         Self {
             secret,
+            browser_sessions: None,
             salt,
             config_hash,
         }
+    }
+
+    pub fn with_browser_sessions(mut self, sessions: Arc<BrowserSessions>) -> Self {
+        self.browser_sessions = Some(sessions);
+        self
+    }
+
+    pub fn browser_sessions(&self) -> Option<&Arc<BrowserSessions>> {
+        self.browser_sessions.as_ref()
+    }
+
+    pub fn verify_browser_jwt(&self, token: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
+        let claims = self.verify_jwt(token)?;
+        if claims.token_use.is_some()
+            || claims.space.is_some()
+            || (self.browser_sessions.is_some() && claims.session_id.is_none())
+        {
+            return Err(jsonwebtoken::errors::ErrorKind::InvalidToken.into());
+        }
+        Ok(claims)
+    }
+
+    pub fn issue_browser_jwt(
+        &self,
+        username: &str,
+        credential_version: Option<String>,
+        provider: Option<&str>,
+        expiry_secs: u64,
+    ) -> Result<String, jsonwebtoken::errors::Error> {
+        let exp = now_secs().saturating_add(expiry_secs);
+        let Some(sessions) = &self.browser_sessions else {
+            return self.issue_jwt_with_version_and_exp(username, credential_version, exp as usize);
+        };
+        let id = sessions.issue(username, provider, exp).map_err(|error| {
+            tracing::error!("could not persist browser session: {error}");
+            jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidToken)
+        })?;
+        self.issue_browser_jwt_for_session(username, credential_version, &id, expiry_secs)
+    }
+
+    pub fn issue_browser_jwt_for_session(
+        &self,
+        username: &str,
+        credential_version: Option<String>,
+        session_id: &str,
+        expiry_secs: u64,
+    ) -> Result<String, jsonwebtoken::errors::Error> {
+        let expires_at = self
+            .browser_sessions
+            .as_ref()
+            .and_then(|sessions| sessions.expires_at(session_id, username))
+            .ok_or(jsonwebtoken::errors::ErrorKind::InvalidToken)?;
+        let claims = Claims {
+            username: username.into(),
+            credential_version,
+            session_id: Some(session_id.into()),
+            token_use: None,
+            space: None,
+            exp: expires_at.min(now_secs().saturating_add(expiry_secs)) as usize,
+        };
+        encode(
+            &Header::new(Algorithm::HS256),
+            &claims,
+            &EncodingKey::from_secret(&self.secret),
+        )
+    }
+
+    pub fn revoke_browser_jwt(&self, token: &str) -> std::io::Result<()> {
+        let Some(sessions) = &self.browser_sessions else {
+            return Ok(());
+        };
+        let Ok(claims) = decode::<Claims>(
+            token,
+            &DecodingKey::from_secret(&self.secret),
+            &Validation::new(Algorithm::HS256),
+        ) else {
+            return Ok(());
+        };
+        if claims.claims.token_use.is_none() && claims.claims.space.is_none() {
+            if let Some(id) = claims.claims.session_id {
+                sessions.revoke(&id)?;
+            }
+        }
+        Ok(())
     }
 
     /// The base64 encryption salt handed to the login page.
@@ -112,6 +201,7 @@ impl Authenticator {
     ) -> Result<String, jsonwebtoken::errors::Error> {
         let claims = Claims {
             username: username.to_string(),
+            session_id: None,
             credential_version,
             token_use: None,
             space: None,
@@ -134,6 +224,7 @@ impl Authenticator {
     ) -> Result<String, jsonwebtoken::errors::Error> {
         let claims = Claims {
             username: username.to_string(),
+            session_id: None,
             credential_version,
             token_use: token_use.map(str::to_string),
             space: space.map(str::to_string),
@@ -169,6 +260,15 @@ impl Authenticator {
             &DecodingKey::from_secret(&self.secret),
             &Validation::new(Algorithm::HS256),
         )?;
+        if let Some(id) = &data.claims.session_id {
+            if !self
+                .browser_sessions
+                .as_ref()
+                .is_some_and(|sessions| sessions.is_active(id, &data.claims.username))
+            {
+                return Err(jsonwebtoken::errors::ErrorKind::InvalidToken.into());
+            }
+        }
         Ok(data.claims)
     }
 
@@ -345,7 +445,6 @@ mod tests {
     #[test]
     fn expired_token_is_rejected() {
         let a = fresh();
-        // exp in the past.
         let token = a.issue_jwt_with_exp("bob", 1_000).unwrap();
         assert!(a.verify_jwt(&token).is_err());
     }
@@ -372,8 +471,6 @@ mod tests {
         let c = cfg("t1");
         let a1 = Authenticator::load_or_init(dir.path(), &c).unwrap();
         let token = a1.issue_jwt("alice", 3600).unwrap();
-        // Reload with the SAME config: the persisted secret is reused, so the
-        // earlier token still verifies.
         let a2 = Authenticator::load_or_init(dir.path(), &c).unwrap();
         assert_eq!(a2.verify_jwt(&token).unwrap().username, "alice");
     }
@@ -383,8 +480,6 @@ mod tests {
         let dir = tempdir().unwrap();
         let a1 = Authenticator::load_or_init(dir.path(), &cfg("t1")).unwrap();
         let token = a1.issue_jwt("alice", 3600).unwrap();
-        // Reload with a DIFFERENT config (token changed) → secret regenerated →
-        // the old token no longer verifies.
         let a2 = Authenticator::load_or_init(dir.path(), &cfg("t2")).unwrap();
         assert!(a2.verify_jwt(&token).is_err());
     }
@@ -434,10 +529,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let a1 = Authenticator::load_or_init_with_stamp(dir.path(), "stamp1").unwrap();
         let jwt = a1.issue_jwt("u", 3600).unwrap();
-        // Same stamp: secret survives.
         let a2 = Authenticator::load_or_init_with_stamp(dir.path(), "stamp1").unwrap();
         assert!(a2.verify_jwt(&jwt).is_ok());
-        // Changed stamp: sessions invalidated, salt preserved.
         let a3 = Authenticator::load_or_init_with_stamp(dir.path(), "stamp2").unwrap();
         assert!(a3.verify_jwt(&jwt).is_err());
         assert_eq!(a2.salt(), a3.salt());
@@ -465,5 +558,37 @@ mod tests {
         assert_eq!(a.csrf_token("session-value"), a.csrf_token("session-value"));
         assert_ne!(a.csrf_token("session-value"), a.csrf_token("other"));
         assert_ne!(a.csrf_token("session-value"), b.csrf_token("session-value"));
+    }
+    #[test]
+    fn browser_sessions_revoke_shared_ids_without_invalidating_device_tokens() {
+        let dir = tempdir().unwrap();
+        let sessions = Arc::new(BrowserSessions::load(dir.path()).unwrap());
+        let a = fresh().with_browser_sessions(sessions);
+        let first = a
+            .issue_browser_jwt("river", Some("epoch-1".into()), None, 3600)
+            .unwrap();
+        let other = a
+            .issue_browser_jwt("river", Some("epoch-1".into()), None, 3600)
+            .unwrap();
+        let device = a
+            .issue_token("river", Some("epoch-1".into()), None, Some("space-a"), 3600)
+            .unwrap();
+        assert!(a.verify_browser_jwt(&first).unwrap().session_id.is_some());
+        a.revoke_browser_jwt(&first).unwrap();
+        assert!(a.verify_jwt(&first).is_err());
+        assert!(a.verify_browser_jwt(&other).is_ok());
+        assert!(a.verify_jwt(&device).is_ok());
+    }
+
+    #[test]
+    fn browser_sessions_require_ids_only_for_account_managed_cookies() {
+        let dir = tempdir().unwrap();
+        let legacy = fresh();
+        let token = legacy.issue_jwt("river", 3600).unwrap();
+        assert!(legacy.verify_browser_jwt(&token).is_ok());
+        let managed =
+            fresh().with_browser_sessions(Arc::new(BrowserSessions::load(dir.path()).unwrap()));
+        assert!(managed.verify_browser_jwt(&token).is_err());
+        assert!(managed.verify_jwt(&token).is_ok());
     }
 }

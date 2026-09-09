@@ -160,8 +160,10 @@ fn append_cookie(resp: &mut Response, name: &str, value: &str, opts: &CookieOpti
     }
 }
 
-/// `GET /.logout` — clear the session + refresh cookies and 302 to `/.auth`.
 pub async fn handle_logout(State(state): State<Arc<ServerState>>, headers: HeaderMap) -> Response {
+    if !crate::auth::browser_sessions::logout_allowed(&headers) {
+        return (StatusCode::FORBIDDEN, "Cross-origin logout refused").into_response();
+    }
     let page_prefix = state
         .login
         .as_ref()
@@ -174,6 +176,17 @@ pub async fn handle_logout(State(state): State<Arc<ServerState>>, headers: Heade
         .unwrap_or_else(|| state.host_url_prefix.clone());
 
     let host = request_host(&headers);
+    if let Some(login) = &state.login {
+        if let Some(token) = crate::auth::cookie_value(
+            &headers,
+            &crate::auth::scoped_auth_cookie_name(&host, &session_prefix),
+        ) {
+            if let Err(error) = login.revoke_browser_session(&token) {
+                tracing::error!("could not revoke browser session: {error}");
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Could not sign out").into_response();
+            }
+        }
+    }
     let secure = is_secure_request(&headers);
     let del = CookieOptions {
         path: format!("{session_prefix}/"),
@@ -223,8 +236,6 @@ mod tests {
         assert!(html.contains(r#"<base href="/prefix/""#), "{html}");
         assert!(html.contains("My Space"), "space name rendered: {html}");
 
-        // The page is a Preact bundle now; its config crosses over as data
-        // attributes on #root.
         assert!(
             html.contains(r#"data-space-name="My Space""#),
             "space name attribute: {html}"
@@ -464,5 +475,31 @@ mod tests {
             "cleared: {cookie}"
         );
         assert!(cookie.contains("Max-Age=0"));
+    }
+    #[tokio::test]
+    async fn logout_rejects_cross_origin_requests() {
+        for (name, value) in [
+            ("origin", "https://elsewhere.example"),
+            ("referer", "https://elsewhere.example/link"),
+            ("sec-fetch-site", "cross-site"),
+            ("sec-fetch-site", "same-site"),
+        ] {
+            let response = crate::build_router(auth_state("river:secret"))
+                .oneshot(
+                    Request::builder()
+                        .uri("/.logout")
+                        .header("host", "localhost:3000")
+                        .header(name, value)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            assert!(response
+                .headers()
+                .get(axum::http::header::SET_COOKIE)
+                .is_none());
+        }
     }
 }

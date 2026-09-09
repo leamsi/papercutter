@@ -59,6 +59,11 @@ fn session_username(
     path: &str,
     query: Option<&str>,
 ) -> Option<String> {
+    let login = state.login.as_ref()?;
+    let token = session_cookie(headers, login);
+    login.verify_browser_session(&token)?;
+    let mut browser_headers = headers.clone();
+    browser_headers.remove(axum::http::header::AUTHORIZATION);
     state
         .authorizer
         .as_ref()?
@@ -66,7 +71,7 @@ fn session_username(
             method: &axum::http::Method::GET,
             path,
             query,
-            headers,
+            headers: &browser_headers,
         })?
         .username
 }
@@ -190,11 +195,8 @@ pub async fn handle_authorize_post(
     let Some(login) = state.login.clone() else {
         return (StatusCode::FORBIDDEN, "Authentication not enabled").into_response();
     };
-    // The code store's `issue` performs no redirect_uri validation of its own,
-    // and `consume` only exact-matches whatever was stored here — so the
-    // loopback-only guarantee holds end-to-end only if this handler validates
-    // before constructing the `CodeGrant`. `check_params` (shared with the GET
-    // path) is what enforces that.
+    // The code store only exact-matches redirect_uri; validate the loopback
+    // constraint here before issuing a grant.
     let params = AuthorizeParams {
         client_id: form.client_id.clone(),
         response_type: "code".into(),
@@ -699,5 +701,22 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["error"], "unsupported_grant_type");
+    }
+    #[tokio::test]
+    async fn device_bearer_cannot_authorize_a_new_device_without_browser_cookie() {
+        let (state, cookie) = login_state();
+        let token = cookie.split_once('=').unwrap().1;
+        let response = crate::build_router(state)
+            .oneshot(
+                Request::builder()
+                    .uri(authorize_url(CB))
+                    .header("host", "localhost")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FOUND);
     }
 }

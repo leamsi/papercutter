@@ -132,19 +132,59 @@ impl LoginManager {
         username: &str,
         remember: bool,
     ) -> Result<(String, u64), jsonwebtoken::errors::Error> {
+        self.issue_session_with_provider(username, remember, None)
+    }
+
+    pub fn issue_provider_session(
+        &self,
+        username: &str,
+        remember: bool,
+        provider: &str,
+    ) -> Result<(String, u64), jsonwebtoken::errors::Error> {
+        self.issue_session_with_provider(username, remember, Some(provider))
+    }
+
+    fn issue_session_with_provider(
+        &self,
+        username: &str,
+        remember: bool,
+        provider: Option<&str>,
+    ) -> Result<(String, u64), jsonwebtoken::errors::Error> {
         let secs = if remember {
             self.remember_me_hours.saturating_mul(3600)
         } else {
             SESSION_EXPIRY_SECS
         };
-        let jwt = match &self.credential_version {
-            Some(provider) => {
-                self.authenticator
-                    .issue_jwt_with_version(username, provider(username), secs)?
-            }
-            None => self.authenticator.issue_jwt(username, secs)?,
-        };
+        let version = self
+            .credential_version
+            .as_ref()
+            .map(|provider| provider(username));
+        let jwt = self
+            .authenticator
+            .issue_browser_jwt(username, version, provider, secs)?;
+        if let Err(error) = self.verifier.record_login(username) {
+            tracing::warn!("Could not persist last login: {error}");
+        }
         Ok((jwt, secs))
+    }
+
+    pub fn revoke_browser_session(&self, token: &str) -> std::io::Result<()> {
+        self.authenticator.revoke_browser_jwt(token)
+    }
+
+    pub fn verify_browser_session(
+        &self,
+        token: &str,
+    ) -> Option<crate::auth::authenticator::Claims> {
+        let claims = self.authenticator.verify_browser_jwt(token).ok()?;
+        let current = self
+            .credential_version
+            .as_ref()
+            .map(|provider| provider(&claims.username));
+        if current != claims.credential_version {
+            return None;
+        }
+        Some(claims)
     }
 
     pub fn issue_device_tokens(

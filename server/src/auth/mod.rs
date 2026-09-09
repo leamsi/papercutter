@@ -6,19 +6,23 @@
 pub mod access;
 pub mod authenticator;
 pub mod authorizer;
+pub mod browser_sessions;
 pub mod config;
 pub mod cookie;
+pub mod handoff;
 pub mod headless_token;
 pub mod identity;
 pub mod jwt_authorizer;
 pub mod lockout;
 pub mod login;
 pub mod oauth;
+pub mod oidc;
 pub mod password;
 
 pub use access::{AccessLevel, AccessPolicy, AnonymousFallbackAuthorizer, AuthorizedPolicy};
 pub use authenticator::{Authenticator, AUTH_FILE_NAME, MULTI_AUTH_FILE_NAME};
 pub use authorizer::{Actor, AuthContext, AuthOutcome, RequestAuthorizer};
+pub use browser_sessions::BrowserSessions;
 pub use config::AuthConfig;
 pub use cookie::{
     auth_cookie_name, cookie_value, is_secure_request, request_host, scoped_auth_cookie_name,
@@ -36,6 +40,10 @@ pub use oauth::{AuthCodeStore, CodeGrant, OAuthError, CLIENT_ID};
 /// multi-user `users.json`-backed store, without knowing which.
 pub trait Credentials: Send + Sync {
     fn verify(&self, username: &str, password: &str) -> bool;
+
+    fn record_login(&self, _username: &str) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 impl Credentials for AuthConfig {
