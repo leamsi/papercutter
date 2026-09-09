@@ -43,17 +43,8 @@ impl SpaceIndexState {
         session: SessionPolicy,
         client_bundle: Box<dyn SpacePrimitives>,
     ) -> Self {
-        // Server-wide, not per-account: `LockoutTimer` counts failures across
-        // every login attempt against this surface regardless of username
-        // (see `is_locked`/`record_failure`, called below with no username).
-        // Before the admin UI merged into `/.spaces`, `/.admin` minted its own
-        // `LockoutTimer`, so failed logins against ordinary accounts could not
-        // lock administrators out of their separate door. Now that both share
-        // this one timer, an attacker spraying failed logins against any
-        // account can also delay administrator login. This is inherent to
-        // having a single surface, and was reviewed and accepted as the
-        // tradeoff for unifying them — not an oversight. Changing it means
-        // per-account lockout, which is a deliberate design change, not a fix.
+        // Lockout counts failures across all accounts, including administrators;
+        // failed attempts against any account can delay every login.
         let lockout = session.lockout();
         let version_store = users.clone();
         let login = Arc::new(
@@ -132,7 +123,17 @@ async fn handle_login(
     response
 }
 
-async fn handle_logout(headers: HeaderMap) -> Response {
+async fn handle_logout(State(state): State<Arc<SpaceIndexState>>, headers: HeaderMap) -> Response {
+    if !crate::auth::browser_sessions::logout_allowed(&headers) {
+        return (StatusCode::FORBIDDEN, "Cross-origin logout refused").into_response();
+    }
+    let name = scoped_auth_cookie_name(&request_host(&headers), "");
+    if let Some(token) = cookie_value(&headers, &name) {
+        if let Err(error) = state.login.revoke_browser_session(&token) {
+            tracing::error!("could not revoke browser session: {error}");
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Could not sign out").into_response();
+        }
+    }
     let options = CookieOptions {
         path: "/".to_string(),
         max_age_secs: Some(0),
@@ -151,7 +152,7 @@ async fn handle_logout(headers: HeaderMap) -> Response {
 fn current_username(state: &SpaceIndexState, headers: &HeaderMap) -> Option<String> {
     let name = scoped_auth_cookie_name(&request_host(headers), "");
     let token = cookie_value(headers, &name)?;
-    let claims = state.authenticator.verify_jwt(&token).ok()?;
+    let claims = state.authenticator.verify_browser_jwt(&token).ok()?;
     state
         .users
         .session_is_current(&claims.username, claims.credential_version.as_deref())
@@ -298,7 +299,6 @@ pub fn build_spaces_router(state: Arc<SpaceIndexState>, admin_api: Router) -> Ro
         .route("/api/logout", get(handle_logout))
         .layer(axum::extract::DefaultBodyLimit::max(1024 * 1024))
         .with_state(state)
-        // Nested after with_state: both sides are Router<()> here.
         .nest("/api/admin", admin_api)
 }
 
@@ -358,7 +358,11 @@ mod tests {
         users
             .create_user("bob", "bobpw", false, Profile::default())
             .unwrap();
-        let authenticator = Arc::new(Authenticator::from_secret_bytes(vec![7; 32], "v1".into()));
+        let authenticator = Arc::new(
+            Authenticator::from_secret_bytes(vec![7; 32], "v1".into()).with_browser_sessions(
+                Arc::new(crate::auth::BrowserSessions::load(dir.path()).unwrap()),
+            ),
+        );
         let deps = InstanceDeps {
             root: dir.path().to_path_buf(),
             assets: AssetFactories {
@@ -464,9 +468,8 @@ mod tests {
         serde_json::from_slice(&bytes).unwrap()
     }
 
-    /// `GET /api/spaces` is the `VisibleSpace` list itself — a bare JSON array,
-    /// with no envelope. The `admin` flag it used to carry now lives on
-    /// `GET /api/session`.
+    /// GET /api/spaces returns a bare VisibleSpace array; session details
+    /// are available separately from GET /api/session.
     fn space_names(body: &serde_json::Value) -> Vec<String> {
         body.as_array()
             .expect("the space list should be an array")
@@ -522,13 +525,10 @@ mod tests {
         );
         for space in spaces {
             let obj = space.as_object().unwrap();
-            // The allowlist: exactly these keys, nothing else. An allowlist,
-            // not a denylist of named-sensitive fields — a denylist would
-            // silently pass if a new field (e.g. `description`) were added
-            // to `VisibleSpace` without being one of the ones named here.
+            // An allowlist catches newly exposed fields that a denylist would miss.
             let mut keys: Vec<&str> = obj.keys().map(|k| k.as_str()).collect();
             keys.sort();
-            assert_eq!(keys, vec!["access", "binding", "id", "name", "state"]);
+            assert_eq!(keys, vec!["access", "binding", "id", "name"]);
         }
     }
 
@@ -623,7 +623,6 @@ mod tests {
         assert_eq!(body["fullName"], "Alice Smith");
         assert_eq!(body["email"], "alice@example.org");
 
-        // The write went to alice, never to anyone else.
         let users = UserStore::open(dir.path()).unwrap().unwrap();
         assert_eq!(users.profile("bob").unwrap(), Profile::default());
     }
@@ -1003,7 +1002,6 @@ mod tests {
         .await;
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()[header::CONTENT_TYPE], "text/css");
-        // Traversal out of `.client/` is refused.
         assert_eq!(
             send(
                 &router,
@@ -1016,5 +1014,57 @@ mod tests {
             .status(),
             StatusCode::BAD_REQUEST
         );
+    }
+    #[tokio::test]
+    async fn browser_sessions_logout_revokes_spaces_and_admin_surfaces() {
+        let (_dir, router) = setup();
+        let first = login(&router, "admin", "adminpw").await;
+        let other = login(&router, "admin", "adminpw").await;
+        let response = send(
+            &router,
+            Request::builder()
+                .uri("/api/logout")
+                .header("host", "localhost")
+                .header("cookie", &first)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            list(&router, Some(&first)).await.status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(list(&router, Some(&other)).await.status(), StatusCode::OK);
+        let response = send(
+            &router,
+            Request::builder()
+                .uri("/api/admin/users")
+                .header("host", "localhost")
+                .header("cookie", &first)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn browser_sessions_cross_origin_logout_does_not_revoke() {
+        let (_dir, router) = setup();
+        let cookie = login(&router, "admin", "adminpw").await;
+        let response = send(
+            &router,
+            Request::builder()
+                .uri("/api/logout")
+                .header("host", "localhost")
+                .header("cookie", &cookie)
+                .header("sec-fetch-site", "cross-site")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(list(&router, Some(&cookie)).await.status(), StatusCode::OK);
     }
 }

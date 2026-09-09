@@ -4,7 +4,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use silverbullet_server::auth::{Authenticator, MULTI_AUTH_FILE_NAME};
+use silverbullet_server::auth::{
+    Authenticator, BrowserSessions, LoginManager, MULTI_AUTH_FILE_NAME,
+};
 use silverbullet_server::metrics::Metrics;
 use silverbullet_server::multi::access::SessionPolicy;
 use silverbullet_server::multi::admin_api::{build_admin_api_router, AdminState};
@@ -62,17 +64,31 @@ pub async fn build_multi_stack(
     warn_if_world_readable(&root.join("users.json"));
     warn_if_world_readable(&root.join(MULTI_AUTH_FILE_NAME));
 
+    let started = std::time::Instant::now();
     let store = UserStore::open(&root)?.ok_or_else(|| {
         "no users.json found: this folder is not fully provisioned, complete setup first"
             .to_string()
     })?;
+    tracing::debug!(
+        elapsed_ms = started.elapsed().as_millis(),
+        "multi-space users loaded"
+    );
+    let started = std::time::Instant::now();
     let authenticator = Arc::new(
         Authenticator::load_or_init_with_stamp_named(
             &root,
             "account-managed-session-v1",
             MULTI_AUTH_FILE_NAME,
         )
-        .map_err(|e| format!("could not initialize server authentication: {e}"))?,
+        .map_err(|e| format!("could not initialize server authentication: {e}"))?
+        .with_browser_sessions(Arc::new(
+            BrowserSessions::load(&root).map_err(|e| e.to_string())?,
+        )),
+    );
+
+    tracing::debug!(
+        elapsed_ms = started.elapsed().as_millis(),
+        "multi-space authentication loaded"
     );
 
     // Server-wide session policy: sessions minted here are valid across every
@@ -81,7 +97,12 @@ pub async fn build_multi_stack(
     let session = SessionPolicy::from_env();
 
     let metrics = config.metrics_port.map(|_| Arc::new(Metrics::new()));
+    let started = std::time::Instant::now();
     let (runtime, runtime_availability) = space_runtime_factory(&root);
+    tracing::debug!(
+        elapsed_ms = started.elapsed().as_millis(),
+        "multi-space runtime configured"
+    );
     let deps = InstanceDeps {
         root: root.clone(),
         assets: AssetFactories {
@@ -105,15 +126,18 @@ pub async fn build_multi_stack(
     };
 
     let known_users = store.usernames();
+    let started = std::time::Instant::now();
     let manager = MultiManager::boot(root.clone(), deps, known_users)?;
+    tracing::debug!(
+        elapsed_ms = started.elapsed().as_millis(),
+        "multi-space manager booted"
+    );
     tracing::info!(
         "SilverBullet multi-space mode: {} space(s) configured",
         manager.registry().current().instances.len()
     );
     if config.shell_disabled {
-        // Only worth saying when it actually contradicts spaces.json — the
-        // point is to make the override visible to someone wondering why a
-        // space they configured for shell access can't run commands.
+        // Warn only when the environment overrides the space configuration.
         let overridden = manager
             .registry()
             .current()
@@ -129,7 +153,6 @@ pub async fn build_multi_stack(
         }
     }
 
-    // Metrics on a dedicated port (server-global, aggregated across spaces).
     if let (Some(mport), Some(metrics)) = (config.metrics_port, metrics.clone()) {
         let maddr = format!("{}:{}", config.bind_host, mport);
         let listener = tokio::net::TcpListener::bind(&maddr)
@@ -156,13 +179,64 @@ pub async fn build_multi_stack(
         });
     }
 
-    // Main listener: the unified /.spaces surface + prefix/host spaces.
-    let admin_state = Arc::new(AdminState::new(
-        manager.clone(),
-        store.clone(),
-        authenticator.clone(),
-        runtime_availability,
-    ));
+    let providers = Arc::new(silverbullet_server::auth::oidc::store::ProviderStore::open(
+        &root,
+    )?);
+    let admin_state = Arc::new(
+        AdminState::new(
+            manager.clone(),
+            store.clone(),
+            authenticator.clone(),
+            runtime_availability,
+        )
+        .with_provider_store(providers.clone()),
+    );
+    let version_store = store.clone();
+    let central_login = Arc::new(
+        LoginManager::new(
+            authenticator.clone(),
+            Arc::new(silverbullet_server::multi::access::AnyUserAuth {
+                store: store.clone(),
+            }),
+            session.remember_me_hours,
+            session.lockout(),
+            String::new(),
+        )
+        .with_credential_version(Arc::new(move |username| {
+            version_store
+                .credential_version(username)
+                .unwrap_or_default()
+        }))
+        .with_server_wide_session(),
+    );
+    let routing_manager = manager.clone();
+    let primary_manager = manager.clone();
+    let name_manager = manager.clone();
+    let central = Arc::new(
+        silverbullet_server::handlers::central_auth::CentralAuth::new(
+            providers.clone(),
+            authenticator.clone(),
+            store.clone(),
+            central_login,
+            Box::new(EmbeddedSpace::<ClientAssets>::new()),
+            Arc::new(move |url| {
+                let table = routing_manager.registry().current();
+                let host = url.host_str()?;
+                let configured_host = table.instances.values().any(|instance| matches!(&instance.config.binding,
+                silverbullet_server::multi::config::Binding::Host { host: bound } if bound.eq_ignore_ascii_case(host)));
+                let central_host = routing_manager.primary_url()
+                    .or_else(|| providers.configured().map(|c| c.central_origin.clone()))
+                    .and_then(|origin| silverbullet_server::auth::oidc::config::validated_url(&origin).ok())
+                    .is_some_and(|origin| origin.origin() == url.origin());
+                if !configured_host && !central_host {
+                    return None;
+                }
+                let (_, prefix) = table.resolve_main(host, url.path())?;
+                Some(format!("{prefix}/"))
+            }),
+        )?.with_primary_url(Arc::new(move || primary_manager.primary_url()))
+        .with_server_name(Arc::new(move || name_manager.server_name())),
+    );
     let spaces_state = Arc::new(SpaceIndexState::new(
         manager.clone(),
         store,
@@ -177,7 +251,8 @@ pub async fn build_multi_stack(
             build_admin_api_router(admin_state),
         )),
         crate::VERSION.to_string(),
-    );
+    )
+    .merge(silverbullet_server::handlers::central_auth::router(central));
     let addr = format!("{}:{}", config.bind_host, config.port);
     let log =
         format!("SilverBullet multi-space server running: http://{addr} (spaces at /.spaces)");

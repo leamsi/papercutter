@@ -87,11 +87,8 @@ async fn handle_complete(
     State(state): State<Arc<SetupState>>,
     Json(req): Json<SetupRequest>,
 ) -> Response {
-    // Hold the lock across the entire handler so concurrent completes are
-    // fully serialized: the second one to acquire it re-runs `run_setup`
-    // against a filesystem the first has already finished writing to, and
-    // gets a clean "already configured" 400 instead of racing the same
-    // argon2-widened check-then-write window.
+    // Serialize setup through the final write so concurrent requests cannot
+    // both pass the unconfigured check while Argon2 is running.
     let _guard = state.complete_lock.lock().await;
 
     let root = state.root.clone();
@@ -247,7 +244,8 @@ mod tests {
             post_json(
                 "/.setup/api/complete",
                 r#"{"adminUsername":"admin","adminPassword":"adminpw123",
-                    "space":{"name":"Notes","prefix":"/","folder":""}}"#,
+                    "primaryUrl":"https://manage.example.com",
+                    "space":{"name":"Notes","host":"notes.example.com","folder":""}}"#,
             ),
         )
         .await;
@@ -256,6 +254,7 @@ mod tests {
 
         assert!(is_configured(dir.path()), "users.json should now exist");
         assert!(dir.path().join("spaces.json").exists());
+        assert!(dir.path().join("server.json").exists());
         assert!(flag.load(Ordering::SeqCst), "on_complete must have fired");
     }
 
@@ -301,11 +300,8 @@ mod tests {
 
     #[tokio::test]
     async fn concurrent_completes_are_serialized_exactly_one_wins() {
-        // Guards the TOCTOU fix: without `complete_lock` serializing the
-        // whole handler, two concurrent completes can both pass
-        // `run_setup`'s `is_configured` check (argon2 hashing widens the
-        // window) and both provision. With the lock, the loser re-checks
-        // against a fully-written `users.json` and gets the intended 400.
+        // Concurrent setup requests must serialize through the final write,
+        // including the slow Argon2 hash between the check and provisioning.
         let dir = tempfile::tempdir().unwrap();
         let flag = Arc::new(AtomicBool::new(false));
         let r = build_setup_router(state(&dir, true, flag.clone()));
@@ -359,7 +355,6 @@ mod tests {
         assert!(sugg.iter().any(|s| s == "alps"), "{sugg:?}");
         assert!(!sugg.iter().any(|s| s == "beta"), "{sugg:?}");
 
-        // An existing directory reports "exists".
         let v = body_json(send(&r, get("/.setup/api/fs/dirs?path=alpha")).await).await;
         assert_eq!(v["status"], "exists");
     }

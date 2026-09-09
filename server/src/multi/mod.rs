@@ -11,6 +11,7 @@ pub mod instance;
 pub mod manager;
 pub mod policy;
 pub mod registry;
+pub mod server_config;
 pub mod setup;
 pub mod setup_api;
 pub mod space_index;

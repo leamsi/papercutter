@@ -43,3 +43,5 @@ pub(crate) fn space_error_response(e: SpaceError) -> Response {
         .body(Body::from(body))
         .unwrap()
 }
+
+pub mod central_auth;

@@ -79,6 +79,10 @@ impl Credentials for SpaceUsersAuth {
         let pass_ok = self.store.verify_password(username, password);
         allowed && pass_ok
     }
+
+    fn record_login(&self, username: &str) -> Result<(), String> {
+        self.store.record_login(username)
+    }
 }
 
 /// Account credentials without an authorization check. Used by the unified
@@ -92,6 +96,10 @@ pub struct AnyUserAuth {
 impl Credentials for AnyUserAuth {
     fn verify(&self, username: &str, password: &str) -> bool {
         self.store.verify_password(username, password)
+    }
+
+    fn record_login(&self, username: &str) -> Result<(), String> {
+        self.store.record_login(username)
     }
 }
 
@@ -147,7 +155,6 @@ mod tests {
     fn session_policy_defaults_match_single_space_mode() {
         let policy = SessionPolicy::parse(None, None, None);
         assert_eq!(policy, SessionPolicy::default());
-        // The documented single-space defaults: 7 days, 60s, 10 attempts.
         assert_eq!(policy.remember_me_hours, 168);
         assert_eq!(policy.lockout_time_secs, 60);
         assert_eq!(policy.lockout_limit, 10);
@@ -242,8 +249,6 @@ mod tests {
         };
         assert!(auth.verify("root", "rootpw123"), "admin allowed");
         assert!(auth.verify("bob", "bobpw12345"), "write member allowed");
-        // Step 6's whole purpose: a read-role member may still sign in, even
-        // though signing in only ever grants write elsewhere in the store.
         assert!(auth.verify("sam", "sampw12345"), "read member allowed");
         assert!(!auth.verify("eve", "evepw12345"), "outsider rejected");
         assert!(!auth.verify("bob", "wrong"), "wrong password rejected");
@@ -299,7 +304,6 @@ mod tests {
         );
         assert!(!authorizer.is_authorized(&ctx(&h_eve)));
 
-        // No token: falls through to inner (DenyAll -> false).
         let h_none = HeaderMap::new();
         assert!(!authorizer.is_authorized(&ctx(&h_none)));
     }

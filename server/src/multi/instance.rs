@@ -160,16 +160,31 @@ impl ServerControlFileFilter {
         let Some(name) = components.next() else {
             return false;
         };
+        let name = name.to_ascii_lowercase();
+        let name = name.as_str();
+        let provider_temp = name
+            .strip_prefix("authentication.")
+            .and_then(|name| name.strip_suffix(".tmp"))
+            .is_some_and(|name| !name.is_empty());
+        let browser_sessions_temp = name
+            .strip_prefix(".silverbullet.browser-sessions.")
+            .and_then(|name| name.strip_suffix(".tmp"))
+            .is_some_and(|name| !name.is_empty());
         matches!(name, "git-keys" | "git-drafts" | "git-connections")
             || components.next().is_none()
-                && matches!(
+                && (matches!(
                     name,
                     "users.json"
                         | "users.json.tmp"
                         | "spaces.json"
                         | "spaces.json.tmp"
+                        | "server.json"
+                        | "server.json.tmp"
+                        | "authentication.json"
+                        | ".silverbullet.browser-sessions.json"
                         | crate::auth::MULTI_AUTH_FILE_NAME
-                )
+                ) || provider_temp
+                    || browser_sessions_temp)
     }
 }
 
@@ -254,19 +269,12 @@ pub fn resolve_folder(root: &Path, id: &str, folder: &str) -> PathBuf {
     }
 }
 
-/// Create `<index_page>.md` in `folder` (with `content`) when the space has no
-/// `.md` files yet. Mirrors the single-space binary's former `ensure_index`
-/// exactly: emptiness is decided by a recursive walk (honoring `space_ignore`),
-/// not a shallow `read_dir`, so a space with markdown only in subdirectories
-/// isn't treated as empty. The walk stops at the first `.md` file, so an
-/// already-populated space costs O(1), not a full listing, on every boot. Uses `DiskSpacePrimitives::write_file`
-/// for the actual write so nested index pages (e.g. `notes/index`) get their
-/// parent directories created for free.
+/// Seed index_page.md when no unignored markdown exists anywhere in the space.
+/// Stop the recursive walk at the first match; create parent directories for
+/// nested index pages through DiskSpacePrimitives::write_file.
 pub fn seed_index(folder: &Path, index_page: &str, content: &str, space_ignore: &str) {
     let disk = match DiskSpacePrimitives::new(folder, space_ignore) {
         Err(e) => {
-            // Unreadable/missing folder: do nothing (matches the old
-            // `ensure_index`'s behavior of leaving the space alone on error).
             tracing::warn!("could not check space state at {}: {e}", folder.display());
             return;
         }
@@ -354,7 +362,14 @@ pub fn build_instance(id: &str, config: &SpaceConfig, deps: &InstanceDeps) -> Sp
         Binding::Prefix { prefix } => normalize_prefix(prefix),
         _ => String::new(),
     };
-    match try_build_state(id, config, &prefix, deps) {
+    let started = std::time::Instant::now();
+    let result = try_build_state(id, config, &prefix, deps);
+    tracing::debug!(
+        space_id = id,
+        elapsed_ms = started.elapsed().as_millis(),
+        "space state built"
+    );
+    match result {
         Ok(state) => {
             let revisions = state.revisions.clone();
             SpaceInstance {
@@ -528,12 +543,19 @@ fn try_build_state(
 
     let shell_enabled = config.shell.enabled && !config.read_only && !deps.shell_disabled;
     let fs_guard = Arc::new(crate::fs_guard::FsGuard::default());
+    let started = std::time::Instant::now();
     let fs_events = crate::start_watcher(
         &folder,
         &config.space_ignore,
         crate::WatchMode::from_env(),
         fs_guard.clone(),
     );
+    tracing::debug!(
+        space_id = id,
+        elapsed_ms = started.elapsed().as_millis(),
+        "space watcher started"
+    );
+    let started = std::time::Instant::now();
     let sync_settings = {
         let gs = config.git_sync();
         if !gs.mode.is_off()
@@ -580,6 +602,12 @@ fn try_build_state(
             fs_guard.clone(),
         )
     });
+
+    tracing::debug!(
+        space_id = id,
+        elapsed_ms = started.elapsed().as_millis(),
+        "space revisions started"
+    );
 
     Ok(ServerState {
         space,
@@ -688,6 +716,19 @@ mod tests {
     }
 
     #[test]
+    fn control_files_are_reserved_case_insensitively() {
+        for path in [
+            "SERVER.JSON",
+            "UsErS.JsOn",
+            "AUTHENTICATION.JSON",
+            "Git-Keys/private",
+        ] {
+            assert!(ServerControlFileFilter::reserved(path), "{path}");
+        }
+        assert!(!ServerControlFileFilter::reserved("notes/server.json"));
+    }
+
+    #[test]
     fn resolves_folders_default_relative_absolute() {
         let root = std::path::Path::new("/root");
         assert_eq!(resolve_folder(root, "id1", ""), root.join("spaces/id1"));
@@ -788,15 +829,12 @@ mod tests {
             whitelist: vec!["git".into()],
         };
 
-        // Baseline: with no process-global override, spaces.json decides.
         let mut deps = test_deps(dir.path());
         let state = try_build_state("x", &cfg, "/work", &deps).unwrap();
         assert!(state.shell.enabled);
         assert_eq!(state.boot_config.shell_backend, "local");
 
-        // `SB_SHELL_BACKEND=off` forces the shell off for every space,
-        // whatever spaces.json says (regression guard: a single-space server
-        // that disabled the shell must keep it disabled after migrating).
+        // The process-wide shell override takes precedence over space configuration.
         deps.shell_disabled = true;
         let state = try_build_state("x", &cfg, "/work", &deps).unwrap();
         assert!(!state.shell.enabled);
@@ -986,10 +1024,7 @@ mod tests {
 
     #[test]
     fn anonymous_readable_tracks_the_account_managed_access_level() {
-        // Pins the regression this field exists to fix: a public,
-        // account-managed space (`access: read`) must still drive the SSR
-        // gate, now that every account-managed space has an authorizer and
-        // `authorizer.is_none()` can no longer tell public from private.
+        // Account-managed public spaces permit SSR despite having an authorizer.
         let (_dir_none, none) = state_with_access(SpaceAccess::None);
         assert!(!none.anonymous_readable);
         let (_dir_read, read) = state_with_access(SpaceAccess::Read);
@@ -1039,12 +1074,8 @@ mod tests {
 
     #[test]
     fn open_single_space_is_anonymous_readable() {
-        // Pins the other regression: a single-space server with no
-        // authorizer at all (the classic open public wiki) must keep
-        // `anonymous_readable == true` even though its synthesized config's
-        // `access` is always `none` (see `synthesize` in
-        // `bin/silverbullet/src/single.rs`) -- unlike an account-managed
-        // space, single-space mode can't use `config.access()` here.
+        // Single-space mode determines public access from its authorizer,
+        // since its synthesized config always has access: none.
         let dir = tempfile::tempdir().unwrap();
         let mut deps = test_deps(dir.path());
         deps.auth = InstanceAuth::Single(None);
@@ -1120,7 +1151,7 @@ mod tests {
         let response = crate::build_router(Arc::new(state))
             .oneshot(
                 Request::builder()
-                    .uri("/SomePage")
+                    .uri("/SomePage?headless=1&filter=a%2Bb")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -1129,7 +1160,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::FOUND);
         assert_eq!(
             response.headers().get("location").unwrap(),
-            "/s/.auth?from=/SomePage"
+            "/s/.auth?from=/s/SomePage%3Fheadless%3D1%26filter%3Da%252Bb"
         );
     }
 
@@ -1358,7 +1389,27 @@ mod tests {
             .create_user("admin", "adminpw1", true, Profile::default())
             .unwrap();
         std::fs::write(dir.path().join("spaces.json"), "{}").unwrap();
+        std::fs::write(dir.path().join("server.json"), "{}").unwrap();
+        std::fs::write(dir.path().join("server.json.tmp"), "{}").unwrap();
         std::fs::write(dir.path().join(crate::auth::MULTI_AUTH_FILE_NAME), "secret").unwrap();
+        std::fs::write(dir.path().join("authentication.json"), "provider-secret").unwrap();
+        std::fs::write(
+            dir.path()
+                .join("authentication.11111111-1111-4111-8111-111111111111.tmp"),
+            "provider-temp-secret",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join(".silverbullet.browser-sessions.json"),
+            "browser-session-secret",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path()
+                .join(".silverbullet.browser-sessions.22222222-2222-4222-8222-222222222222.tmp"),
+            "browser-session-temp-secret",
+        )
+        .unwrap();
         std::fs::write(dir.path().join("note.md"), "visible").unwrap();
         for directory in ["git-keys", "git-drafts", "git-connections"] {
             std::fs::create_dir(dir.path().join(directory)).unwrap();
@@ -1410,11 +1461,17 @@ mod tests {
         for path in [
             "/.fs/users.json",
             "/.fs/spaces.json",
+            "/.fs/server.json",
+            "/.fs/server.json.tmp",
             "/.fs/.silverbullet.session.json",
             "/.fs/git-keys/sample",
             "/.fs/git-drafts/sample",
             "/.fs/git-connections/sample",
             "/.revisions/_sync",
+            "/.fs/authentication.json",
+            "/.fs/authentication.11111111-1111-4111-8111-111111111111.tmp",
+            "/.fs/.silverbullet.browser-sessions.json",
+            "/.fs/.silverbullet.browser-sessions.22222222-2222-4222-8222-222222222222.tmp",
         ] {
             assert_eq!(
                 router.clone().oneshot(get(path)).await.unwrap().status(),
@@ -1432,7 +1489,6 @@ mod tests {
             std::fs::read_to_string(dir.path().join("index.md")).unwrap(),
             "# Hello\n"
         );
-        // Non-empty: do not overwrite/add.
         std::fs::write(dir.path().join("other.md"), "x").unwrap();
         seed_index(dir.path(), "home", "# Hello\n", "");
         assert!(!dir.path().join("home.md").exists());
@@ -1440,11 +1496,7 @@ mod tests {
 
     #[test]
     fn seed_index_ignores_markdown_nested_in_subdirectories() {
-        // Regression test: a space with markdown only in subdirectories (e.g.
-        // daily/2026-07-20.md, no top-level .md) must NOT be considered empty
-        // and must NOT get a spurious index page seeded at its root. The old
-        // shallow `read_dir` check missed this; `fetch_file_list()` is
-        // recursive and catches it.
+        // Markdown in subdirectories also makes a space nonempty.
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join("sub")).unwrap();
         std::fs::write(dir.path().join("sub/page.md"), "hi").unwrap();
@@ -1457,10 +1509,7 @@ mod tests {
 
     #[test]
     fn seed_index_seeds_when_only_md_is_gitignored() {
-        // Old semantics (former `ensure_index`, backed by
-        // `DiskSpacePrimitives::fetch_file_list`): ignored files are excluded
-        // from the listing used to decide emptiness. So a space whose only
-        // `.md` file is gitignored is still treated as empty and gets seeded.
+        // Ignored markdown does not prevent seeding an otherwise empty space.
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("ignored.md"), "x").unwrap();
         seed_index(dir.path(), "index", "# Hello\n", "ignored.md");
@@ -1472,8 +1521,6 @@ mod tests {
 
     #[test]
     fn seed_index_creates_parent_dirs_for_nested_index_page() {
-        // SB_INDEX_PAGE=notes/index: the seeded file's parent directory must
-        // be created (DiskSpacePrimitives::write_file does this for free).
         let dir = tempfile::tempdir().unwrap();
         seed_index(dir.path(), "notes/index", "# Hello\n", "");
         assert_eq!(
@@ -1506,7 +1553,6 @@ mod tests {
                 email: Some("ada@example.org".into()),
             }
         );
-        // An unknown or absent user degrades to username-only, never an error.
         assert_eq!(
             resolver.resolve(Some("ghost")),
             crate::auth::UserProfile {
@@ -1561,7 +1607,6 @@ mod tests {
             vec![Some("ada".to_string()), Some("root".to_string())]
         );
         assert_eq!(accounts[0].full_name.as_deref(), Some("Ada Lovelace"));
-        // The directory carries no addresses: `/.accounts` must never serve one.
         assert!(accounts.iter().all(|a| a.email.is_none()));
     }
 

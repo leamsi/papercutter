@@ -9,6 +9,7 @@ use serde::Deserialize;
 
 use crate::multi::config::{MultiConfig, SpaceAccess, SpaceConfig};
 use crate::multi::instance::{resolve_folder, seed_index};
+use crate::multi::server_config::ServerConfig;
 use crate::multi::users::{Profile, UserEntry, UsersConfig, USERS_FILE};
 use crate::multi::validate::{validate, FieldError};
 
@@ -19,9 +20,10 @@ const SPACES_FILE: &str = "spaces.json";
 #[serde(rename_all = "camelCase")]
 pub struct FirstSpace {
     pub name: String,
-    /// `"/"` binds at the root; anything else is a URL prefix. Must not be
-    /// empty (empty is ambiguous between "root" and "no prefix picked yet").
+    #[serde(default)]
     pub prefix: String,
+    #[serde(default)]
+    pub host: Option<String>,
     /// Empty = default (`spaces/<id>` under the root).
     #[serde(default)]
     pub folder: String,
@@ -32,6 +34,8 @@ pub struct FirstSpace {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetupRequest {
+    #[serde(default)]
+    pub primary_url: Option<String>,
     pub admin_username: String,
     pub admin_password: String,
     #[serde(default)]
@@ -69,8 +73,6 @@ pub(crate) fn canonicalize_best_effort(path: &Path) -> PathBuf {
     if let Ok(c) = std::fs::canonicalize(path) {
         return c;
     }
-    // Walk up to the nearest existing ancestor, canonicalize it, then rejoin
-    // the not-yet-existing tail we walked past.
     let mut tail: Vec<std::ffi::OsString> = Vec::new();
     let mut cur = path;
     while let Some(parent) = cur.parent() {
@@ -145,24 +147,36 @@ pub fn run_setup(
     users.users.insert(
         username.to_string(),
         UserEntry {
-            password_hash,
+            password_hash: Some(password_hash),
+            sso: None,
             admin: true,
+            disabled: false,
             full_name: profile.full_name,
             email: profile.email,
             tokens: BTreeMap::new(),
             session_epoch: 0,
+            account_generation: Some(uuid::Uuid::new_v4().to_string()),
+            last_login: None,
             extra: Default::default(),
         },
     );
 
     if let Some(first) = &req.space {
         let prefix = first.prefix.trim();
-        if prefix.is_empty() {
+        if first.host.is_none() && prefix.is_empty() {
             return Err(err(
                 "space.prefix",
                 "prefix must not be empty (use \"/\" for the root)",
             ));
         }
+
+        if first.host.is_some() && !prefix.is_empty() {
+            return Err(err("space.host", "choose a hostname or a prefix, not both"));
+        }
+        let binding = match &first.host {
+            Some(host) => serde_json::json!({ "host": host.trim() }),
+            None => serde_json::json!({ "prefix": prefix }),
+        };
 
         let id = uuid::Uuid::new_v4().to_string();
         let folder_field = if first.folder.is_empty() {
@@ -178,13 +192,8 @@ pub fn run_setup(
             )
         })?;
 
-        // Portability guard: an absolute folder inside the data root is stored
-        // relative to it (the wizard now prepopulates an absolute `<root>/…`
-        // path, and storing that verbatim would pin `spaces.json` to this
-        // machine's layout). Runs *after* `create_dir_all` so the folder
-        // exists and canonicalizes cleanly. Relativizing doesn't change where
-        // files land — `resolve_folder(root, id, "spaces/notes")` resolves
-        // back to the very directory we just created.
+        // Store folders inside the data root relatively so spaces.json stays portable.
+        // Run after creation so canonicalization can resolve the full path.
         let folder_field = relativize_folder_field(root, &folder_field);
 
         // Build a fresh SpaceConfig through Deserialize so every field
@@ -193,7 +202,7 @@ pub fn run_setup(
         // than duplicating those defaults here.
         let mut cfg: SpaceConfig = serde_json::from_value(serde_json::json!({
             "name": first.name,
-            "binding": { "prefix": prefix },
+            "binding": binding,
         }))
         .map_err(|e| err("", format!("internal error building space config: {e}")))?;
         cfg.folder = folder_field;
@@ -216,6 +225,17 @@ pub fn run_setup(
         return Err(errors);
     }
 
+    let mut server_config =
+        ServerConfig::load(&root.join("server.json")).map_err(|e| err("", e))?;
+    if let Some(primary_url) = &req.primary_url {
+        server_config.primary_url = Some(primary_url.clone());
+    }
+    server_config.validate(&spaces)?;
+    server_config.validate_paths(root, &spaces)?;
+    server_config
+        .save(&root.join("server.json"))
+        .map_err(|e| err("", e))?;
+
     // users.json before spaces.json: a crash in between leaves users.json
     // written (admin claimed, `is_configured()` == true) but spaces.json
     // unwritten — a safe "admin exists, no new spaces" state. The reverse
@@ -235,6 +255,7 @@ mod tests {
 
     fn req(space: Option<FirstSpace>) -> SetupRequest {
         SetupRequest {
+            primary_url: None,
             admin_username: "ada".into(),
             admin_password: "hunter22".into(),
             admin_full_name: String::new(),
@@ -255,6 +276,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let request = req(Some(FirstSpace {
             name: "Notes".into(),
+            host: None,
             prefix: "/".into(),
             folder: String::new(),
         }));
@@ -300,6 +322,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let request = req(Some(FirstSpace {
             name: "Work".into(),
+            host: None,
             prefix: "/work".into(),
             folder: "custom/work".into(),
         }));
@@ -318,13 +341,13 @@ mod tests {
 
     #[test]
     fn inside_root_absolute_folder_is_relativized() {
-        // The wizard now submits an absolute `<root>/spaces/notes`. Stored
-        // verbatim that would pin spaces.json to this machine; the guard must
-        // relativize it back to "spaces/notes" so the config stays portable.
+        // Absolute folders inside the data root must be stored relatively
+        // so spaces.json remains portable.
         let dir = tempfile::tempdir().unwrap();
         let abs = dir.path().join("spaces").join("notes");
         let request = req(Some(FirstSpace {
             name: "Notes".into(),
+            host: None,
             prefix: "/".into(),
             folder: abs.to_string_lossy().to_string(),
         }));
@@ -333,7 +356,6 @@ mod tests {
         let cfg = MultiConfig::load(&dir.path().join(SPACES_FILE)).unwrap();
         let (_, space) = cfg.spaces.iter().next().unwrap();
         assert_eq!(space.folder, "spaces/notes");
-        // ...and it still resolves to the same directory, seeded index and all.
         assert_eq!(
             std::fs::read_to_string(abs.join("index.md")).unwrap(),
             "# Hello\n"
@@ -350,6 +372,7 @@ mod tests {
         let folder = abs.to_string_lossy().to_string();
         let request = req(Some(FirstSpace {
             name: "Notes".into(),
+            host: None,
             prefix: "/".into(),
             folder: folder.clone(),
         }));
@@ -366,6 +389,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let request = req(Some(FirstSpace {
             name: "Work".into(),
+            host: None,
             prefix: "/work".into(),
             folder: "custom/work".into(),
         }));
@@ -383,6 +407,51 @@ mod tests {
         assert!(UserStore::open(dir.path()).unwrap().is_some());
         let cfg = MultiConfig::load(&dir.path().join(SPACES_FILE)).unwrap();
         assert!(cfg.spaces.is_empty());
+    }
+
+    #[test]
+    fn setup_persists_primary_url_and_hostname_space() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut request = req(Some(FirstSpace {
+            name: "Notes".into(),
+            prefix: String::new(),
+            host: Some("notes.example.com".into()),
+            folder: String::new(),
+        }));
+        request.primary_url = Some("https://manage.example.com".into());
+        run_setup(dir.path(), &request, "# Hello\n").unwrap();
+        let server = ServerConfig::load(&dir.path().join("server.json")).unwrap();
+        assert_eq!(
+            server.primary_url.as_deref(),
+            Some("https://manage.example.com")
+        );
+        let cfg = MultiConfig::load(&dir.path().join(SPACES_FILE)).unwrap();
+        let space = cfg.spaces.values().next().unwrap();
+        assert!(matches!(&space.binding, Binding::Host { host } if host == "notes.example.com"));
+    }
+
+    #[test]
+    fn primary_url_accepts_prefix_but_rejects_same_host_spaces() {
+        for (prefix, host) in [("/", None), ("", Some("manage.example.com"))] {
+            let dir = tempfile::tempdir().unwrap();
+            let mut request = req(Some(FirstSpace {
+                name: "Notes".into(),
+                prefix: prefix.into(),
+                host: host.map(String::from),
+                folder: String::new(),
+            }));
+            request.primary_url = Some("https://manage.example.com".into());
+            let result = run_setup(dir.path(), &request, "");
+            if host.is_none() {
+                result.unwrap();
+                assert!(is_configured(dir.path()));
+                assert!(dir.path().join("server.json").exists());
+            } else {
+                assert!(result.is_err());
+                assert!(!is_configured(dir.path()));
+                assert!(!dir.path().join("server.json").exists());
+            }
+        }
     }
 
     #[test]

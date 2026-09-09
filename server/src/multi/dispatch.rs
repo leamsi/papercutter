@@ -6,7 +6,8 @@ use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::{Request, State};
-use axum::http::{StatusCode, Uri};
+use axum::http::{header, HeaderMap, Method, StatusCode, Uri};
+use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::Router;
 use tower::ServiceExt;
@@ -27,16 +28,9 @@ pub fn build_main_router(
     spaces_router: Option<Router>,
     version: String,
 ) -> Router {
-    // Per-boot instance identity AND liveness, served on ANY hostname (it's
-    // routed before host/prefix resolution) with permissive CORS. Two
-    // consumers: the spaces UI probes
-    // `http(s)://<candidate-hostname>:<port>/.instance` from the browser and
-    // compares the id against its own origin's to verify that a hostname
-    // binding actually reaches this very server (discloses nothing but a
-    // random UUID), and the Docker HEALTHCHECK uses a 200 here as liveness.
-    // It lives on the main router, before host/prefix resolution, so it is the
-    // one endpoint that exists regardless of which spaces are bound — which is
-    // exactly why the health check uses it instead of the per-space `/.ping`.
+    // Serve before host/prefix resolution so hostname probes and Docker
+    // health checks work regardless of space bindings. Only a per-boot UUID
+    // is exposed across origins.
     let spaces_mounted = spaces_router.is_some();
     let instance_id = uuid::Uuid::new_v4().to_string();
     let body = serde_json::json!({ "instance": instance_id, "version": version }).to_string();
@@ -56,17 +50,132 @@ pub fn build_main_router(
     if let Some(spaces) = spaces_router {
         router = router.nest_service(crate::multi::space_index::SPACES_PREFIX, spaces);
     }
-    router.fallback(dispatch).with_state(MainState {
-        manager,
-        spaces_mounted,
-    })
+    router
+        .fallback(dispatch)
+        .layer(middleware::from_fn_with_state(
+            manager.clone(),
+            manager_origin,
+        ))
+        .with_state(MainState {
+            manager,
+            spaces_mounted,
+        })
 }
 
-async fn dispatch(State(state): State<MainState>, req: Request) -> Response {
+fn primary_host_matches(primary: &str, headers: &HeaderMap) -> bool {
+    let Ok(url) = reqwest::Url::parse(primary) else {
+        return false;
+    };
+    let host = crate::auth::request_host(headers);
+    if host.contains(['/', '\\', '@', '?', '#']) {
+        return false;
+    }
+    reqwest::Url::parse(&format!("{}://{host}", url.scheme()))
+        .is_ok_and(|request| request.origin() == url.origin())
+}
+
+fn same_origin_request(primary: Option<&str>, headers: &HeaderMap) -> bool {
+    if let Some(site) = headers.get("sec-fetch-site") {
+        if !matches!(site.to_str().ok(), Some("same-origin" | "none")) {
+            return false;
+        }
+    }
+    let expected = primary.map(str::to_owned).unwrap_or_else(|| {
+        let scheme = if crate::auth::is_secure_request(headers) {
+            "https"
+        } else {
+            "http"
+        };
+        format!("{scheme}://{}", crate::auth::request_host(headers))
+    });
+    for name in [header::ORIGIN, header::REFERER] {
+        if let Some(value) = headers.get(name) {
+            if value
+                .to_str()
+                .ok()
+                .and_then(|value| reqwest::Url::parse(value).ok())
+                .is_none_or(|url| url.origin().ascii_serialization() != expected)
+            {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn manager_ui_path(path: &str) -> bool {
+    let rest = path.strip_prefix("/.spaces").unwrap_or("");
+    if rest.is_empty() || rest == "/" || rest == "/index.html" {
+        return true;
+    }
+    let parts: Vec<_> = rest.trim_start_matches('/').split('/').collect();
+    if parts.iter().any(|part| {
+        part.is_empty()
+            || !part
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_' || c == b'.')
+            || *part == "."
+            || *part == ".."
+    }) {
+        return false;
+    }
+    matches!(
+        parts.as_slice(),
+        ["new" | "users" | "login" | "profile" | "admin"] | ["users", _]
+    ) || (parts.len() == 1 && uuid::Uuid::parse_str(parts[0]).is_ok())
+        || (parts.len() == 2 && parts[1] == "git" && uuid::Uuid::parse_str(parts[0]).is_ok())
+}
+
+async fn manager_origin(
+    State(manager): State<Arc<MultiManager>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let path = req.uri().path();
+    if path != "/.spaces" && !path.starts_with("/.spaces/") {
+        return next.run(req).await;
+    }
+    let primary = manager.primary_url();
+    let api = path.starts_with("/.spaces/api/") || path == "/.spaces/api";
+    let mut response = if primary.as_deref().is_some_and(|origin| {
+        !primary_host_matches(origin, req.headers())
+            || origin.starts_with("https://") != crate::auth::is_secure_request(req.headers())
+    }) {
+        if req.method() == Method::GET && manager_ui_path(path) {
+            Redirect::temporary(&format!("{}{path}", primary.as_deref().unwrap())).into_response()
+        } else {
+            (StatusCode::FORBIDDEN, "Use the primary server origin").into_response()
+        }
+    } else if (api || req.method() != Method::GET && req.method() != Method::HEAD)
+        && (!same_origin_request(primary.as_deref(), req.headers())
+            || primary.is_some() && req.headers().contains_key(header::AUTHORIZATION))
+    {
+        (StatusCode::FORBIDDEN, "Cross-origin manager request denied").into_response()
+    } else {
+        next.run(req).await
+    };
+    let headers = response.headers_mut();
+    headers.insert(header::X_FRAME_OPTIONS, "DENY".parse().unwrap());
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        "frame-ancestors 'none'".parse().unwrap(),
+    );
+    headers.insert(header::X_CONTENT_TYPE_OPTIONS, "nosniff".parse().unwrap());
+    headers.insert(header::REFERRER_POLICY, "same-origin".parse().unwrap());
+    headers.insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+    headers.remove(header::ACCESS_CONTROL_ALLOW_ORIGIN);
+    headers.remove(header::ACCESS_CONTROL_ALLOW_CREDENTIALS);
+    response
+}
+
+async fn dispatch(State(state): State<MainState>, mut req: Request) -> Response {
+    req.extensions_mut()
+        .insert(crate::handlers::bundle::ServerName(
+            state.manager.server_name(),
+        ));
     let table = state.manager.registry().current();
     let host = crate::auth::request_host(req.headers());
     let path = req.uri().path().to_string();
-
     let Some((inst, prefix)) = table.resolve_main(&host, &path) else {
         if path == "/" {
             if state.spaces_mounted {
@@ -240,15 +349,143 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn primary_origin_serves_prefix_spaces() {
+        let dir = tempfile::tempdir().unwrap();
+        let manager =
+            MultiManager::boot(dir.path().into(), deps(dir.path()), Default::default()).unwrap();
+        manager
+            .create(
+                payload(
+                    "Notes",
+                    Binding::Prefix {
+                        prefix: "/notes".into(),
+                    },
+                ),
+                false,
+            )
+            .unwrap();
+        manager
+            .set_primary_url("https://manager.example.test")
+            .unwrap();
+        let router = build_main_router(
+            manager,
+            Some(Router::new().fallback(|| async { "manager" })),
+            "test".into(),
+        );
+        assert_eq!(
+            get(&router, "manager.example.test", "/notes/.config")
+                .await
+                .status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            get(&router, "manager.example.test", "/.spaces")
+                .await
+                .status(),
+            StatusCode::TEMPORARY_REDIRECT
+        );
+        assert_eq!(
+            get(&router, "notes.example.test", "/.spaces/api/session")
+                .await
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+    }
+
+    #[tokio::test]
+    async fn primary_origin_isolates_manager_and_rejects_sibling_requests() {
+        let dir = tempfile::tempdir().unwrap();
+        let m =
+            MultiManager::boot(dir.path().into(), deps(dir.path()), Default::default()).unwrap();
+        m.set_primary_url("https://manager.example.test").unwrap();
+        m.create(
+            payload(
+                "Notes",
+                Binding::Host {
+                    host: "notes.example.test".into(),
+                },
+            ),
+            false,
+        )
+        .unwrap();
+        let spaces = Router::new().fallback(|| async { "manager secret" });
+        let r = build_main_router(m, Some(spaces), "test".into());
+        assert_eq!(
+            get(&r, "notes.example.test", "/.spaces/api/session")
+                .await
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+        let response = get(
+            &r,
+            "notes.example.test",
+            "/.spaces/users?redirect=//evil.test",
+        )
+        .await;
+        assert_eq!(
+            response.headers()["location"],
+            "https://manager.example.test/.spaces/users"
+        );
+        assert_eq!(
+            get(&r, "manager.example.test", "/.config").await.status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            get(&r, "unknown.example.test", "/.spaces/api/session")
+                .await
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+        for (method, site, origin) in [
+            ("GET", "same-site", "https://notes.example.test"),
+            ("POST", "cross-site", "https://other.test"),
+        ] {
+            let response = r
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri("/.spaces/api/session")
+                        .header("host", "manager.example.test")
+                        .header("x-forwarded-proto", "https")
+                        .header("sec-fetch-site", site)
+                        .header("origin", origin)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            assert_eq!(response.headers()["x-frame-options"], "DENY");
+            assert!(!response
+                .headers()
+                .contains_key("access-control-allow-origin"));
+        }
+        let response = r
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/.spaces/api/session")
+                    .header("host", "manager.example.test")
+                    .header("x-forwarded-proto", "https")
+                    .header("sec-fetch-site", "same-origin")
+                    .header("origin", "https://manager.example.test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
     async fn prefix_space_gets_stripped_path() {
         let dir = tempfile::tempdir().unwrap();
         let r = setup(&dir);
-        // /work/.config -> the work space's /.config (200, open auth).
         assert_eq!(
             get(&r, "localhost", "/work/.config").await.status(),
             StatusCode::OK
         );
-        // Query strings survive the strip.
         assert_eq!(
             get(&r, "localhost", "/work/.config?x=1").await.status(),
             StatusCode::OK
@@ -259,18 +496,15 @@ mod tests {
     async fn bare_prefix_url_redirects_to_trailing_slash() {
         let dir = tempfile::tempdir().unwrap();
         let r = setup(&dir);
-        // Exact prefix, no trailing slash -> 307 to `<prefix>/`.
         let resp = get(&r, "localhost", "/work").await;
         assert_eq!(resp.status(), StatusCode::TEMPORARY_REDIRECT);
         assert_eq!(resp.headers()[axum::http::header::LOCATION], "/work/");
-        // Query string is preserved.
         let resp = get(&r, "localhost", "/work?a=1&b=2").await;
         assert_eq!(resp.status(), StatusCode::TEMPORARY_REDIRECT);
         assert_eq!(
             resp.headers()[axum::http::header::LOCATION],
             "/work/?a=1&b=2"
         );
-        // A deeper path under the prefix is forwarded, not redirected.
         assert_eq!(
             get(&r, "localhost", "/work/.config").await.status(),
             StatusCode::OK
@@ -363,10 +597,7 @@ mod tests {
             get(&r, "notes.example.com", "/.config").await.status(),
             StatusCode::OK
         );
-        // `setup()` doesn't bind a root ("/") space, so unprefixed paths on an
-        // unmatched host never reach a space (root prefixes are valid now,
-        // see `root_prefix_binding_is_accepted`, but simply aren't bound
-        // here).
+        // This fixture has no root-bound space to handle unmatched requests.
         assert_eq!(
             get(&r, "localhost", "/.config").await.status(),
             StatusCode::NOT_FOUND
@@ -394,7 +625,6 @@ mod tests {
     async fn spaces_prefix_always_reserved() {
         let dir = tempfile::tempdir().unwrap();
         let r = setup(&dir);
-        // /.spaces always routes to the spaces router, never to a space.
         assert_eq!(
             get(&r, "localhost", "/.spaces/anything")
                 .await
@@ -460,7 +690,6 @@ mod tests {
             "*"
         );
 
-        // A different router (fresh boot) gets a different id.
         let dir2 = tempfile::tempdir().unwrap();
         let r2 = setup(&dir2);
         let (other, _) = instance_of(&r2, "localhost").await;
@@ -496,7 +725,6 @@ mod tests {
     #[tokio::test]
     async fn root_redirects_to_spaces_when_unbound_and_unknown_paths_404() {
         let dir = tempfile::tempdir().unwrap();
-        // Manager with NO root space.
         let m = MultiManager::boot(
             dir.path().to_path_buf(),
             deps(dir.path()),

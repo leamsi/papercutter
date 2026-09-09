@@ -63,11 +63,8 @@ enum Command {
 fn main() -> std::process::ExitCode {
     tracing_subscriber::fmt()
         .with_env_filter(
-            // Default to `info`, but silence chromiumoxide's noisy `WARN`s. With
-            // current Chrome it floods the log with "WS Invalid message: data did
-            // not match any variant of untagged enum Message" for CDP events its
-            // bundled protocol types don't recognize — harmless (command
-            // responses still work), so keep only its errors. `RUST_LOG` overrides.
+            // Chromiumoxide warns on unrecognized CDP events even when commands
+            // succeed. Suppress that noise unless RUST_LOG overrides the filter.
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info,chromiumoxide=error".into()),
         )
@@ -75,14 +72,11 @@ fn main() -> std::process::ExitCode {
 
     let cli = Cli::parse();
 
-    // Subcommands run synchronously and outside a Tokio runtime — the upgrade
-    // variants self-replace this executable using `reqwest::blocking`, which
-    // panics inside a runtime. Handle them before the server path builds one.
+    // Upgrade uses reqwest::blocking, which panics inside a Tokio runtime.
     if let Some(command) = cli.command {
         return run_subcommand(command);
     }
 
-    // Server path: build a multi-threaded Tokio runtime and serve until shutdown.
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -98,9 +92,7 @@ fn main() -> std::process::ExitCode {
         match server::run(cli.hostname, cli.port, cli.folder, cli.single).await {
             Ok(()) => std::process::ExitCode::SUCCESS,
             Err(e) => {
-                // Log the fatal error and also write it to stderr — the
-                // conventional stream for fatal CLI errors (the tracing fmt
-                // subscriber writes to stdout).
+                // The tracing subscriber writes to stdout; fatal CLI errors also need stderr.
                 tracing::error!("{e}");
                 eprintln!("Error: {e}");
                 std::process::ExitCode::FAILURE
@@ -164,11 +156,13 @@ fn run_setup_subcommand(
     }
 
     let req = SetupRequest {
+        primary_url: None,
         admin_username: username.to_string(),
         admin_password: password.to_string(),
         admin_full_name: String::new(),
         admin_email: String::new(),
         space: space.map(|name| FirstSpace {
+            host: None,
             name,
             prefix: at,
             folder: space_folder,
