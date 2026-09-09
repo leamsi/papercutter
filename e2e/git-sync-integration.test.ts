@@ -120,13 +120,17 @@ test("checked activation, pause, automatic text recovery and explicit binary rec
   ).toContainText("Push preflight passed");
   expect(git(join(root, "notebook"), "remote")).toBe("");
   await page.getByRole("button", { name: "Enable sync", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Up to date");
+  await expect(
+    page.getByRole("status", { name: "Git sync status" }),
+  ).toContainText("Up to date");
   const statusUrl = `${base}/.spaces/api/admin/spaces/sample/git`;
   const success = (await (await page.request.get(statusUrl)).json())
     .lastSuccess;
   expect(success).toBeGreaterThan(0);
   await page.getByRole("button", { name: "Pause sync", exact: true }).click();
-  await expect(page.getByRole("status")).toHaveText("Sync paused");
+  await expect(
+    page.getByRole("status", { name: "Git sync status" }),
+  ).toHaveText("Sync paused");
   expect((await (await page.request.get(statusUrl)).json()).lastSuccess).toBe(
     success,
   );
@@ -167,9 +171,9 @@ test("checked activation, pause, automatic text recovery and explicit binary rec
   commit(remoteWork, "Remote edits");
   git(remoteWork, "push", "-q", "origin", "main");
   await page.getByRole("button", { name: "Resume sync", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText(
-    "2 files need conflict resolution",
-  );
+  await expect(
+    page.getByRole("status", { name: "Git sync status" }),
+  ).toContainText("2 files need conflict resolution");
   await page.goto(`${base}/notebook/Sample`);
   await expect(
     page.getByRole("button", { name: "Edit manually", exact: true }),
@@ -197,5 +201,7 @@ test("checked activation, pause, automatic text recovery and explicit binary rec
     Buffer.from("remote\0bytes"),
   );
   await page.goto(`${base}/.spaces/sample/git`);
-  await expect(page.getByRole("status")).toContainText("Up to date");
+  await expect(
+    page.getByRole("status", { name: "Git sync status" }),
+  ).toContainText("Up to date");
 });

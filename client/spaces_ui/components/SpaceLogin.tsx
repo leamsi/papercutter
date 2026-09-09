@@ -1,7 +1,9 @@
 import { useEffect, useState } from "preact/hooks";
+import { redirectToCentral } from "../central_redirect.ts";
 import {
   base64Decode,
   deriveEncryptionKey,
+  inspectEncryptionCache,
   publishEncryptionKey,
 } from "../encryption.ts";
 import { LoginForm, type LoginValues } from "./LoginForm.tsx";
@@ -23,6 +25,19 @@ export type AuthConfig = {
 export function SpaceLogin({ config }: { config: AuthConfig }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(config.accountManaged);
+
+  useEffect(() => {
+    if (config.accountManaged)
+      void redirectToCentral(
+        new URLSearchParams(location.search).get("from") ||
+          new URL(".", document.baseURI).href,
+      )
+        .then((redirected) => {
+          if (!redirected) setChecking(false);
+        })
+        .catch(() => setChecking(false));
+  }, []);
 
   // Registering here — not in the editor — is what makes the login page the
   // first thing that installs a space's worker, so it is already active by the
@@ -64,12 +79,72 @@ export function SpaceLogin({ config }: { config: AuthConfig }) {
         return;
       }
 
+      const encrypted = !!localStorage.getItem("enableEncryption");
+      if (encrypted && !values.clientEncryption) {
+        setError(
+          "Encryption is already enabled in this browser. Keep it enabled to preserve your existing local data. Synchronize and export your data before changing encryption mode.",
+        );
+        setBusy(false);
+        return;
+      }
+
       if (values.clientEncryption) {
-        localStorage.setItem("enableEncryption", "true");
         const key = await deriveEncryptionKey(
           `${values.username}:${values.password}`,
           base64Decode(config.encryptionSalt),
         );
+        const configResponse = await fetch(".config", {
+          credentials: "include",
+        });
+        if (!configResponse.ok) {
+          setError(
+            "Could not check this space's local encryption settings. Try again.",
+          );
+          setBusy(false);
+          return;
+        }
+        const spaceConfig = await configResponse.json();
+        if (
+          !spaceConfig.enableClientEncryption ||
+          typeof spaceConfig.spaceFolderPath !== "string"
+        ) {
+          setError("This space does not support local encryption.");
+          setBusy(false);
+          return;
+        }
+        let cache;
+        try {
+          cache = await inspectEncryptionCache(
+            new URL(".", document.baseURI).href,
+            spaceConfig.spaceFolderPath,
+            key,
+          );
+        } catch (error: any) {
+          setError(
+            error.message ??
+              "Could not inspect this browser's existing local data.",
+          );
+          setBusy(false);
+          return;
+        }
+        if (!encrypted && cache.plainHasData) {
+          setError(
+            "This browser already has local data. Synchronize and export it before changing encryption mode. Your existing cache has been preserved.",
+          );
+          setBusy(false);
+          return;
+        }
+        if (
+          encrypted &&
+          !cache.matching &&
+          (cache.otherFiles || cache.plainHasData)
+        ) {
+          setError(
+            "This key does not match an existing local cache. Unlock it with the previous credentials before changing encryption. Your local data has been preserved.",
+          );
+          setBusy(false);
+          return;
+        }
         if (!(await publishEncryptionKey(key, config.accountManaged))) {
           // Without a worker holding the key the editor would boot, find no
           // key and bounce straight back here — say so instead of looping.
@@ -80,6 +155,7 @@ export function SpaceLogin({ config }: { config: AuthConfig }) {
           setBusy(false);
           return;
         }
+        localStorage.setItem("enableEncryption", "true");
       } else {
         localStorage.removeItem("enableEncryption");
       }
@@ -90,6 +166,13 @@ export function SpaceLogin({ config }: { config: AuthConfig }) {
       setBusy(false);
     }
   }
+
+  if (checking)
+    return (
+      <div class="center">
+        <p role="status">Loading sign-in…</p>
+      </div>
+    );
 
   return (
     <div class="center">
@@ -105,7 +188,10 @@ export function SpaceLogin({ config }: { config: AuthConfig }) {
           busy={busy}
           rememberMeDays={config.rememberMeDays}
           clientEncryption
-          initialClientEncryption={!!localStorage.getItem("enableEncryption")}
+          initialClientEncryption={
+            new URLSearchParams(location.search).get("encrypt") === "true" ||
+            !!localStorage.getItem("enableEncryption")
+          }
           onSubmit={(values) => void submit(values)}
         />
         <footer>

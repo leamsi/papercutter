@@ -5,8 +5,6 @@ import * as sass from "sass";
 
 import { patchBundledJS } from "../client/plugos/plug_compile.ts";
 
-// This builds the client and puts it into client_bundle/client
-
 export async function buildClient(): Promise<void> {
   await mkdir("client_bundle/client", { recursive: true });
   await mkdir("client_bundle/base_fs", { recursive: true });
@@ -24,7 +22,6 @@ export async function buildClient(): Promise<void> {
     sourcemap: "linked",
     minify: true,
     jsxFactory: "h",
-    // metafile: true,
     format: "esm",
     chunkNames: ".client/[name]-[hash]",
     jsx: "automatic",
@@ -94,6 +91,7 @@ export async function buildClient(): Promise<void> {
             in: "client/spaces_ui/auth.tsx",
             out: ".client/auth",
           },
+          { in: "client/spaces_ui/central.tsx", out: ".client/central" },
         ],
         splitting: false,
       },
@@ -128,17 +126,10 @@ async function copyAssets(dist: string) {
   );
   await cp("client/images/logo.png", `${dist}/logo.png`);
   await cp("client/images/logo-dock.png", `${dist}/logo-dock.png`);
-  // Small copy of the dock icon for inline UI use (the Space Manager's
-  // wordmark). Generated from logo-dock.png — see that file's note in
-  // client/images/README.md. The 1024px original is 405 KB for something
-  // drawn at ~26 CSS px.
+  // Avoid loading the 405 KB original for a ~26 CSS px wordmark.
   await cp("client/images/logo-dock-96x96.png", `${dist}/logo-dock-96x96.png`);
 
-  // Three stylesheets, all compiled from the same partials so they cannot
-  // drift: main.css for the editor, app.css for the standalone pages (login,
-  // setup wizard, Space Manager) and components.css for plug panel iframes —
-  // the last kept under that name because `panelStyles()` and the plug docs
-  // reference it.
+  // Keep components.css's name: panelStyles() and plug documentation rely on it.
   for (const [entry, output] of [
     ["main.scss", "main.css"],
     ["app.scss", "app.css"],
@@ -167,6 +158,8 @@ const NOT_PRECACHED = new Set([
   "authorize.html",
   "auth.js",
   "index.html",
+  "central.html",
+  "central.js",
   "spaces.html",
   "spaces.js",
   "setup.html",
@@ -176,7 +169,6 @@ const NOT_PRECACHED = new Set([
 ]);
 
 async function patchServiceWorker() {
-  // Scan .client/ directory to build the full precache file list
   const clientDir = "client_bundle/client/.client";
   const allFiles = await readdir(clientDir);
   const precacheFiles = [
@@ -188,7 +180,6 @@ async function patchServiceWorker() {
   ];
   const precacheFilesStr = precacheFiles.join(",");
 
-  // Patch the service_worker {{CACHE_NAME}} and {{PRECACHE_FILES}}
   let swCode = await readFile(
     "client_bundle/client/service_worker.js",
     "utf-8",

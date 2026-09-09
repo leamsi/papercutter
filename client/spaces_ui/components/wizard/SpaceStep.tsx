@@ -1,27 +1,16 @@
-import { Fragment } from "preact";
-import { Button, Input, UrlPrefixInput } from "@silverbulletmd/silverbullet/ui";
+import { Button, Input } from "@silverbulletmd/silverbullet/ui";
 import { FolderPicker } from "../../FolderPicker.tsx";
 import { FieldErrors } from "../../space_fields.tsx";
 import type { FieldError } from "../../types.ts";
-import {
-  defaultFolder,
-  type Hosting,
-  parentDir,
-  type SpaceValues,
-} from "../../wizard.ts";
+import { defaultFolder, parentDir, type SpaceValues } from "../../wizard.ts";
 
-/**
- * Step 2 of the setup wizard: the first space. Controlled like `AdminStep`,
- * with one wrinkle — `onNameInput` is separate from the other setters because
- * typing a name also reseeds the prefix and folder defaults, which the wizard
- * tracks (see `useSlugDefaults`).
- */
 export function SpaceStep({
   values,
   root,
   onNameInput,
-  onHostingChange,
-  onPrefixChange,
+  primaryUrl,
+  onPrimaryUrlChange,
+  onHostChange,
   onFolderChange,
   errors,
   busy,
@@ -32,8 +21,9 @@ export function SpaceStep({
   /** The server's absolute data root, used for the folder placeholder. */
   root: string;
   onNameInput: (name: string) => void;
-  onHostingChange: (hosting: Hosting) => void;
-  onPrefixChange: (prefix: string) => void;
+  primaryUrl: string;
+  onPrimaryUrlChange: (value: string) => void;
+  onHostChange: (value: string) => void;
   onFolderChange: (folder: string) => void;
   errors: FieldError[];
   busy: boolean;
@@ -56,40 +46,30 @@ export function SpaceStep({
         value={values.name}
         onInput={(e) => onNameInput(e.currentTarget.value)}
       />
-      <label>Hosting</label>
-      <label>
-        <input
-          type="radio"
-          name="hosting"
-          checked={values.hosting === "root"}
-          onChange={() => onHostingChange("root")}
-        />{" "}
-        Host at the root of this server (/)
-        <span class="sb-help-text">
-          Only recommended if you intend to create only a <em>single space</em>{" "}
-          or using individual (sub)domains for additional spaces.
-        </span>
-      </label>
-      <label>
-        <input
-          type="radio"
-          name="hosting"
-          checked={values.hosting === "prefix"}
-          onChange={() => onHostingChange("prefix")}
-        />{" "}
-        Host under a URL prefix
-      </label>
-      {values.hosting === "prefix" && (
-        <Fragment>
-          <label for="setup-prefix">Prefix</label>
-          <UrlPrefixInput
-            id="setup-prefix"
-            origin={location.origin}
-            value={values.prefix}
-            onInput={onPrefixChange}
-          />
-        </Fragment>
-      )}
+      <label for="setup-primary-url">Primary URL</label>
+      <Input
+        id="setup-primary-url"
+        type="url"
+        required
+        value={primaryUrl}
+        onInput={(e) => onPrimaryUrlChange(e.currentTarget.value)}
+      />
+      <p class="sb-help-text">
+        Confirm the public origin for server management and sign-in. The current
+        browser origin is suggested. Spaces must use separate hostnames.
+      </p>
+      <label for="setup-host">Space hostname</label>
+      <Input
+        id="setup-host"
+        required
+        value={values.host ?? ""}
+        placeholder="notes.example.com"
+        onInput={(e) => onHostChange(e.currentTarget.value)}
+      />
+      <p class="sb-help-text">
+        Configure this hostname to reach this server. It must differ from the
+        primary URL hostname; do not include a scheme or path.
+      </p>
       <label for="setup-folder">Folder</label>
       <FolderPicker
         id="setup-folder"

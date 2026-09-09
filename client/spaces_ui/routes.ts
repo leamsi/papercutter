@@ -4,6 +4,12 @@ export const SPACES_BASE = new URL(document.baseURI).pathname.replace(
   "",
 );
 
+export const ADMIN_SECTIONS = {
+  server: "Server",
+  authentication: "Authentication",
+} as const;
+export type AdminSection = keyof typeof ADMIN_SECTIONS;
+
 export type SpacesRoute =
   | { screen: "login"; next?: string }
   | { screen: "spaces" }
@@ -14,6 +20,7 @@ export type SpacesRoute =
   | { screen: "user-new" }
   | { screen: "user"; username: string }
   | { screen: "profile" }
+  | { screen: "admin"; section: AdminSection }
   | { screen: "not-found" };
 
 export function spacesUrl(path: string): string {
@@ -49,6 +56,21 @@ export function parseSpacesRoute(): SpacesRoute {
   }
   if (segments[0] === "new" && segments.length === 1) {
     return { screen: "space-new" };
+  }
+  if (
+    ["admin", "authentication"].includes(segments[0]) &&
+    segments.length === 1
+  ) {
+    const section = new URLSearchParams(location.search).get("section");
+    return {
+      screen: "admin",
+      section:
+        section && Object.hasOwn(ADMIN_SECTIONS, section)
+          ? (section as AdminSection)
+          : segments[0] === "authentication"
+            ? "authentication"
+            : "server",
+    };
   }
   if (segments[0] === "profile" && segments.length === 1) {
     return { screen: "profile" };

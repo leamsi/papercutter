@@ -1,5 +1,6 @@
 import type { RuntimeAvailability } from "./runtime_availability.ts";
 import type {
+  AuthenticationStatus,
   FieldError,
   GitStatus,
   GitDraft,
@@ -66,11 +67,12 @@ export function formatApiError(e: unknown): string {
 }
 
 /** Server-level facts for admin screens. See `RuntimeAvailability`. */
-export function getServerInfo(): Promise<{ runtimeApi: RuntimeAvailability }> {
+export function getServerInfo(): Promise<{
+  runtimeApi: RuntimeAvailability;
+  primaryUrl?: string | null;
+}> {
   return adminApi("GET", "server-info");
 }
-
-// --- User management (backed by users.json via the admin API) ------------
 
 export function listUsers(): Promise<Record<string, UserInfo>> {
   return adminApi("GET", "users");
@@ -90,14 +92,22 @@ export function createUser(
   admin: boolean,
   fullName: string,
   email: string,
+  loginMethod: "local" | "sso" = "local",
+  providerId = "",
+  expectedEmail = "",
 ): Promise<void> {
-  return adminApi("POST", "users", {
-    username,
-    password,
-    admin,
-    fullName,
-    email,
-  });
+  const profile = { username, admin, fullName, email, loginMethod };
+  return adminApi(
+    "POST",
+    "users",
+    loginMethod === "sso"
+      ? { ...profile, providerId, expectedEmail }
+      : { ...profile, password },
+  );
+}
+
+export function getAuthenticationStatus(): Promise<AuthenticationStatus> {
+  return adminApi("GET", "authentication");
 }
 
 export function deleteUser(name: string): Promise<void> {
@@ -112,6 +122,15 @@ export function setUserPassword(name: string, password: string): Promise<void> {
 
 export function setUserAdmin(name: string, admin: boolean): Promise<void> {
   return adminApi("PUT", `users/${encodeURIComponent(name)}`, { admin });
+}
+
+export function setUserDisabled(
+  name: string,
+  disabled: boolean,
+): Promise<void> {
+  return adminApi("POST", `users/${encodeURIComponent(name)}/disabled`, {
+    disabled,
+  });
 }
 
 export function setUserProfile(
@@ -150,8 +169,6 @@ export function deleteToken(user: string, name: string): Promise<void> {
     `users/${encodeURIComponent(user)}/tokens/${encodeURIComponent(name)}`,
   );
 }
-
-// --- Git sync (per-space) --------------------------------------------------
 
 export function getGitStatus(spaceId: string): Promise<GitStatus> {
   return adminApi("GET", `spaces/${encodeURIComponent(spaceId)}/git`);

@@ -2,7 +2,7 @@ import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { chromium, expect, type Page, test } from "@playwright/test";
 import {
   ADMIN_PASSWORD,
   ADMIN_USER,
@@ -173,14 +173,9 @@ test("a space moved to a different prefix still boots", async ({ page }) => {
 test("a sibling space's client assets are not answered with the app shell", async ({
   page,
 }) => {
-  // The root worker's scope covers `/private/.client/*`, but those files are
-  // not in its precache (whose keys are its own space's) and not in its local
-  // data — so it used to fall through to the SPA-shell fallback and answer a
-  // JavaScript module request with HTML. The browser refuses to execute that,
-  // and the login page it belongs to renders blank.
-  //
-  // A private space, because its login page is the one asset request a visitor
-  // makes before authenticating anywhere — the case a user actually hits.
+  // The root worker must proxy sibling assets instead of answering module
+  // requests with its cached HTML shell. A private sibling exercises asset
+  // loading before the visitor authenticates.
   await registerRootServiceWorker(page);
   await admin("POST", "spaces", {
     name: "private",
@@ -210,15 +205,9 @@ test("a sibling space's client assets are not answered with the app shell", asyn
 test("a sibling space is not shadowed while the worker believes it is offline", async ({
   page,
 }) => {
-  // The worker's `online` flag flips false on a mere ping timeout (2s), so a
-  // slow server — not a dead one — is enough to reach the offline SPA-shell
-  // fallback. A navigation to a sibling space landing in that window used to
-  // be answered with the root space's cached shell; the worker can only
-  // refuse it because it knows the origin's space prefixes
-  // (`BootConfig.spacePrefixes`).
-  //
-  // Freezing a server strands the in-flight requests of anything sharing it,
-  // so this test runs against one of its own.
+  // A ping timeout marks a slow server offline. Even then, spacePrefixes
+  // must prevent the root worker answering sibling navigations from cache.
+  // This test uses its own server because freezing strands all in-flight requests.
   const own = await startServer();
   try {
     await runOfflineSiblingCheck(page, own);
@@ -310,4 +299,302 @@ test("/.accounts is proxied to the server, not answered with the app shell", asy
   expect(result.status).toBe(200);
   expect(result.body).not.toContain("<!doctype");
   expect(() => JSON.parse(result.body)).not.toThrow();
+});
+
+test("Space Manager logs out after leaving the only editor tab", async ({
+  page,
+  context,
+}) => {
+  await registerRootServiceWorker(page);
+  await page.evaluate(() => (window as any).client.widgetsReady);
+  const login = await page.request.post(`${base}/.spaces/api/login`, {
+    data: { username: ADMIN_USER, password: ADMIN_PASSWORD },
+  });
+  expect(login.ok()).toBe(true);
+  await page.goto(`${base}/.spaces/`);
+  expect(context.pages()).toHaveLength(1);
+  await page.getByRole("button", { name: "Profile menu", exact: true }).click();
+  await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "You are signed out" }),
+  ).toBeVisible();
+  expect((await page.request.get(`${base}/.spaces/api/session`)).status()).toBe(
+    401,
+  );
+});
+
+test("Space Manager logs out outside the last editor's worker scope", async ({
+  page,
+  context,
+  browserName,
+}) => {
+  const isolated = await startServer();
+  try {
+    await adminOn(isolated, "POST", "spaces", {
+      name: "Notebook",
+      binding: { prefix: "/notes" },
+      public: true,
+      seedIndex: true,
+    });
+    await adminOn(isolated, "POST", "spaces", {
+      name: "Public notebook",
+      binding: { prefix: "/public" },
+      public: true,
+      seedIndex: true,
+    });
+    await page.goto(`${isolated.base}/public/`);
+    await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+    await page.evaluate(() => (window as any).client.widgetsReady);
+    await page.goto(`${isolated.base}/notes/`);
+    await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+    await page.evaluate(() => (window as any).client.widgetsReady);
+    const login = await page.request.post(
+      `${isolated.base}/.spaces/api/login`,
+      {
+        data: { username: ADMIN_USER, password: ADMIN_PASSWORD },
+      },
+    );
+    expect(login.ok()).toBe(true);
+    await page.goto(`${isolated.base}/.spaces/`);
+    expect(context.pages()).toHaveLength(1);
+    expect(
+      await page.evaluate(
+        async () => (await navigator.serviceWorker.getRegistrations()).length,
+      ),
+    ).toBe(2);
+    expect(
+      await page.evaluate(() => navigator.serviceWorker.controller),
+    ).toBeNull();
+    if (browserName === "chromium") {
+      const cdp = await context.newCDPSession(page);
+      await cdp.send("ServiceWorker.enable");
+      await cdp.send("ServiceWorker.stopAllWorkers");
+      await cdp.detach();
+    }
+    await page
+      .getByRole("button", { name: "Profile menu", exact: true })
+      .click();
+    await page.getByRole("button", { name: "Log out", exact: true }).click();
+    if (browserName === "chromium") {
+      await expect(
+        page.getByRole("button", { name: "Force logout", exact: true }),
+      ).toBeVisible();
+      page.once("dialog", (dialog) => dialog.accept());
+      await page
+        .getByRole("button", { name: "Force logout", exact: true })
+        .click();
+    }
+    await expect(
+      page.getByRole("heading", { name: "You are signed out" }),
+    ).toBeVisible();
+  } finally {
+    await stopServer(isolated);
+  }
+});
+
+test("Space Manager offers force logout for an old worker and deletes data directly", async ({
+  page,
+}) => {
+  const login = await page.request.post(`${base}/.spaces/api/login`, {
+    data: { username: ADMIN_USER, password: ADMIN_PASSWORD },
+  });
+  expect(login.ok()).toBe(true);
+  await page.goto(`${base}/.spaces/`);
+  await page.context().route(`${base}/retired/service_worker.js`, (route) =>
+    route.fulfill({
+      contentType: "text/javascript",
+      body: `self.addEventListener("install", event => event.waitUntil(self.skipWaiting()));
+self.addEventListener("activate", event => event.waitUntil(self.clients.claim()));`,
+    }),
+  );
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.register("/retired/service_worker.js");
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        async () =>
+          (await navigator.serviceWorker.getRegistration("/retired/"))?.active
+            ?.state,
+      ),
+    )
+    .toBe("activated");
+  await page.getByRole("button", { name: "Profile menu", exact: true }).click();
+  await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Force logout", exact: true }),
+  ).toBeVisible();
+  expect((await page.request.get(`${base}/.spaces/api/session`)).status()).toBe(
+    200,
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Force logout", exact: true }).click();
+  await expect(
+    page.getByText("Local space data has been removed from this browser."),
+  ).toBeVisible();
+  expect((await page.request.get(`${base}/.spaces/api/session`)).status()).toBe(
+    401,
+  );
+  expect(
+    await page.evaluate(
+      async () => (await navigator.serviceWorker.getRegistrations()).length,
+    ),
+  ).toBe(0);
+});
+
+test("failed saving preserves edits until explicit force logout deletes local data", async ({
+  page,
+  context,
+}) => {
+  await registerRootServiceWorker(page);
+  await page.evaluate(() => (window as any).client.widgetsReady);
+  expect(
+    (
+      await page.request.post(`${base}/.spaces/api/login`, {
+        data: { username: ADMIN_USER, password: ADMIN_PASSWORD },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.goto(`${base}/.spaces/`);
+  const editor = await context.newPage();
+  await editor.goto(`${base}/RecoveryDraft`);
+  await expect(editor.locator("#sb-editor .cm-editor")).toBeVisible();
+  await editor.evaluate(() => (window as any).client.widgetsReady);
+  await editor.evaluate(() => {
+    const client = (window as any).client;
+    client.contentManager.save = async () => {
+      throw new Error("Synthetic storage failure");
+    };
+    const view = client.editorView;
+    view.dispatch({
+      changes: {
+        from: 0,
+        to: view.state.doc.length,
+        insert: "Keep this unsaved draft available for recovery",
+      },
+    });
+    clearTimeout(client.contentManager.saveTimeout);
+  });
+  await page.getByRole("button", { name: "Profile menu", exact: true }).click();
+  await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Force logout", exact: true }),
+  ).toBeVisible();
+  expect((await page.request.get(`${base}/.spaces/api/session`)).status()).toBe(
+    200,
+  );
+  await expect(editor).toHaveURL(`${base}/RecoveryDraft`);
+  expect(await editor.evaluate(() => document.documentElement.inert)).toBe(
+    false,
+  );
+  await expect(editor.locator("#sb-editor .cm-content")).toContainText(
+    "Keep this unsaved draft available for recovery",
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Force logout", exact: true }).click();
+  await expect(
+    page.getByText("Local space data has been removed from this browser."),
+  ).toBeVisible();
+  await expect(
+    editor.getByText("Local space data has been removed from this browser."),
+  ).toBeVisible();
+  expect((await page.request.get(`${base}/.spaces/api/session`)).status()).toBe(
+    401,
+  );
+  expect(
+    await page.evaluate(async () =>
+      (await indexedDB.databases()).filter((db) => db.name?.startsWith("sb_")),
+    ),
+  ).toEqual([]);
+});
+
+test("Space Manager without workers ignores duplicate locks in its own tab", async ({
+  page,
+}) => {
+  expect(
+    (
+      await page.request.post(`${base}/.spaces/api/login`, {
+        data: { username: ADMIN_USER, password: ADMIN_PASSWORD },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.goto(`${base}/.spaces/`);
+  await page.evaluate(() => {
+    void navigator.locks.request(
+      "silverbullet-logout-participant",
+      { mode: "shared" },
+      () => new Promise<void>(() => {}),
+    );
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        async () =>
+          (await navigator.locks.query()).held?.filter(
+            (lock) => lock.name === "silverbullet-logout-participant",
+          ).length,
+      ),
+    )
+    .toBe(2);
+  expect(
+    await page.evaluate(
+      async () => (await navigator.serviceWorker.getRegistrations()).length,
+    ),
+  ).toBe(0);
+  await page.getByRole("button", { name: "Profile menu", exact: true }).click();
+  await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await expect(
+    page.getByText("Local space data has been removed from this browser."),
+  ).toBeVisible();
+  expect((await page.request.get(`${base}/.spaces/api/session`)).status()).toBe(
+    401,
+  );
+});
+
+test("repeated local manager logouts with back-forward cache enabled", async () => {
+  test.setTimeout(120_000);
+  const browser = await chromium.launch({
+    channel: process.env.SB_TEST_CHROME_CHANNEL,
+    ignoreDefaultArgs: ["--disable-back-forward-cache"],
+  });
+  try {
+    const page = await browser.newPage();
+    await page.goto(`${base}/.spaces/login`);
+    for (let iteration = 0; iteration < 4; iteration++) {
+      await page.getByLabel("Username", { exact: true }).fill(ADMIN_USER);
+      await page.getByLabel("Password", { exact: true }).fill(ADMIN_PASSWORD);
+      await page.getByRole("button", { name: "Log in", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Profile menu", exact: true })
+        .click();
+      await page.getByRole("button", { name: "Log out", exact: true }).click();
+      await expect(
+        page.getByText("Local space data has been removed from this browser."),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    }
+    await page.getByLabel("Username", { exact: true }).fill(ADMIN_USER);
+    await page.getByLabel("Password", { exact: true }).fill(ADMIN_PASSWORD);
+    await page.getByRole("button", { name: "Log in", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Profile menu", exact: true }),
+    ).toBeVisible();
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("data-before-history", "true"),
+    );
+    await page.goto("about:blank");
+    expect((await page.request.get(`${base}/.spaces/api/logout`)).ok()).toBe(
+      true,
+    );
+    await page.goBack();
+    await expect(
+      page.getByRole("button", { name: "Log in", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator("html")).not.toHaveAttribute(
+      "data-before-history",
+      "true",
+    );
+  } finally {
+    await browser.close();
+  }
 });

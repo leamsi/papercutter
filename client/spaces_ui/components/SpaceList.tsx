@@ -1,7 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
-import { Alert, Badge } from "@silverbulletmd/silverbullet/ui";
+import { Alert } from "@silverbulletmd/silverbullet/ui";
 import { api, formatApiError } from "../api.ts";
-import { bindingLabel, spaceUrl } from "../bindings.ts";
+import { bindingLabel, spaceEntryUrl } from "../bindings.ts";
 import { spacesUrl } from "../routes.ts";
 import type { VisibleSpace } from "../types.ts";
 
@@ -19,12 +19,21 @@ export function SpaceList({
   onUnauthorized: () => void;
 }) {
   const [spaces, setSpaces] = useState<VisibleSpace[]>([]);
+  const [encryptedLogin, setEncryptedLogin] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api("GET", "api/spaces")
-      .then((spaces: VisibleSpace[]) => {
+    const encrypt = !!localStorage.getItem("enableEncryption");
+    const central = encrypt
+      ? fetch("/.auth/central/public").then(
+          async (response) =>
+            response.ok && !!(await response.json()).configured,
+        )
+      : Promise.resolve(false);
+    Promise.all([api("GET", "api/spaces"), central])
+      .then(([spaces, configured]: [VisibleSpace[], boolean]) => {
+        setEncryptedLogin(configured);
         setSpaces(spaces);
         setLoaded(true);
       })
@@ -57,13 +66,19 @@ export function SpaceList({
       <ul class="sb-space-list">
         {spaces.map((space) => (
           <li key={space.id}>
-            <a class="sb-space-link" href={spaceUrl(space.binding)}>
+            <a
+              class="sb-space-link"
+              href={spaceEntryUrl(space.binding, encryptedLogin)}
+            >
               {space.name}
             </a>
-            <a href={spaceUrl(space.binding)} target="_blank" rel="noopener">
+            <a
+              href={spaceEntryUrl(space.binding, encryptedLogin)}
+              target="_blank"
+              rel="noopener"
+            >
               {bindingLabel(space.binding)}
             </a>
-            <Badge class={space.state}>{space.state}</Badge>
             {admin && (
               <a
                 class="sb-button sb-space-edit"

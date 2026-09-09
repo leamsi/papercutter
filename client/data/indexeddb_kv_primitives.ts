@@ -3,7 +3,6 @@ import { type IDBPDatabase, openDB } from "idb";
 
 import type { KV, KvKey } from "../../plug-api/types/datastore.ts";
 
-// Separator character to use for key serialization
 const sep = "\0";
 const objectStoreName = "data";
 
@@ -27,6 +26,7 @@ export class IndexedDBKvPrimitives implements KvPrimitives {
 
   async init() {
     this.db = await openDB(this.dbName, 1, {
+      blocking: () => this.db.close(),
       upgrade: (db) => {
         db.createObjectStore(objectStoreName);
       },
@@ -36,18 +36,14 @@ export class IndexedDBKvPrimitives implements KvPrimitives {
   async clear(): Promise<void> {
     const objectStoreNames = this.db.objectStoreNames;
 
-    // Create a transaction that includes all object stores
     const tx = this.db.transaction(objectStoreNames, "readwrite");
 
-    // Clear each object store in parallel
     const clearPromises = Array.from(objectStoreNames).map((storeName) =>
       tx.objectStore(storeName).clear(),
     );
 
-    // Wait for all clears to complete
     await Promise.all(clearPromises);
 
-    // Complete the transaction
     await tx.done;
   }
 

@@ -93,9 +93,29 @@ export type SpaceInfo = {
 /** GET /api/users entry: `{ "<username>": UserInfo }`. */
 export interface UserInfo {
   admin: boolean;
+  disabled: boolean;
+  loginMethod: "local" | "sso";
+  lastLogin?: string | null;
   fullName: string | null;
   email: string | null;
+  sso: {
+    providerId: string;
+    expectedEmail: string;
+    identity?: { issuer: string; subject: string };
+  } | null;
   tokens: Record<string, { createdAt: string }>;
+}
+
+export interface AuthenticationStatus {
+  enabled: boolean;
+  active: {
+    providerId: string;
+    buttonLabel?: string;
+  } | null;
+  draft?: {
+    providerId: string;
+    buttonLabel?: string;
+  } | null;
 }
 
 /** GET/PUT `api/profile`: the caller's own account. */
@@ -114,7 +134,6 @@ export type VisibleSpace = {
   id: string;
   name: string;
   binding: Binding;
-  state: "running" | "errored";
   access: SpaceAccess;
 };
 

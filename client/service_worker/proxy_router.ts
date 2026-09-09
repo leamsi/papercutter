@@ -171,7 +171,6 @@ export class ProxyRouter extends EventEmitter<ProxyRouterEvents> {
     private precacheFiles: Record<string, string>,
   ) {
     super();
-    // Actively check if we're online by pinging the server
     void this.checkOnline();
     setInterval(() => {
       void this.checkOnline();
@@ -221,6 +220,8 @@ export class ProxyRouter extends EventEmitter<ProxyRouterEvents> {
    * Stops service worker operation only to be continued after reconfiguration
    */
   reset() {
+    this.localSpacePrimitives = undefined;
+    this.fullSyncConfirmed = false;
     console.log("Shutting down proxy router and linked components");
     if (this.syncEngine) {
       this.syncEngine.stop();
@@ -232,7 +233,6 @@ export class ProxyRouter extends EventEmitter<ProxyRouterEvents> {
     if (this.syncEngine) {
       try {
         const serverVersion = await this.syncEngine.remote.ping();
-        // If the ping is successful, we are online
         this.online = true;
 
         if (serverVersion) {
@@ -245,7 +245,6 @@ export class ProxyRouter extends EventEmitter<ProxyRouterEvents> {
           }
         }
       } catch {
-        // Otherwise we're not
         this.online = false;
       } finally {
         void this.emit("onlineStatusUpdated", this.online);
@@ -266,7 +265,6 @@ export class ProxyRouter extends EventEmitter<ProxyRouterEvents> {
 
     const pathname = url.pathname.substring(this.basePathName.length); //url.pathname with any URL prefix removed
 
-    // Use the custom cache key if available, otherwise use the request URL
     const cacheKey = this.precacheFiles[pathname] || event.request.url;
 
     event.respondWith(
@@ -274,19 +272,15 @@ export class ProxyRouter extends EventEmitter<ProxyRouterEvents> {
         const request = event.request;
         const requestUrl = new URL(request.url);
         try {
-          // Are we fetching a URL from the same origin as the app? If not, we don't handle it and pass it on
           if (!requestUrl.href.startsWith(this.baseURI)) {
             return fetch(request);
           }
 
-          // Try the static (client) file cache first
           const cachedResponse = await caches.match(cacheKey);
-          // Return the cached response if found
           if (cachedResponse) {
             return cachedResponse;
           }
 
-          //requestUrl.pathname without with any URL prefix removed
           const pathname = requestUrl.pathname.substring(
             this.basePathName.length,
           );
@@ -356,8 +350,6 @@ export class ProxyRouter extends EventEmitter<ProxyRouterEvents> {
             }
           }
 
-          // We are now in a state we're configured and either a full sync cycle has completed (since boot) OR we're offline
-
           if (
             pathname.startsWith(fsEndpoint) &&
             pathname.endsWith(".md") &&
@@ -368,10 +360,8 @@ export class ProxyRouter extends EventEmitter<ProxyRouterEvents> {
               `${pathname.slice(fsEndpoint.length, -3)}`,
             );
           } else if (pathname.startsWith(fsEndpoint)) {
-            // Handle /.fs file system APIs
             return this.handleRequest(pathname, request);
           } else {
-            // Fallback to the app shell for all other requests (SPA).
             if (request.mode === "navigate" && this.online) {
               try {
                 return await fetch(request);
@@ -406,10 +396,8 @@ export class ProxyRouter extends EventEmitter<ProxyRouterEvents> {
     switch (request.method) {
       case "GET": {
         if (!path) {
-          // .fs GET
           return this.handleFileListing();
         } else {
-          // .fs/* GET
           return this.handleGet(path, request);
         }
       }
@@ -439,7 +427,6 @@ export class ProxyRouter extends EventEmitter<ProxyRouterEvents> {
     }
 
     const files = await this.localSpacePrimitives.fetchFileList();
-    // Now augment this with non-synced file metadata
     const localFileNames = new Set(files.map((f) => f.name));
     for (const nonSyncedFile of this.nonSyncedFiles.values()) {
       if (!localFileNames.has(nonSyncedFile.name)) {
@@ -460,11 +447,9 @@ export class ProxyRouter extends EventEmitter<ProxyRouterEvents> {
 
     try {
       if (request.headers.has("x-get-meta")) {
-        // Requesting only file meta
         const meta = await this.localSpacePrimitives.getFileMeta(path);
         if (request.headers.has("x-observing")) {
           setTimeout(() => {
-            // Next tick
             void this.emit("observedRequest", path);
           });
         }
@@ -478,7 +463,6 @@ export class ProxyRouter extends EventEmitter<ProxyRouterEvents> {
     } catch (err: any) {
       if (err.message === notFoundError.message && this.online) {
         console.info("No local copy of", path, "proxying to server");
-        // Not found locally, but we're online, so let's try the server
         return fetch(request);
       } else if (err.message === notFoundError.message) {
         console.warn(
@@ -486,7 +470,6 @@ export class ProxyRouter extends EventEmitter<ProxyRouterEvents> {
           path,
           "and offline, so will 404 on this one",
         );
-        // We're not online so let's assume the file indeed doesn't exist
         // TODO: What could be nice here is to check if this is a nonSyncedFile and if so serve some sort of offline placeholder
         return new Response(notFoundError.message, {
           status: 404,
@@ -504,19 +487,14 @@ export class ProxyRouter extends EventEmitter<ProxyRouterEvents> {
       throw new Error("This should not happen");
     }
     try {
-      // console.log("Doing a write for", path);
       if (!this.syncEngine.isSyncCandidate(path) && this.online) {
         console.log("Handling file write for non-synced file", path);
-        // Writing a non-synced file while being online
-        // Proxy the request
         const resp = await fetch(request);
         // Update the nonSynced snapshot in place for later file listing consistency
         this.nonSyncedFiles.set(path, headersToFileMeta(path, resp.headers)!);
         return resp;
       } else {
-        // Synced file
         const body = await request.arrayBuffer();
-        // console.log("Handling file write", path, body.byteLength);
         const meta = await this.localSpacePrimitives.writeFile(
           path,
           new Uint8Array(body),
@@ -547,10 +525,8 @@ export class ProxyRouter extends EventEmitter<ProxyRouterEvents> {
       if (!this.syncEngine.isSyncCandidate(path)) {
         console.log("Handling file delete for non-synced file", path);
         this.nonSyncedFiles.delete(path);
-        // Proxy the request
         return fetch(request);
       }
-      // console.log("Handling file delete", path);
       await this.localSpacePrimitives.deleteFile(path);
       return new Response("OK", {
         status: 200,

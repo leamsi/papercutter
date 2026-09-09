@@ -87,8 +87,6 @@ test("an unknown deep path is not-found", async () => {
   });
 });
 
-// --- safeSpacesDestination: the open-redirect guard -----------------------
-
 test("safeSpacesDestination accepts an in-base path", async () => {
   const { safeSpacesDestination } = await load("/.spaces/login");
   expect(safeSpacesDestination("/.spaces/users")).toBe("/.spaces/users");
@@ -160,8 +158,6 @@ test.each([
   expect(safeSpacesDestination(payload)).toBe(undefined);
 });
 
-// --- loginUrl ---------------------------------------------------------------
-
 test("loginUrl encodes a safe next destination as the query param", async () => {
   const { loginUrl } = await load("/.spaces/users", "");
   expect(loginUrl("/.spaces/users/alice")).toBe(
@@ -205,4 +201,24 @@ test("space sections have refreshable query routes", async () => {
     id: "notebook",
     section: "revisions",
   });
+});
+
+test("existing authentication links open the Admin authentication section", async () => {
+  expect((await load("/.spaces/authentication")).parseSpacesRoute()).toEqual({
+    screen: "admin",
+    section: "authentication",
+  });
+});
+
+test("Admin defaults to Server and supports section links", async () => {
+  for (const [query, section] of [
+    ["", "server"],
+    ["?section=invalid", "server"],
+    ["?section=authentication", "authentication"],
+  ]) {
+    expect((await load("/.spaces/admin", query)).parseSpacesRoute()).toEqual({
+      screen: "admin",
+      section,
+    });
+  }
 });

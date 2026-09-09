@@ -1,7 +1,15 @@
+import {
+  logoutBrowserSession,
+  LogoutSyncError,
+  forceLogoutWarning,
+  logoutInProgress,
+  registerLogoutParticipant,
+} from "../../logout.ts";
+import { useServerName } from "../server_name.ts";
 import type { ComponentType } from "preact";
-import { useEffect, useState } from "preact/hooks";
-import { Alert } from "@silverbulletmd/silverbullet/ui";
-import { api, formatApiError, getSession } from "../api.ts";
+import { useEffect, useRef, useState } from "preact/hooks";
+import { Alert, Button } from "@silverbulletmd/silverbullet/ui";
+import { formatApiError, getSession } from "../api.ts";
 import {
   NavigateProvider,
   canNavigate,
@@ -11,6 +19,7 @@ import {
 import { loginUrl, safeSpacesDestination, spacesUrl } from "../routes.ts";
 import type { SpacesRoute } from "../routes.ts";
 import type { AuthState } from "../types.ts";
+import { AdminView } from "./AdminView.tsx";
 import { Login } from "./Login.tsx";
 import { ProfileView } from "./ProfileView.tsx";
 import { SpaceEditor } from "./SpaceEditor.tsx";
@@ -26,9 +35,6 @@ type ScreenProps = {
 
 type Screen = { view: ComponentType<ScreenProps>; admin: boolean };
 
-// Thin adapters: each narrows `route` to its own variant and calls the existing
-// component unchanged. Keeping the components' own signatures means this table
-// adds indirection only where the route shape differs.
 const SpaceListScreen = ({ auth, onUnauthorized }: ScreenProps) => (
   <SpaceList admin={auth.admin} onUnauthorized={onUnauthorized} />
 );
@@ -70,12 +76,14 @@ const ProfileScreen = ({ onUnauthorized }: ScreenProps) => (
   <ProfileView onUnauthorized={onUnauthorized} />
 );
 
-// Keyed on SpacesRoute["screen"], so TypeScript requires an entry for every
-// route variant: adding a route without deciding its admin requirement is a
-// compile error rather than a silently public screen.
-//
-// `admin` is a DISPLAY decision, not a security boundary. Every screen's data
-// comes from `api/admin/*`, which authorizes server-side on every request.
+const AdminScreen = ({ route, onUnauthorized }: ScreenProps) => (
+  <AdminView
+    section={route.screen === "admin" ? route.section : "server"}
+    onUnauthorized={onUnauthorized}
+  />
+);
+
+// These flags control navigation; API requests enforce authorization independently.
 const SCREENS: Record<SpacesRoute["screen"], Screen | undefined> = {
   spaces: { view: SpaceListScreen, admin: false },
   "space-new": { view: SpaceNewScreen, admin: true },
@@ -84,14 +92,61 @@ const SCREENS: Record<SpacesRoute["screen"], Screen | undefined> = {
   users: { view: UserListScreen, admin: true },
   "user-new": { view: UserNewScreen, admin: true },
   user: { view: UserDetailScreen, admin: true },
+  admin: { view: AdminScreen, admin: true },
   profile: { view: ProfileScreen, admin: false },
   login: undefined, // handled by the auth gate before this table is consulted
   "not-found": undefined,
 };
 
 export function App() {
+  const serverName = useServerName();
   const [auth, setAuth] = useState<AuthState>({ phase: "loading" });
   const { route, navigate } = useSpacesRouter();
+  const [logoutError, setLogoutError] = useState("");
+  const [canForceLogout, setCanForceLogout] = useState(false);
+  async function logOut(force = false) {
+    if (force && !window.confirm(forceLogoutWarning)) return;
+    if (!canNavigate(spacesUrl("/login"))) return;
+    const previous = auth;
+    setAuth({ phase: "loading" });
+    setLogoutError("");
+    setCanForceLogout(false);
+    try {
+      await logoutBrowserSession(async () => {}, force);
+    } catch (error) {
+      setAuth(previous);
+      setLogoutError(
+        error instanceof Error ? error.message : "Could not log out",
+      );
+      setCanForceLogout(error instanceof LogoutSyncError);
+    }
+  }
+  const tabs = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const unregister = registerLogoutParticipant(async () => {});
+    const restore = (event: PageTransitionEvent) => {
+      if (event.persisted) location.reload();
+    };
+    window.addEventListener("pagehide", unregister);
+    window.addEventListener("pageshow", restore);
+    return () => {
+      window.removeEventListener("pagehide", unregister);
+      window.removeEventListener("pageshow", restore);
+      unregister();
+    };
+  }, []);
+  useEffect(() => {
+    const nav = tabs.current;
+    const current = nav?.querySelector('[aria-current="page"]');
+    if (!nav || !current) return;
+    const viewport = nav.getBoundingClientRect();
+    const selected = current.getBoundingClientRect();
+    if (selected.left < viewport.left) {
+      nav.scrollLeft -= viewport.left - selected.left;
+    } else if (selected.right > viewport.right) {
+      nav.scrollLeft += selected.right - viewport.right;
+    }
+  }, [auth.phase, route.screen]);
 
   // One delegated listener rather than a link component: every in-app link is
   // a real <a href> that works without JS, and this upgrades them in place.
@@ -112,6 +167,7 @@ export function App() {
   useEffect(() => {
     getSession()
       .then(({ username, admin }) => {
+        if (logoutInProgress()) return;
         if (route.screen === "login") {
           location.replace(route.next ?? spacesUrl("/"));
           return;
@@ -119,6 +175,7 @@ export function App() {
         setAuth({ phase: "authed", username, admin });
       })
       .catch((error: any) => {
+        if (logoutInProgress()) return;
         if (error.unauthorized) {
           if (route.screen === "login") setAuth({ phase: "login" });
           else location.replace(loginUrl());
@@ -135,6 +192,7 @@ export function App() {
   if (auth.phase === "login") {
     return (
       <Login
+        title={serverName}
         onDone={() => {
           const next =
             route.screen === "login"
@@ -146,26 +204,24 @@ export function App() {
     );
   }
 
-  const onUnauthorized = () => location.replace(loginUrl());
+  const onUnauthorized = () => {
+    if (!logoutInProgress()) location.replace(loginUrl());
+  };
   const onSpacesTab = route.screen.startsWith("space");
   const onUsersTab = route.screen.startsWith("user");
+  const onAdminTab = route.screen === "admin";
   return (
     <NavigateProvider value={navigate}>
       <div class="sb-spaces-header">
         <div class="sb-spaces-header-left">
           <a class="sb-wordmark" href={spacesUrl("/")}>
-            {/* The dock icon, in the small copy meant for inline use (see
-                client/images/README.md). `alt` is empty on purpose: the
-                wordmark beside it already says "SilverBullet", so a
-                description here would only make screen readers announce the
-                name twice. */}
             <img src="assets/logo-dock-96x96.png" alt="" />
-            SilverBullet
+            <span title={serverName}>{serverName}</span>
           </a>
           {/* The active tab is what names the current screen — the list screens
               dropped their headings rather than repeat it — so it carries
               `aria-current` and not just a highlight class. */}
-          <nav class="sb-tabs" aria-label="Sections">
+          <nav ref={tabs} class="sb-tabs" aria-label="Sections">
             {auth.admin && (
               <>
                 <a
@@ -182,6 +238,13 @@ export function App() {
                 >
                   Users
                 </a>
+                <a
+                  class={`sb-tab ${onAdminTab ? "sb-active" : ""}`}
+                  aria-current={onAdminTab ? "page" : undefined}
+                  href={spacesUrl("/admin")}
+                >
+                  Admin
+                </a>
               </>
             )}
           </nav>
@@ -191,19 +254,24 @@ export function App() {
           admin={auth.admin}
           routeKey={`${location.pathname}${location.search}`}
           onUnauthorized={onUnauthorized}
-          onLogout={async () => {
-            if (!canNavigate(spacesUrl("/login"))) return;
-            setAuth({ phase: "loading" });
-            try {
-              await api("GET", "api/logout");
-              location.assign(spacesUrl("/login"));
-            } catch (error: any) {
-              if (error.unauthorized) onUnauthorized();
-              else setAuth(auth);
-            }
-          }}
+          onLogout={() => logOut()}
         />
       </div>
+      {logoutError && (
+        <Alert variant="error">
+          {logoutError}
+          {canForceLogout && (
+            <>
+              <p>
+                Synchronization did not finish. Retry logout, or force logout to
+                discard unsynchronized edits.
+              </p>
+              <Button onClick={() => logOut()}>Retry logout</Button>
+              <Button onClick={() => logOut(true)}>Force logout</Button>
+            </>
+          )}
+        </Alert>
+      )}
       {(() => {
         const screen = SCREENS[route.screen];
         if (!screen || (screen.admin && !auth.admin)) {

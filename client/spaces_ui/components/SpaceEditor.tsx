@@ -134,7 +134,6 @@ export function SpaceEditor({
       <a href={spacesUrl("/")}>← All spaces</a>
       <header class="sb-settings-heading">
         <div>
-          <p>Space settings</p>
           <h1>{space.name}</h1>
         </div>
         <a

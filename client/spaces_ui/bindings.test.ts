@@ -20,12 +20,8 @@ test('spaceUrl normalizes a bare-root prefix of "" to "/"', () => {
 });
 
 test('spaceUrl normalizes a literal "/" prefix to "/", not "//"', () => {
-  // Regression test for Fix 3: server/src/multi/validate.rs accepts a bare
-  // "/" prefix and never normalizes it before persisting, so a stored
-  // binding can have `prefix === "/"` exactly. `${prefix}/` used to turn
-  // that into "//" -- a protocol-relative URL with an empty authority that
-  // navigates nowhere useful, and this sits on SpaceList, the landing
-  // screen for every ordinary account.
+  // The server accepts a bare "/" prefix. Appending another slash would
+  // produce an invalid protocol-relative URL.
   expect(spaceUrl({ prefix: "/" })).toBe("/");
 });
 
@@ -48,4 +44,27 @@ test('bindingLabel shows a bare-root prefix as "/"', () => {
 
 test("bindingLabel shows a host binding with its listener port", () => {
   expect(bindingLabel({ host: "test.localhost" })).toBe("test.localhost:3000");
+});
+
+test("space entry carries central encryption to the destination hostname while preserving ordinary links", async () => {
+  (globalThis as any).location = {
+    port: "3000",
+    href: "https://login.sb.test:3000/.spaces/",
+  };
+  const { spaceEntryUrl } = await import("./bindings.ts");
+  expect(spaceEntryUrl({ host: "notes.test" }, false)).toBe(
+    "//notes.test:3000/",
+  );
+  const encrypted = new URL(spaceEntryUrl({ host: "notes.test" }, true));
+  expect(encrypted.origin).toBe("https://notes.test:3000");
+  expect(encrypted.pathname).toBe("/.auth/central/start");
+  expect(encrypted.searchParams.get("destination")).toBe(
+    "https://notes.test:3000/",
+  );
+  expect(encrypted.searchParams.get("encrypt")).toBe("true");
+  expect(
+    new URL(spaceEntryUrl({ prefix: "/notes" }, true)).searchParams.get(
+      "destination",
+    ),
+  ).toBe("https://login.sb.test:3000/notes/");
 });

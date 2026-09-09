@@ -1,3 +1,9 @@
+import { waitForLogout } from "./logout_state.ts";
+import {
+  logoutInProgress,
+  registerLogoutParticipant,
+  saveCurrentEditor,
+} from "./logout.ts";
 import type {
   CompletionContext,
   CompletionResult,
@@ -144,10 +150,8 @@ declare global {
 // an origin can't outlive the sync it belongs to.
 const REALTIME_ORIGIN_TTL_MS = 30_000;
 
-// Window within which an identical sync notification is shown only once.
 const SYNC_FLASH_DEDUP_MS = 5_000;
 
-// Service worker messages that mean the sync engine is still delivering.
 const SYNC_PROGRESS_MESSAGES = new Set([
   "file-synced",
   "file-sync-complete",
@@ -266,6 +270,11 @@ export class Client {
 
     this.widgetCache = new WidgetCache(this.ds);
     this.contentManager = new ContentManager(this);
+    if (!(await waitForLogout())) {
+      this.ds.kv.close();
+      return;
+    }
+    registerLogoutParticipant(() => saveCurrentEditor(this));
 
     this.objectIndex = new ObjectIndex(
       this.ds,
@@ -425,6 +434,7 @@ export class Client {
       document.baseURI.replace(/\/*$/, "") + fsEndpoint,
       this.bootConfig.spaceFolderPath,
       (message, actionOrRedirectHeader) => {
+        if (logoutInProgress()) return;
         alert(message);
         if (!actionOrRedirectHeader || actionOrRedirectHeader === "reload") {
           location.reload();
@@ -510,8 +520,6 @@ export class Client {
       },
     );
 
-    // Caching a list of known files for the wiki_link highlighter (that checks if a file exists)
-    // And keeping it up to date as we go
     this.eventHook.addLocalListener("file:changed", (fileName: string) => {
       this.clientSystem.allKnownFiles.add(fileName);
     });
@@ -680,7 +688,6 @@ export class Client {
 
     console.error(`Error during ${context}:`, e);
 
-    // Don't show flash notifications for expected operational errors
     if (
       e.message === "Offline" ||
       e.name === "AbortError" ||
@@ -831,7 +838,6 @@ export class Client {
         allPages = await this.space.fetchPageList();
 
         for (const page of allPages) {
-          // These are _mostly_ meta pages, let's add a tag for them
           if (page.name.startsWith("Library/")) {
             page.tags = ["meta"];
           }
@@ -1127,7 +1133,6 @@ export class Client {
       ].some(Boolean) ||
       document.querySelector(".sb-anchored-menu")
     ) {
-      // Some other modal UI element is visible, don't focus editor now
       return;
     }
 
@@ -1255,7 +1260,6 @@ export class Client {
       return;
     }
 
-    // Prepare separate <style> tag per custom style (for robustness)
     const customStylesContent = spaceStyles
       .map((s) => `<style>${s.style}</style>`)
       .join("\n\n");
@@ -1357,7 +1361,6 @@ export class Client {
           // First sync pulled new content — reload the current page
           // (it may have been empty because the file didn't exist locally yet)
           void this.reloadEditor();
-          // Re-evaluate CONFIG and space scripts now that sync has pulled them
           void this.clientSystem.reloadState();
         }
         break;
@@ -1370,6 +1373,7 @@ export class Client {
         break;
       }
       case "auth-error": {
+        if (logoutInProgress()) break;
         alert(message.message);
         if (
           !message.actionOrRedirectHeader ||

@@ -24,8 +24,6 @@ body.sb-standalone {
     font-weight: normal;
   }
 
-  // Subsection heading (e.g. "Role", "Password", "API tokens" on the user
-  // detail screen) — a clear step below the page title, not level with it.
   h2 {
     font-size: 1.15rem;
     font-weight: 600;
@@ -37,8 +35,6 @@ body.sb-standalone {
     margin-top: 1.5rem;
   }
 
-  // Vertical rhythm between subsections (the user detail screen's
-  // Role/Password/API tokens blocks) so they read as distinct groups.
   section {
     margin-top: 1.75rem;
   }
@@ -47,17 +43,12 @@ body.sb-standalone {
     margin-top: 1rem;
   }
 
-  // Every list on these pages is a custom `list-style: none` layout, never
-  // prose, so the UA's ~40px marker indent is pure dead space on the left.
-  // The old bundle got this from a global `* { padding: 0 }` reset; that reset
-  // is gone (it broke the editor), so state it where it actually applies.
+  // These lists have no markers; remove the browser’s unused marker indent.
   ul,
   ol {
     padding-left: 0;
   }
 
-  // The component library has no Radio, so the setup wizard's hosting choice
-  // uses native radios — just tint them to match .sb-checkbox.
   input[type="radio"] {
     accent-color: var(--ui-accent-color);
     cursor: pointer;
@@ -69,7 +60,6 @@ body.sb-standalone {
     font-weight: 600;
   }
 
-  // Full-width fields inside forms; the components supply everything else.
   form .sb-input,
   form .sb-select {
     width: 100%;
@@ -181,10 +171,7 @@ body.sb-standalone.sb-page {
   flex-direction: row;
 }
 
-// A checkbox's label sits beside it, not above it: undo the block layout,
-// top margin and bold weight that `form label` gives the field labels, which
-// otherwise push the text out of line with the box and make every option
-// shout.
+// Undo form-label layout for checkbox labels, which sit beside the control.
 .sb-standalone .checkbox-wrapper label,
 .sb-standalone form .checkbox-wrapper label {
   display: inline;
@@ -225,6 +212,14 @@ body.sb-standalone.sb-page {
 }
 
 .sb-standalone .sb-wordmark {
+  min-width: 0;
+  max-width: min(24rem, 55vw);
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   color: inherit;
   text-decoration: none;
   font-weight: bold;
@@ -233,10 +228,8 @@ body.sb-standalone.sb-page {
   gap: 0.4em;
   font-size: 1.1rem;
 
-  // The dock icon already carries its own rounded corners and padding, so it
-  // needs no framing here — only a size that sits with the wordmark's cap
-  // height rather than towering over it.
   img {
+    flex-shrink: 0;
     width: 1.5em;
     height: 1.5em;
   }
@@ -280,12 +273,6 @@ body.sb-standalone.sb-page {
   padding-top: 1.25rem;
   border-top: 1px solid #8884;
 }
-
-.sb-standalone .sb-badge.errored {
-  background-color: #b0002033;
-  color: #b00020;
-}
-
 
 /* Server-side folder picker (client/spaces_ui/FolderPicker.tsx). */
 .sb-standalone .sb-folder-picker-status {
@@ -390,8 +377,6 @@ body.sb-standalone.sb-page {
   vertical-align: middle;
 }
 
-// Name reads as the primary control; the Edit button repeats it at the row's
-// end, right-aligned like the spaces list.
 .sb-standalone .sb-user-link {
   color: var(--ui-accent-color);
   font-weight: 600;
@@ -442,9 +427,7 @@ body.sb-standalone.sb-page {
   border-radius: 0.4em;
   padding: 0.5rem 0.75rem;
   margin-top: 0.5rem;
-  // Defensive: the UA stylesheet's `min-inline-size: min-content` would stop a
-  // fieldset shrinking inside a flex container. It does not bite in today's
-  // layout, where a fieldset is a block child of a non-flex form.
+  // Allow fieldsets to shrink below min-content when placed in flex layouts.
   min-width: 0;
 }
 
@@ -463,8 +446,28 @@ body.sb-standalone.sb-page {
     margin-bottom: 4px;
   }
 
-  .sb-access-fixed {
-    color: var(--subtle-color, #666);
+  .sb-access-grid-scroll {
+    overflow-x: auto;
+  }
+
+  .sb-access-grid {
+    width: 100%;
+    border-collapse: collapse;
+
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--subtle-color);
+      text-align: center;
+    }
+
+    th:first-child {
+      text-align: left;
+      overflow-wrap: anywhere;
+    }
+
+    tbody th {
+      font-weight: normal;
+    }
   }
 }
 
@@ -518,9 +521,7 @@ body.sb-standalone.sb-page {
       height: 20px;
     }
 
-    // Anything laying a field out beside its button: let the button drop to
-    // its own line instead of pushing out of the card, and let the field
-    // shrink to make room while they still share one.
+    // Wrap field buttons on narrow screens without forcing the card wider.
     .row,
     .password-field,
     .sb-folder-picker-status,
@@ -554,11 +555,17 @@ body.sb-standalone.sb-page {
   .sb-standalone .sb-spaces-header .sb-tabs {
     order: 1;
     flex: 1 0 100%;
+    display: flex;
+    flex-wrap: nowrap;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
     margin-top: 0.25rem;
   }
 
   .sb-standalone .sb-tab {
     display: inline-flex;
+    flex-shrink: 0;
     align-items: center;
     min-height: 2.75rem;
     padding: 0 0.6rem;

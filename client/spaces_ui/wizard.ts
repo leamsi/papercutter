@@ -1,8 +1,7 @@
 import { slugify } from "@silverbulletmd/silverbullet/ui";
 import type { FieldError } from "./types.ts";
 
-/** Where a space is bound: the server root, or a URL prefix under it. */
-export type Hosting = "root" | "prefix";
+export type Hosting = "root" | "prefix" | "host";
 
 /** What the administrator step collects. */
 export type AdminValues = {
@@ -18,6 +17,7 @@ export type SpaceValues = {
   name: string;
   hosting: Hosting;
   prefix: string;
+  host?: string;
   folder: string;
 };
 
@@ -68,18 +68,18 @@ export function validateAdmin({
   return [];
 }
 
-/**
- * Validate the first-space step, one problem at a time (see `validateAdmin`).
- * The prefix is only required when the space is actually bound to one.
- */
 export function validateSpace({
   name,
   hosting,
   prefix,
   folder,
+  host,
 }: SpaceValues): FieldError[] {
   if (!name.trim()) {
     return [{ field: "space.name", message: "name is required" }];
+  }
+  if (hosting === "host" && !host?.trim()) {
+    return [{ field: "space.host", message: "hostname is required" }];
   }
   if (hosting === "prefix" && !prefix.trim()) {
     return [{ field: "space.prefix", message: "prefix is required" }];
@@ -91,11 +91,14 @@ export function validateSpace({
 }
 
 /** The space half of the `api/complete` payload. */
-export function spacePayload({ name, hosting, prefix, folder }: SpaceValues): {
-  name: string;
-  prefix: string;
-  folder: string;
-} {
+export function spacePayload({
+  name,
+  hosting,
+  prefix,
+  host,
+  folder,
+}: SpaceValues) {
+  if (hosting === "host") return { name, host: host?.trim(), folder };
   return {
     name,
     prefix: hosting === "root" ? "/" : prefix,

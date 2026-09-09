@@ -9,6 +9,7 @@ import { EncryptedKvPrimitives } from "./data/encrypted_kv_primitives.ts";
 import { IndexedDBKvPrimitives } from "./data/indexeddb_kv_primitives.ts";
 import type { KvPrimitives } from "./data/kv_primitives.ts";
 import { initLogger } from "./lib/logger.ts";
+import { WorkerLogout } from "./service_worker/logout.ts";
 import { ProxyRouter } from "./service_worker/proxy_router.ts";
 import { SyncEngine } from "./service_worker/sync_engine.ts";
 import { getOrCreateClientId } from "./spaces/client_id.ts";
@@ -47,11 +48,8 @@ const precacheFiles = Object.fromEntries(
     .map((path) => [path, `${baseURI}${path}?v=${CACHE_NAME}`, path]),
 ); // Cache busting
 
-// Initially set to undefined, resulting in all "fetch" being proxied.
-// Once the service worker is configured, this will be set and the proxy will handle fetches.
 const proxyRouter = new ProxyRouter(basePathName, baseURI, precacheFiles);
 
-// Configuration mutex
 let configuring = false;
 
 // @ts-expect-error: debugging
@@ -59,6 +57,46 @@ globalThis.proxyRouter = proxyRouter;
 
 // This is the in-memory store of an encryption key that SB clients and the index engine can share without asking for it constantly
 let encryptionKeyMemoryStore: CryptoKey | undefined;
+let keyGeneration = 0;
+let syncDatabaseName: string | undefined;
+const workerLogout = new WorkerLogout(
+  async () => {
+    // @ts-expect-error: service worker API
+    const clients = await self.clients.matchAll({
+      type: "window",
+      includeUncontrolled: true,
+    });
+    return clients.filter(
+      (client: { frameType: string }) => client.frameType !== "nested",
+    );
+  },
+  async () => {
+    keyGeneration++;
+    encryptionKeyMemoryStore = undefined;
+    proxyRouter.reset();
+    // @ts-expect-error: service worker API
+    await self.registration.unregister();
+  },
+  async () => {
+    const engine = proxyRouter.syncEngine;
+    if (engine) {
+      while ((await engine.syncSpace()) !== 0) {
+        if (!workerLogout.active) throw new Error("Logout was cancelled.");
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      return syncDatabaseName ? [syncDatabaseName] : [];
+    } else if (
+      (await indexedDB.databases()).some((db) =>
+        db.name?.startsWith("sb_files_"),
+      )
+    ) {
+      throw new Error(
+        "Open this space to synchronize its local data, or force logout to discard it.",
+      );
+    }
+    return [];
+  },
+);
 
 // Let's clean this encryptionKey if there's no more clients left for a little while, asking to re-enter
 setInterval(() => {
@@ -71,10 +109,19 @@ setInterval(() => {
   });
 }, 5000); // little while is 5s
 
-// Message received from client
 self.addEventListener("message", async (event: any) => {
   const message: ServiceWorkerTargetMessage = event.data;
   switch (message.type) {
+    case "logout-sync":
+    case "logout-cancel":
+    case "logout-clear":
+    case "logout-complete":
+    case "logout-revoked":
+    case "logout-preserve":
+    case "logout-force": {
+      event.waitUntil(workerLogout.handle(message, event.ports[0]));
+      break;
+    }
     case "skip-waiting": {
       // @ts-expect-error: Skip waiting to activate this service worker immediately
       self.skipWaiting();
@@ -155,6 +202,7 @@ self.addEventListener("message", async (event: any) => {
       break;
     }
     case "get-encryption-key": {
+      if (workerLogout.active) break;
       event.source.postMessage({
         type: "encryption-key",
         key:
@@ -164,7 +212,11 @@ self.addEventListener("message", async (event: any) => {
       break;
     }
     case "set-encryption-key": {
-      encryptionKeyMemoryStore = await importKey(message.key);
+      if (workerLogout.active) break;
+      const generation = keyGeneration;
+      const key = await importKey(message.key);
+      if (generation !== keyGeneration || workerLogout.active) break;
+      encryptionKeyMemoryStore = key;
       console.info("Encryption phrase set");
       event.ports[0]?.postMessage({ type: "encryption-key-set" });
       break;
@@ -197,11 +249,13 @@ self.addEventListener("message", async (event: any) => {
       break;
     }
     case "config": {
+      if (workerLogout.active) break;
+      const generation = keyGeneration;
+      const encryptionKey = encryptionKeyMemoryStore;
       const config = message.config;
       // Refreshed ahead of the configured check: a space added since this
       // worker booted must stop being answered locally right away.
       proxyRouter.setSpacePrefixes(config.spacePrefixes ?? []);
-      // Configure the service worker if it hasn't been already
       if (isConfigured()) {
         console.info(
           "Service worker already configured, just updating configs",
@@ -219,16 +273,14 @@ self.addEventListener("message", async (event: any) => {
         console.info("Configuration already in progress, skipping");
         return;
       }
-      // Lock configuration mutex
       configuring = true;
       const configureStart = performance.now();
-      // Put a timeout on it, just in case
       setTimeout(() => {
         configuring = false;
       }, 5000);
       try {
         if (config.enableClientEncryption) {
-          if (!encryptionKeyMemoryStore) {
+          if (!encryptionKey) {
             console.error(
               "Supposed to use encryption, but no phrase set yet, auth error",
             );
@@ -237,7 +289,6 @@ self.addEventListener("message", async (event: any) => {
               message: "Re-authentication required, redirecting...",
               actionOrRedirectHeader: ".auth",
             });
-            // ABORT
             return;
           }
         }
@@ -247,7 +298,7 @@ self.addEventListener("message", async (event: any) => {
           "files",
           spaceFolderPath,
           baseURI,
-          encryptionKeyMemoryStore,
+          encryptionKey,
         );
 
         if (config.logPush) {
@@ -256,28 +307,24 @@ self.addEventListener("message", async (event: any) => {
           }, 1000);
         }
 
-        // Setup KV (database) for store synced files
         let kv: KvPrimitives = new IndexedDBKvPrimitives(dbName);
         await (kv as IndexedDBKvPrimitives).init();
         console.log("Using IndexedDB database", dbName);
 
-        if (encryptionKeyMemoryStore) {
-          kv = new EncryptedKvPrimitives(kv, encryptionKeyMemoryStore);
+        if (encryptionKey) {
+          kv = new EncryptedKvPrimitives(kv, encryptionKey);
           await (kv as EncryptedKvPrimitives).init();
           console.log("Enabled client-side encryption for synced files");
         }
 
-        // And use that to power the IndexedDB backed local storage
         const local = new DataStoreSpacePrimitives(kv);
 
         const clientId = await getOrCreateClientId(kv);
 
-        // Which we'll sync with the remote server
         const remote = new HttpSpacePrimitives(
           basePathName + fsEndpoint,
           spaceFolderPath,
           (message, actionOrRedirectHeader) => {
-            // And auth error occured
             console.error(
               "[service proxy error]",
               message,
@@ -297,7 +344,6 @@ self.addEventListener("message", async (event: any) => {
           "sync",
         );
 
-        // Now let's setup sync
         const syncEngine = new SyncEngine(kv, local, remote);
         syncEngine.setSyncConfig({
           syncDocuments: config.syncDocuments,
@@ -306,7 +352,11 @@ self.addEventListener("message", async (event: any) => {
         const syncStartBegin = performance.now();
         await syncEngine.start();
 
-        // Ok, we're ready to go, let's plug in the proxy router
+        if (generation !== keyGeneration || workerLogout.active) {
+          syncEngine.stop();
+          return;
+        }
+        syncDatabaseName = dbName;
         proxyRouter.configure(syncEngine);
         console.log(
           `[Boot] service worker configured in ${Math.round(
@@ -316,11 +366,10 @@ self.addEventListener("message", async (event: any) => {
           )}ms)`,
         );
 
-        // And wire up some events
         proxyRouter.on({
           observedRequest: (path) => {
             // This is triggered for the currently open file, we want to proactively sync it to keep it up to date
-            syncEngine.requestFileSync(path, { type: "probe" });
+            proxyRouter.syncEngine?.requestFileSync(path, { type: "probe" });
           },
           onlineStatusUpdated: (isOnline) => {
             broadcastMessage({
@@ -377,7 +426,6 @@ self.addEventListener("message", async (event: any) => {
           },
         });
       } finally {
-        // Unlock mutex
         configuring = false;
       }
       break;
@@ -388,7 +436,6 @@ self.addEventListener("message", async (event: any) => {
 function broadcastMessage(message: ServiceWorkerSourceMessage) {
   // @ts-expect-error: service worker API
   const clients: any = self.clients;
-  // Find all windows attached to this service worker
   clients
     .matchAll({
       type: "window",
@@ -417,11 +464,9 @@ self.addEventListener("fetch", (event: any) => {
     throttledServiceWorkerStarted();
   }
 
-  // Always delegate to the proxy router
   proxyRouter.onFetch(event);
 });
 
-// Service worker lifecycle management
 self.addEventListener("install", (event: any) => {
   console.log("Installing service worker...");
   event.waitUntil(
@@ -449,7 +494,6 @@ self.addEventListener("activate", (event: any) => {
 
   event.waitUntil(
     (async () => {
-      // Flush old caches
       const cacheNames = await caches.keys();
       await Promise.all(
         cacheNames.map((cacheName) => {

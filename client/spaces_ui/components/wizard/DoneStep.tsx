@@ -15,6 +15,10 @@ export function DoneStep({ target }: { target: string }) {
   const [pollExhausted, setPollExhausted] = useState(false);
 
   useEffect(() => {
+    if (new URL(target, location.href).origin !== location.origin) {
+      location.href = target;
+      return;
+    }
     let stopped = false;
     let attempts = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -66,7 +70,7 @@ export function DoneStep({ target }: { target: string }) {
           <a href={target}>{target}</a>
         </p>
       ) : (
-        <p>Setup complete — taking you to your space…</p>
+        <p>Setup complete — taking you to server management…</p>
       )}
     </Fragment>
   );

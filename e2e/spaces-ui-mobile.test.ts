@@ -101,7 +101,13 @@ test("the Space Manager fits a phone viewport on every screen", async ({
   await expect(page.getByRole("link", { name: "My Notes" })).toBeVisible();
   await expectFits(page);
 
-  for (const path of ["/new", "/users", `/users/${ADMIN_USER}`, "/profile"]) {
+  for (const path of [
+    "/new",
+    "/users",
+    `/users/${ADMIN_USER}`,
+    "/profile",
+    "/authentication",
+  ]) {
     await page.goto(`${base}/.spaces${path}`);
     await expect(
       page.getByRole("button", { name: "Profile menu", exact: true }),
@@ -140,7 +146,7 @@ test("the tabs and profile menu fit the mobile header", async ({ page }) => {
     };
   });
 
-  expect(header.tabLines).toEqual([1, 1]);
+  expect(header.tabLines).toEqual([1, 1, 1]);
   expect(header.tabTops).toHaveLength(1);
   await page.getByRole("button", { name: "Profile menu", exact: true }).click();
   await expect(page.locator(".sb-anchored-menu")).toBeVisible();
@@ -167,13 +173,15 @@ test("form fields are big enough to tap and never trigger iOS zoom", async ({
       ...document.querySelectorAll<HTMLElement>(
         ".sb-input, .sb-select, .sb-button, .sb-button-primary, .sb-button-danger",
       ),
-    ].map((el) => ({
-      label: `${el.tagName.toLowerCase()}.${el.className}`,
-      height: el.getBoundingClientRect().height,
-      // iOS Safari zooms the page in on focus for anything under 16px and
-      // never zooms back out.
-      fontSize: parseFloat(getComputedStyle(el).fontSize),
-    })),
+    ]
+      .filter((el) => el.getClientRects().length > 0)
+      .map((el) => ({
+        label: `${el.tagName.toLowerCase()}.${el.className}`,
+        height: el.getBoundingClientRect().height,
+        // iOS Safari zooms the page in on focus for anything under 16px and
+        // never zooms back out.
+        fontSize: parseFloat(getComputedStyle(el).fontSize),
+      })),
   );
 
   expect(controls.length).toBeGreaterThan(0);

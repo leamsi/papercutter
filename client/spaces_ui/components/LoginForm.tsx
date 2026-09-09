@@ -13,16 +13,6 @@ export type LoginValues = {
   clientEncryption: boolean;
 };
 
-/**
- * The login form, shared by a space's own login page and the Space Manager.
- * Purely presentational: it collects credentials and hands them to `onSubmit`,
- * which is where the two differ (one posts to a space's `.auth`, the other to
- * the Space Manager's JSON API).
- *
- * The optional fields are opt-in per caller rather than always-on. Client
- * encryption in particular only belongs on a space's login page: the key is
- * handed to that space's service worker, and the Space Manager has none.
- */
 export function LoginForm({
   title,
   error,
@@ -33,6 +23,8 @@ export function LoginForm({
   initialClientEncryption = false,
   children,
   onSubmit,
+  providerLabel,
+  onProvider,
 }: {
   title: preact.ComponentChildren;
   error?: string;
@@ -46,6 +38,8 @@ export function LoginForm({
   initialClientEncryption?: boolean;
   /** Extra content below the form (e.g. the login page's footer link). */
   children?: preact.ComponentChildren;
+  providerLabel?: string;
+  onProvider?: (values: LoginValues) => void;
   onSubmit: (values: LoginValues) => void;
 }) {
   const [username, setUsername] = useState("");
@@ -70,6 +64,24 @@ export function LoginForm({
     >
       <h1>{title}</h1>
       {error && <Alert variant="error">{error}</Alert>}
+      {providerLabel && onProvider && (
+        <>
+          <Button
+            disabled={busy}
+            onClick={() =>
+              onProvider({
+                username: "",
+                password: "",
+                rememberMe,
+                clientEncryption: clientEncryption && encrypt,
+              })
+            }
+          >
+            {providerLabel}
+          </Button>
+          <div role="separator">or use a local account</div>
+        </>
+      )}
       <div>
         <label for="username">Username</label>
         <Input
@@ -122,7 +134,7 @@ export function LoginForm({
               onChange={(event) => setEncrypt(event.currentTarget.checked)}
             />
             <label for="clientEncryption">
-              Enable client encryption (e.g. when using a public computer)
+              Encrypt local data on this device
             </label>
           </div>
           {clientEncryptionHint && encrypt && (

@@ -29,6 +29,27 @@ function routerWithFile(
   return router;
 }
 
+test("reset releases storage and sync references without deleting local files", async () => {
+  const router = routerWithFile(
+    "text/plain",
+    new TextEncoder().encode("Saved draft"),
+  );
+  const storage = router.localSpacePrimitives!;
+  let stopped = false;
+  router.syncEngine = {
+    stop() {
+      stopped = true;
+    },
+  } as any;
+  router.reset();
+  expect(stopped).toBe(true);
+  expect(router.localSpacePrimitives).toBeUndefined();
+  expect(router.syncEngine).toBeUndefined();
+  expect(
+    new TextDecoder().decode((await storage.readFile("Draft.md")).data),
+  ).toBe("Saved draft");
+});
+
 test.each([
   "/notes/.client/auth.js",
   "/notes/.client/client.js",
@@ -66,11 +87,8 @@ test("a page named like a surface, one level down, is still another space", () =
   expect(belongsToAnotherSpace("/x/.fs")).toBe(true);
 });
 
-// `belongsToAnotherSpace` only recognizes *space surfaces* one level down
-// (`/x/.client/...`). A bare sibling root like `/private/` matches nothing
-// there, so while the worker believed it was offline such a navigation fell
-// through to the root space's cached shell. The worker now also consults the
-// origin's space prefixes, delivered via `BootConfig.spacePrefixes`.
+// Bare sibling roots do not match space surfaces; BootConfig.spacePrefixes
+// must keep offline navigation from serving the wrong space's shell.
 
 test("the root worker treats every other prefix space as a sibling", () => {
   expect(scopedSiblingPrefixes("", ["/private", "/work"])).toEqual([

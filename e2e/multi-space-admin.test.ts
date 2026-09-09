@@ -21,11 +21,8 @@ const CWD = join(import.meta.dirname, "..");
 test.beforeAll(async () => {
   rootDir = await mkdtemp(join(tmpdir(), "sb-multi-e2e-"));
 
-  // Provision the root the same way an operator would non-interactively: the
-  // `setup` subcommand (the scriptable twin of the /.setup wizard) writes
-  // users.json (the admin account) + an empty spaces.json. That spaces.json is
-  // what makes the server boot into multi-space mode; SB_MULTI_SPACE is gone
-  // and setting SB_USER alongside spaces.json now refuses to boot.
+  // The setup subcommand writes the admin account and an empty spaces.json,
+  // which selects multi-space mode. SB_USER is invalid alongside spaces.json.
   execFileSync(
     BIN,
     [
@@ -92,9 +89,8 @@ test("first run: login, create a space, open it, edit a page", async ({
   await expect(page.getByRole("status")).toHaveText("Saved");
   await page.getByRole("link", { name: "Spaces", exact: true }).click();
 
-  // It shows as running.
+  // It shows up in the list.
   await expect(page.getByText("Playground")).toBeVisible();
-  await expect(page.locator(".sb-badge.running")).toBeVisible();
 
   await page.goto(`${base}/play/?headless=1`);
   await page
@@ -107,4 +103,72 @@ test("first run: login, create a space, open it, edit a page", async ({
   await editor.click();
   await page.keyboard.type("Hello from multi-space");
   await expect(editor).toContainText("Hello from multi-space");
+});
+
+test("user settings sections preserve drafts and confirm successful saves", async ({
+  page,
+}) => {
+  await page.request.post(`${base}/.spaces/api/login`, {
+    data: { username: ADMIN_USER, password: ADMIN_PASSWORD },
+  });
+  await page.goto(`${base}/.spaces/users`);
+  await expect(
+    page.getByRole("columnheader", { name: "Last login" }),
+  ).toBeVisible();
+  const lastLogin = page
+    .getByRole("row")
+    .filter({ has: page.getByRole("link", { name: ADMIN_USER, exact: true }) })
+    .locator("time");
+  await expect(lastLogin).toBeVisible();
+  expect(Date.parse((await lastLogin.getAttribute("datetime"))!)).not.toBeNaN();
+  await page.goto(`${base}/.spaces/users/${ADMIN_USER}`);
+  const sidebar = page.getByRole("navigation", { name: "User settings" });
+  await expect(sidebar).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Profile", exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("Full name", { exact: true }).fill("Morgan Rivers");
+  await sidebar.getByRole("link", { name: "API tokens" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Profile", exact: true }),
+  ).toBeHidden();
+  await sidebar.getByRole("link", { name: "Profile", exact: true }).click();
+  await expect(page.getByLabel("Full name", { exact: true })).toHaveValue(
+    "Morgan Rivers",
+  );
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Profile saved.");
+  await page.reload();
+  await expect(page.getByLabel("Full name", { exact: true })).toHaveValue(
+    "Morgan Rivers",
+  );
+  await page.route("**/.spaces/api/admin/users/*/profile", (route) =>
+    route.fulfill({ status: 500, body: "Could not save profile" }),
+  );
+  await page.getByLabel("Full name", { exact: true }).fill("Unsaved draft");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(page.locator(".sb-alert-error")).toBeVisible();
+  await page.unroute("**/.spaces/api/admin/users/*/profile");
+  await sidebar.getByRole("link", { name: "API tokens" }).click();
+  await page.getByRole("textbox", { name: "Token name" }).fill("settings-test");
+  await page.getByRole("button", { name: "Create token", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("API token created.");
+  await sidebar.getByRole("link", { name: "Profile", exact: true }).click();
+  await expect(page.getByLabel("Full name", { exact: true })).toHaveValue(
+    "Unsaved draft",
+  );
+  await sidebar.getByRole("link", { name: "API tokens" }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(sidebar).toBeHidden();
+  await page
+    .getByLabel("Settings section", { exact: true })
+    .selectOption("security");
+  await expect(
+    page.getByRole("heading", { name: "Password", exact: true }),
+  ).toBeVisible();
+  await page.goBack();
+  await expect(
+    page.getByRole("heading", { name: "API tokens", exact: true }),
+  ).toBeVisible();
 });

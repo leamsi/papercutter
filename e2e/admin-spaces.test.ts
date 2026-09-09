@@ -216,8 +216,7 @@ test("user create and detail screens have refreshable URLs", async ({
   page,
 }) => {
   await page.getByRole("link", { name: "Users" }).click();
-  // The tab is now the screen's label, so it must be marked as the current
-  // page rather than merely highlighted.
+  // The tab labels the screen and must be marked as the current page.
   await expect(page.locator("[aria-current=page]")).toHaveText("Users");
   await expect(page).toHaveURL(`${base}/.spaces/users`);
   await page.getByRole("link", { name: "Create user" }).click();
@@ -432,8 +431,10 @@ test("canceling logout keeps the session and unsaved settings", async ({
   });
   await page.getByRole("button", { name: "Profile menu", exact: true }).click();
   await page.getByRole("button", { name: "Log out", exact: true }).click();
-  await expect(page).toHaveURL(`${base}/.spaces/login`);
-  await expect(page.getByLabel("Username")).toBeVisible();
+  await expect(page).toHaveURL(`${base}/.spaces/login?signedOut=true`);
+  await expect(
+    page.getByRole("heading", { name: "You are signed out" }),
+  ).toBeVisible();
   expect(confirmations).toBe(1);
 });
 
@@ -501,4 +502,155 @@ test("the shared profile menu replaces account navigation in the header", async 
   await expect(trigger).toHaveText("TE");
   await menu.getByRole("button", { name: "All spaces", exact: true }).click();
   await expect(page).toHaveURL(`${base}/.spaces/`);
+});
+
+test("Admin defaults to Server and preserves Authentication links", async ({
+  page,
+}, testInfo) => {
+  await page.getByRole("link", { name: "Admin", exact: true }).click();
+  await expect(page).toHaveURL(`${base}/.spaces/admin`);
+  await expect(
+    page.getByRole("heading", { name: "Admin", exact: true }),
+  ).toBeVisible();
+  const sections = page.getByRole("navigation", { name: "Admin settings" });
+  await expect(
+    sections.getByRole("link", { name: "Server", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(page.getByLabel("Primary URL", { exact: true })).toBeVisible();
+  await sections
+    .getByRole("link", { name: "Authentication", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Set up SSO" }).click();
+  await expect(page.getByLabel("Provider", { exact: true })).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("admin-authentication-desktop.png"),
+  });
+  await page.goto(`${base}/.spaces/authentication`);
+  await expect(
+    page.getByRole("heading", { name: "Admin", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".sb-tab.sb-active")).toHaveText("Admin");
+  await sections.getByRole("link", { name: "Authentication" }).click();
+  await expect(page).toHaveURL(`${base}/.spaces/admin?section=authentication`);
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Authentication", exact: true }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(sections).toBeHidden();
+  await expect(page.getByLabel("Settings section")).toHaveValue(
+    "authentication",
+  );
+  await page.getByRole("button", { name: "Set up SSO" }).click();
+  await expect(page.getByLabel("Provider", { exact: true })).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath("admin-authentication-mobile.png"),
+  });
+});
+
+test("Admin settings remain inaccessible to non-admin accounts", async ({
+  page,
+  browser,
+}) => {
+  const created = await page.request.post(`${base}/.spaces/api/admin/users`, {
+    data: { username: "casey", password: "casey-password", admin: false },
+  });
+  expect(created.ok()).toBe(true);
+  const context = await browser.newContext();
+  try {
+    const member = await context.newPage();
+    const login = await member.request.post(`${base}/.spaces/api/login`, {
+      data: { username: "casey", password: "casey-password" },
+    });
+    expect(login.ok()).toBe(true);
+    for (const path of ["admin", "authentication"]) {
+      await member.goto(`${base}/.spaces/${path}`);
+      await expect(
+        member.getByRole("link", { name: "Admin", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        member.getByRole("heading", { name: "Not found" }),
+      ).toBeVisible();
+      await expect(
+        member.getByRole("button", { name: "Set up SSO" }),
+      ).toHaveCount(0);
+    }
+    expect(
+      (
+        await member.request.get(`${base}/.spaces/api/admin/authentication`)
+      ).status(),
+    ).toBe(403);
+  } finally {
+    await context.close();
+  }
+});
+
+test("access grid preserves permission dependencies and saved grants", async ({
+  page,
+}, testInfo) => {
+  await admin(page, "POST", "api/admin/users", {
+    username: "morgan",
+    password: "morgan-password",
+    admin: false,
+  });
+  const id = await createSpaceViaApi(page, {
+    name: "Permissions",
+    binding: { prefix: "/permissions" },
+  });
+  await page.goto(`${base}/.spaces/${id}?section=access`);
+  const read = page.getByRole("checkbox", {
+    name: "morgan: Read",
+    exact: true,
+  });
+  const write = page.getByRole("checkbox", {
+    name: "morgan: Write",
+    exact: true,
+  });
+  await expect(read).not.toBeChecked();
+  await write.check();
+  await expect(read).toBeChecked();
+  await write.uncheck();
+  await expect(read).toBeChecked();
+  await write.check();
+  await read.uncheck();
+  await expect(write).not.toBeChecked();
+  await write.check();
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Saved");
+  expect((await fetchSpaceViaApi(page, id)).members.morgan.role).toBe("write");
+  await page.reload();
+  await expect(read).toBeChecked();
+  await expect(write).toBeChecked();
+  const adminWrite = page.getByRole("checkbox", {
+    name: `${ADMIN_USER}: Write`,
+    exact: true,
+  });
+  await expect(adminWrite).toBeChecked();
+  await expect(adminWrite).toBeDisabled();
+  await page.screenshot({
+    path: testInfo.outputPath("access-grid-desktop.png"),
+  });
+  await page.getByRole("checkbox", { name: "Freeze this space" }).check();
+  await expect(write).toBeDisabled();
+  await expect(write).toBeChecked();
+  await page.getByRole("checkbox", { name: "Freeze this space" }).uncheck();
+  await expect(write).toBeEnabled();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath("access-grid-mobile.png"),
+  });
+  await read.uncheck();
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Saved");
+  expect((await fetchSpaceViaApi(page, id)).members?.morgan).toBeUndefined();
 });

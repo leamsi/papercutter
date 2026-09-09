@@ -24,3 +24,16 @@ export function spaceUrl(b: Binding): string {
   const trimmed = (b.prefix || "").replace(/\/+$/, "");
   return `${trimmed}/`;
 }
+
+export function spaceEntryUrl(
+  binding: Binding,
+  encryptedCentralLogin: boolean,
+): string {
+  const direct = spaceUrl(binding);
+  if (!encryptedCentralLogin) return direct;
+  const destination = new URL(direct, location.href);
+  const start = new URL("/.auth/central/start", destination.origin);
+  start.searchParams.set("destination", destination.href);
+  start.searchParams.set("encrypt", "true");
+  return start.href;
+}

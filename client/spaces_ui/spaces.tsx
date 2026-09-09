@@ -1,4 +1,11 @@
 import { render } from "preact";
 import { App } from "./components/App.tsx";
 
-render(<App />, document.getElementById("root")!);
+import { NotificationProvider } from "./notifications.tsx";
+
+render(
+  <NotificationProvider>
+    <App />
+  </NotificationProvider>,
+  document.getElementById("root")!,
+);

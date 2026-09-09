@@ -1,22 +1,27 @@
-import { Fragment } from "preact";
-import { useEffect, useState } from "preact/hooks";
 import {
   Alert,
-  Badge,
   Button,
   Checkbox,
   Input,
   Select,
   UrlPrefixInput,
 } from "@silverbulletmd/silverbullet/ui";
+import { Fragment } from "preact";
+import { useEffect, useState } from "preact/hooks";
 import { adminApi, getServerInfo, listUsers } from "../api.ts";
 import { FolderPicker } from "../FolderPicker.tsx";
 import { formatDuration } from "../git_sync_copy.ts";
+import { SaveConfirmation, useNotification } from "../notifications.tsx";
 import {
   type RuntimeAvailability,
   runtimeApiUnavailableReason,
 } from "../runtime_availability.ts";
 import { FieldErrors, useSlugDefaults } from "../space_fields.tsx";
+import {
+  SPACE_SECTIONS,
+  type SpaceSection,
+  settingsPayload,
+} from "../space_settings.ts";
 import type {
   CommitTiming,
   FieldError,
@@ -26,11 +31,7 @@ import type {
   SpaceInfo,
   UserInfo,
 } from "../types.ts";
-import {
-  SPACE_SECTIONS,
-  settingsPayload,
-  type SpaceSection,
-} from "../space_settings.ts";
+import { AccessGrid } from "./AccessGrid.tsx";
 
 const COMMIT_PRESETS = [
   {
@@ -83,11 +84,8 @@ export function SpaceForm({
   const [hostValue, setHostValue] = useState(initial?.binding.host ?? "");
   const bindValue = bindType === "host" ? hostValue : prefix;
 
-  // Bootstrap from `initial` (edit mode) exactly once. Going through the
-  // hook's setters — rather than lazy initial state — also marks folder/prefix
-  // as touched, which is what protects an existing space's stored values from
-  // being clobbered by a later name edit (mirroring the old `!!initial` seed
-  // for `folderTouched`/`bindValueTouched`).
+  // Initialize through the setters to mark stored folder/prefix values as
+  // touched, protecting them from later name edits.
   useEffect(() => {
     if (initial) {
       setFolder(initial.folder);
@@ -173,7 +171,6 @@ export function SpaceForm({
     return () => clearTimeout(t);
   }, [bindType, bindValue]);
 
-  // Known users, for the member checklist below.
   const loadUsers = () => {
     setUsersError(false);
     listUsers()
@@ -190,7 +187,9 @@ export function SpaceForm({
   // usable: a transient error should not lock an admin out of a setting.
   useEffect(() => {
     getServerInfo()
-      .then((info) => setRuntimeAvailability(info.runtimeApi))
+      .then((info) => {
+        setRuntimeAvailability(info.runtimeApi);
+      })
       .catch(() => {});
   }, []);
   const runtimeApiUnavailable =
@@ -228,7 +227,7 @@ export function SpaceForm({
   useEffect(() => {
     if (id) onDirtyChange?.(dirtySections);
   }, [id, dirtyKey, onDirtyChange]);
-  const [savedSection, setSavedSection] = useState<SpaceSection>();
+  const notify = useNotification("space");
   const [errorSection, setErrorSection] = useState<SpaceSection>();
   const activeDirty = dirtySections.includes(section);
   const modeBlocked =
@@ -243,8 +242,8 @@ export function SpaceForm({
       onSubmit={async (event) => {
         event.preventDefault();
         if (saveState === "saving" || modeBlocked) return;
+        notify("");
         setErrorSection(section);
-        setSavedSection(undefined);
         if (
           (!id || section === "general") &&
           bindType === "prefix" &&
@@ -264,10 +263,11 @@ export function SpaceForm({
               payload,
             );
             setSavedValues((previous) => ({ ...previous, ...payload }));
-            setSavedSection(section);
+            notify("Saved");
             onSaved(id, payload);
           } else {
             const result = await adminApi("POST", "spaces", payload);
+            notify("Space created.");
             onSaved(result.id);
           }
         } catch (cause) {
@@ -284,6 +284,7 @@ export function SpaceForm({
       }}
     >
       {id ? <h2>{SPACE_SECTIONS[section]}</h2> : <h1>Create space</h1>}
+      <SaveConfirmation scope="space" />
       {(!id || errorSection === section) && <FieldErrors errors={errors} />}
       <fieldset class="sb-settings-fields" disabled={saveState === "saving"}>
         <div hidden={!visible("general")}>
@@ -425,41 +426,23 @@ export function SpaceForm({
             {!usersError && Object.keys(users).length === 0 && (
               <p>No other users yet — create some in the Users tab.</p>
             )}
-            {Object.entries(users)
-              .sort((a, b) => a[0].localeCompare(b[0]))
-              .map(([username, u]) => (
-                <div class="sb-access-row" key={username}>
-                  <span class="sb-access-who">
-                    {username}
-                    {u.admin && <Badge>admin</Badge>}
-                  </span>
-                  {u.admin ? (
-                    <span class="sb-access-fixed">Full access</span>
-                  ) : (
-                    <Select
-                      value={members[username] ?? "none"}
-                      onChange={(e) => {
-                        const role = e.currentTarget.value;
-                        setMembers((prev) => {
-                          const next = { ...prev };
-                          if (role === "none") delete next[username];
-                          else next[username] = role as MemberRole;
-                          return next;
-                        });
-                      }}
-                    >
-                      <option value="none">No access</option>
-                      <option value="read">Read</option>
-                      <option value="write" disabled={readOnly}>
-                        Read &amp; write
-                      </option>
-                    </Select>
-                  )}
-                </div>
-              ))}
+            <AccessGrid
+              users={users}
+              members={members}
+              frozen={readOnly}
+              onChange={(username, role) =>
+                setMembers((previous) => {
+                  const next = { ...previous };
+                  if (role === "none") delete next[username];
+                  else next[username] = role;
+                  return next;
+                })
+              }
+            />
             {readOnly && (
               <p class="sb-help-text">
-                Write access is disabled while this space is frozen.
+                Write access is suspended while this space is frozen. Checked
+                permissions are kept for when it is unfrozen.
               </p>
             )}
           </fieldset>
@@ -608,9 +591,6 @@ export function SpaceForm({
           <a class="sb-button" href={cancelHref}>
             Cancel
           </a>
-        )}
-        {savedSection === section && !activeDirty && (
-          <span role="status">Saved</span>
         )}
       </div>
       {id && section === "general" && (

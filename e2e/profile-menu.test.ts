@@ -298,11 +298,14 @@ test("Log out ends the session -- the next request is unauthenticated, not just 
 
   await profileTrigger(page).click();
   await page.getByRole("button", { name: "Log out" }).click();
-  await expect(page).toHaveURL(`${base}/cy/.auth`);
+  await expect(page).toHaveURL(`${base}/.spaces/login?signedOut=true`);
 
   const resp = await page.request.get(`${base}/.spaces/api/profile`);
   expect(resp.status()).toBe(401);
 
+  await expect(
+    page.getByText("Local space data has been removed from this browser."),
+  ).toBeVisible();
   await expect.poll(() => storedRecordCount(page)).toBe(0);
 });
 

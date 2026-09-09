@@ -183,6 +183,18 @@ export type BootConfig = {
  */
 export type ServiceWorkerTargetMessage =
   | {
+      type:
+        | "logout-sync"
+        | "logout-cancel"
+        | "logout-clear"
+        | "logout-complete"
+        | "logout-revoked"
+        | "logout-preserve"
+        | "logout-force";
+      id: string;
+      localLockIncomplete?: boolean;
+    }
+  | {
       type: "skip-waiting";
     }
   | { type: "config"; config: BootConfig }

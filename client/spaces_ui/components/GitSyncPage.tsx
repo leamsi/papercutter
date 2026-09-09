@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "preact/hooks";
 import {
   Alert,
   Button,
@@ -6,6 +5,8 @@ import {
   Input,
   Select,
 } from "@silverbulletmd/silverbullet/ui";
+import { useEffect, useRef, useState } from "preact/hooks";
+import { syncStatusText } from "../../sync_notification.ts";
 import {
   adminApi,
   applyGitDraft,
@@ -28,9 +29,9 @@ import {
   formatDuration,
 } from "../git_sync_copy.ts";
 import { setNavigationGuard } from "../navigation.ts";
+import { SaveConfirmation, useNotification } from "../notifications.tsx";
 import { spacesUrl } from "../routes.ts";
 import type { GitDraft, GitStatus, SpaceInfo } from "../types.ts";
-import { syncStatusText } from "../../sync_notification.ts";
 
 const FREQUENCIES = [
   [60, "Every minute"],
@@ -66,6 +67,7 @@ export function GitSyncPage({
   const [copy, setCopy] = useState("");
   const [generatedDraftKey, setGeneratedDraftKey] = useState(false);
   const [notice, setNotice] = useState("");
+  const notify = useNotification("git");
   const request = useRef(0);
   const mounted = useRef(true);
   const sessionRef = useRef(session);
@@ -153,6 +155,7 @@ export function GitSyncPage({
   const operation = async (name: string, run: () => Promise<void>) => {
     if (busy) return;
     setBusy(name);
+    notify("");
     setError("");
     setNotice("");
     try {
@@ -199,11 +202,12 @@ export function GitSyncPage({
       session!.discard();
       sessionRef.current = undefined;
       setSession(undefined);
-      setNotice(
-        generatedDraftKey
-          ? "Draft discarded. If you added its public key to the repository, remove that unused key there."
-          : "Draft discarded.",
-      );
+      notify("Draft discarded.");
+      if (generatedDraftKey) {
+        setNotice(
+          "If you added its public key to the repository, remove that unused key there.",
+        );
+      }
       await refresh();
     });
   const test = draft?.test;
@@ -235,6 +239,7 @@ export function GitSyncPage({
       ) : (
         <h1>Git sync{space ? ` · ${space.name}` : ""}</h1>
       )}
+      <SaveConfirmation scope="git" />
       {error && <Alert variant="error">{error}</Alert>}
       {notice && <Alert variant="info">{notice}</Alert>}
       {space && space.revisions !== "managed" ? (
@@ -265,7 +270,7 @@ export function GitSyncPage({
                   <Subheading>
                     {connected ? status.remoteUrl : "Connect a Git repository"}
                   </Subheading>
-                  <p role="status">
+                  <p role="status" aria-label="Git sync status">
                     {statusError ? "Status unavailable" : syncText}
                   </p>
                   {connected && (
@@ -364,6 +369,9 @@ export function GitSyncPage({
                         onClick={() =>
                           void operation("pause", async () => {
                             await setGitPaused(spaceId, !status.paused);
+                            notify(
+                              status.paused ? "Sync resumed." : "Sync paused.",
+                            );
                             await refresh();
                           })
                         }
@@ -400,6 +408,7 @@ export function GitSyncPage({
                           )
                             void operation("disconnect", async () => {
                               await disconnectGit(spaceId);
+                              notify("Connection removed.");
                               await refresh();
                             });
                         }}
@@ -665,7 +674,7 @@ export function GitSyncPage({
                         session.discard();
                         sessionRef.current = undefined;
                         setSession(undefined);
-                        setNotice(
+                        notify(
                           "Connection applied. Sync is queued; its result will appear below.",
                         );
                         await refresh();

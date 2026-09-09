@@ -1,6 +1,7 @@
-import { useEffect, useState } from "preact/hooks";
 import { Alert, Button, Input } from "@silverbulletmd/silverbullet/ui";
+import { useEffect, useState } from "preact/hooks";
 import { formatApiError, getProfile, setProfile } from "../api.ts";
+import { SaveConfirmation, useNotification } from "../notifications.tsx";
 import type { ProfileInfo } from "../types.ts";
 
 export function ProfileView({
@@ -13,7 +14,7 @@ export function ProfileView({
   const [error, setError] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
-  const [saved, setSaved] = useState(false);
+  const notify = useNotification("profile");
 
   async function reload() {
     try {
@@ -35,6 +36,7 @@ export function ProfileView({
   }, []);
 
   async function run(action: () => Promise<void>) {
+    notify("");
     try {
       await action();
       setError("");
@@ -54,11 +56,12 @@ export function ProfileView({
         event.preventDefault();
         void run(async () => {
           await setProfile(fullName, email);
-          setSaved(true);
+          notify("Saved.");
         });
       }}
     >
       <h1>Profile</h1>
+      <SaveConfirmation scope="profile" />
       {error && <Alert variant="error">{error}</Alert>}
       <p class="sb-help-text">
         Used for revision history and collaboration features.
@@ -70,7 +73,6 @@ export function ProfileView({
         value={fullName}
         onInput={(event) => {
           setFullName(event.currentTarget.value);
-          setSaved(false);
         }}
       />
       <label for="profile-email">Email</label>
@@ -79,14 +81,12 @@ export function ProfileView({
         value={email}
         onInput={(event) => {
           setEmail(event.currentTarget.value);
-          setSaved(false);
         }}
       />
       <div class="row">
         <Button type="submit" variant="primary">
           Save
         </Button>
-        {saved && <span class="sb-help-text">Saved.</span>}
       </div>
     </form>
   );

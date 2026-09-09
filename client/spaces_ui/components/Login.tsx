@@ -1,18 +1,9 @@
-import { useState } from "preact/hooks";
+import { SignedOut } from "./SignedOut.tsx";
+import { redirectToCentral } from "../central_redirect.ts";
+import { useEffect, useState } from "preact/hooks";
 import { api } from "../api.ts";
 import { LoginForm } from "./LoginForm.tsx";
 
-/**
- * The Space Manager's login. Shares its form with a space's own login page;
- * the credentials go to the Space Manager API rather than to a space's `.auth`.
- *
- * Client encryption is offered here but cannot be *completed* here: the key
- * lives in a space's service worker, and the Space Manager has none to hand it
- * to. So ticking the box only records the preference — the space's own login
- * page reads it back (`initialClientEncryption`), arrives pre-ticked, and does
- * the derivation. Without this the option would be unreachable for anyone who
- * starts at the Space Manager, which is now the front door.
- */
 export function Login({
   onDone,
   title = "SilverBullet",
@@ -24,6 +15,24 @@ export function Login({
 }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [signedOut, setSignedOut] = useState(
+    new URLSearchParams(location.search).get("signedOut") === "true",
+  );
+  useEffect(() => {
+    if (signedOut) return;
+    void redirectToCentral(
+      new URLSearchParams(location.search).get("next") || "/.spaces/",
+    )
+      .then((redirected) => {
+        if (!redirected) setChecking(false);
+      })
+      .catch(() => setChecking(false));
+  }, [signedOut]);
+
+  if (signedOut) return <SignedOut onContinue={() => setSignedOut(false)} />;
+
+  if (checking) return <p role="status">Loading sign-in…</p>;
 
   return (
     <LoginForm

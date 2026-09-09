@@ -138,3 +138,19 @@ test("spacePayload sends the root binding, not a stale prefix", () => {
     folder: "/data/spaces/notes",
   });
 });
+
+test("hostname setup submits an explicit host without a prefix", () => {
+  expect(
+    spacePayload({ ...SPACE, hosting: "host", host: "notes.example.com" }),
+  ).toEqual({
+    name: "Notes",
+    host: "notes.example.com",
+    folder: SPACE.folder,
+  });
+});
+
+test("hostname setup requires an explicit host", () => {
+  expect(validateSpace({ ...SPACE, hosting: "host", host: " " })).toEqual([
+    { field: "space.host", message: "hostname is required" },
+  ]);
+});

@@ -1,3 +1,4 @@
+import { managerSessionRoutes } from "./manager_navigation.ts";
 export type ProfileState =
   | {
       status: "signed-in";
@@ -8,18 +9,12 @@ export type ProfileState =
   | { status: "signed-out" }
   | { status: "unavailable" };
 
-/**
- * Origin-absolute on purpose: a prefix-bound space's `document.baseURI` is
- * `/wiki/`, and a relative fetch would ask `/wiki/.spaces/...`, which does not
- * exist. `/.spaces` is mounted ahead of the space dispatcher on every host.
- */
-const PROFILE_URL = "/.spaces/api/profile";
-
 export async function loadProfile(
   fetchFn: typeof fetch = fetch,
 ): Promise<ProfileState> {
   try {
-    const response = await fetchFn(PROFILE_URL);
+    const { profile } = await managerSessionRoutes(fetchFn);
+    const response = await fetchFn(profile);
     if (response.status === 401) {
       return { status: "signed-out" };
     }

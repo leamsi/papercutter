@@ -1,10 +1,15 @@
+import { managerUrl, managerSessionRoutes } from "../manager_navigation.ts";
 import type { FunctionalComponent } from "preact";
 import * as featherIcons from "preact-feather";
 import type { Client } from "../client.ts";
+import {
+  logoutBrowserSession,
+  saveCurrentEditor,
+  LogoutSyncError,
+  forceLogoutWarning,
+} from "../logout.ts";
 import { initials, type ProfileState } from "../profile.ts";
 import type { MenuItem } from "./anchored_menu.tsx";
-
-const LOGOUT_URL = "/.spaces/api/logout";
 
 export function ProfileAvatar(
   profile: ProfileState,
@@ -91,30 +96,42 @@ export function editorProfileMenuItems(
     logIn: () => {
       location.href = `.auth?from=${encodeURIComponent(location.pathname)}`;
     },
-    editProfile: () => client.openUrl("/.spaces/profile"),
-    allSpaces: () => {
-      location.href = "/.spaces";
+    editProfile: async () => client.openUrl(await managerUrl("/profile")),
+    allSpaces: async () => {
+      location.href = await managerUrl();
     },
-    logOut: () => {
-      void (async () => {
-        let response: Response;
+    logOut: async () => {
+      const { logout } = await managerSessionRoutes();
+      const force = async () => {
+        if (!window.confirm(forceLogoutWarning)) return;
         try {
-          response = await fetch(LOGOUT_URL);
-        } catch {
-          client.ui.flashNotification("Could not log out", "error");
-          return;
+          await logoutBrowserSession(
+            () => saveCurrentEditor(client),
+            true,
+            logout,
+          );
+        } catch (error) {
+          client.ui.flashNotification(
+            error instanceof Error ? error.message : "Could not log out",
+            "error",
+          );
         }
-        if (!response.ok) {
-          client.ui.flashNotification("Could not log out", "error");
-          return;
-        }
-        try {
-          await client.wipeClient();
-        } catch (e: any) {
-          console.error("Wiping local data after logout failed", e);
-        }
-        location.href = ".auth";
-      })();
+      };
+      try {
+        await logoutBrowserSession(
+          () => saveCurrentEditor(client),
+          false,
+          logout,
+        );
+      } catch (error) {
+        client.ui.flashNotification(
+          error instanceof Error ? error.message : "Could not log out",
+          "error",
+          error instanceof LogoutSyncError
+            ? { timeout: 0, actions: [{ name: "Force logout", run: force }] }
+            : undefined,
+        );
+      }
     },
   });
 }
