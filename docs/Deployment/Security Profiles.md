@@ -10,7 +10,7 @@ SilverBullet [[Features/Space Manager|spaces]] are **scriptable** — a member w
 The choice in one line: **convenience and flexibility** (one domain, [[Features/Space Manager#Bindings|path bindings]], shell on) vs. **isolation** (a space per origin, shell off) — and which is right depends on trust.
 
 # Personal / fully-trusted
-You, your family, or a small circle who all trust each other completely and know what they’re doing (i.e. don’t copy random scripts into the space). For this setup, one domain, [[Features/Space Manager#Bindings|path/prefix bindings]] for your spaces, shell on or off as you like. This is fine.
+You, your family, or a small circle who all trust each other completely and know what they’re doing (i.e. don’t copy random scripts into the space). Legacy and transitional deployments can use one domain, [[Features/Space Manager#Bindings|path/prefix bindings]] for your spaces, shell on or off as you like. This is fine.
 
 **If everyone you share a space with is fully trusted, this is all you need.** Nothing below changes anything for you — a shared trust circle has no "untrusted writer" for isolation to protect against.
 
@@ -20,7 +20,7 @@ A team, community, or any setup where a `write` member might plant malicious con
 The recommended hardened profile:
 
 * **Shell off** for spaces with untrusted writers. This removes the main capability an attacker could otherwise reach — see [[Install/Configuration#Security|shell configuration]].
-* **One subdomain per untrusted-writer space**, via a [[Features/Space Manager#Bindings|host binding]] rather than a path prefix. Also give the `/.spaces` admin surface its own dedicated hostname (one that no space is bound to), and always reach it there.
+* **One subdomain per untrusted-writer space**, via a [[Features/Space Manager#Bindings|host binding]] rather than a path prefix. Configure a dedicated primary URL for the `/.spaces` admin surface through **Admin → Server** (see [[Features/Space Manager#Primary server URL]]). Use a fresh hostname that has never served space content. With this configured, the server rejects manager APIs on space hosts and blocks browser requests to manager APIs from other origins, including sibling subdomains. Merely visiting the manager on a separate hostname does not enable these restrictions.
 
 **Why a subdomain per space?** SilverBullet's session cookie is scoped to the exact hostname you’re on. A `write` member can make their space’s content run code as whoever opens it — but if each untrusted-writer space lives on its own hostname, that code runs in an origin that doesn’t hold anyone else’s session.
 

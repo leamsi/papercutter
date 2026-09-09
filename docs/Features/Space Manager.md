@@ -9,7 +9,7 @@ references:
 - server/src/multi/access.rs
 - server/src/multi/space_index.rs
 ---
-A single SilverBullet server can host any number of [[Concepts/Space|spaces]] — each with its own URL, access rules, and configuration — managed a web-based management UI called _Space Manager_.
+A single SilverBullet server can host any number of [[Concepts/Space|spaces]] — each with its own URL, access rules, and configuration — managed through a web-based management UI called _Space Manager_.
 
 # Setup wizard
 When a server boots with an empty data folder it will run in setup mode. Setup mode has two steps:
@@ -17,7 +17,7 @@ When a server boots with an empty data folder it will run in setup mode. Setup m
 1. **Account creation**: creates the first administrator account.
 2. **Space creation**: creates your first space.
 
-Once finished, the server writes `users.json` and `spaces.json` and redirects you to your newly created space. To return to the space manager, simply open the `/.spaces` URL, or select “All spaces” from the profile menu in the top bar.
+The wizard also confirms the primary server URL and asks for a separate hostname for your first space. Once finished, the server writes `users.json`, `spaces.json`, and `server.json` and opens the Space Manager. To return to the space manager, simply open the `/.spaces` URL, or select “All spaces” from the profile menu in the top bar.
 
 # Accounts
 Each account has a username, password, admin flag, any number of API tokens, and a profile — an optional full name and email used for attribution — which the account holder can edit themselves, or an admin can set on their behalf. See [[HTTP API#Accounts (multi-space mode)]] for the profile endpoints.
@@ -25,13 +25,13 @@ Each account has a username, password, admin flag, any number of API tokens, and
 * **Admins** can reach the admin UI and manage spaces, accounts, and tokens. They can also log into *every* space.
 * **Non-admin accounts** are ordinary users: they can log into any space they are a member of, and any space whose access level admits them (see [[#Access]]).
 
-There is no self-service signup. Admins create accounts. There is no password recovery either, an admin sets a new password from the _Users_ tab. Fancier features like SSO integration etc may be implemented later.
+There is no self-service signup. Admins create accounts. There is no password recovery either, an admin sets a new password from the _Users_ tab. Administrators can also provision [[Features/Single Sign-On|SSO accounts]] alongside local accounts.
 
 # Spaces
 Spaces have a name and point to a folder where its content is kept. By default this will be inside the SilverBullet data folder, but you can pick any folder you like.
 
 ## Bindings
-Each space is reachable one of two ways:
+Spaces support either binding, including when a primary URL is configured:
 
 * **URL prefix**: e.g. `/work`. A bare `/` binds a space at the root (allowed once). Prefixes must not overlap (`/work` and `/work/sub` can’t coexist, nor can two spaces both bind `/`).
 * **Hostname**: e.g. `notes.example.com`, matched on the `Host` header of the main listener. Point wildcard DNS or per-host reverse-proxy rules at the server.

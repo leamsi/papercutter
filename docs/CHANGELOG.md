@@ -6,6 +6,14 @@ An attempt at documenting the changes/new features introduced in each release.
 ## Edge
 Whenever a commit is pushed to the `main` branch, within ~10 minutes, it will be released as a docker image with the `:v2` tag, and a binary in the [edge release](https://github.com/silverbulletmd/silverbullet/releases/tag/edge). If you want to live on the bleeding edge of SilverBullet goodness (or regression) this is where to do it.
 
+* Significant **multi-space server upgrade and revamp**:
+  * Profile menu giving access to profile editing, list of all spaces, login, logout
+  * Read/Write permissions per user
+  * SSO user creation asks for email before suggesting a username.
+  * Public space support (no auth)
+  * Admin tab:
+    * [[Features/Single Sign-On]] (Google Workspace Auth, Pocket ID, other OIDC provider support) support
+    * Configurable Server name (used in headerz)
 * Beginnings of more solid [[Features/Collaboration]] functionality, comprising of a slew of new improvements/features:
   * **Near real-time sync**: changes made to pages are now synced (and will appear in other clients) within ~2-3s.
   * **Near real-time content updates**: if multiple clients/process edit the same page, SilverBullet will do its best to reconcile those changes with local ones. In cases of unresolvable conflicts a new _conflict widget_ will show helping you to resolve the conflict.
