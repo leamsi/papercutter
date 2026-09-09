@@ -1,58 +1,46 @@
-//! The shared headless-Chrome pool: one browser process for the whole server,
-//! one page per space.
-//!
-//! Launch is LAZY at two levels. The browser does not start until the first
-//! runtime request from *any* space, and a space's page is not created until
-//! that space's own first request — so Chrome never runs while the runtime API
-//! is unused, and a space nobody queries never costs a tab.
-//!
-//! `eval_js`/`wait_ready` are synchronous and block the calling thread (the
-//! server invokes them via `spawn_blocking`) they run their async work on the
-//! pool's owned runtime.
+//! Isolated browser transports sharing one execution runtime.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
-use chromiumoxide::browser::Browser;
 use chromiumoxide::page::Page;
 use serde_json::Value;
 use silverbullet_server::runtime::{ClientTransport, LogBuffer, RuntimeError};
 use tokio::runtime::Runtime;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::{watch, Mutex, Notify};
 
 use crate::config::{ChromeConfig, SpacePage};
-use crate::supervisor::{eval_on_page, launch_browser, supervise_space};
+use crate::supervisor::{eval_on_page, launch_browser, supervise_space, OwnedBrowser};
 
-/// One registered space: its live page, readiness flag, and supervisor handle.
 struct Registration {
-    live: Arc<Mutex<Option<Page>>>,
     supervisor: tokio::task::JoinHandle<()>,
 }
 
-/// The pool's browser slot: the live browser tagged with the generation it was
-/// launched as, or empty when there is none.
-type BrowserSlot<B> = Arc<Mutex<Option<(u64, Arc<B>)>>>;
+type BrowserSlot<B> = Mutex<Option<(u64, Arc<B>)>>;
 
-/// The shared headless-Chrome pool.
-pub struct ChromePool<B = Browser> {
+pub struct ChromePool {
     rt: Option<Runtime>,
     config: ChromeConfig,
-    browser: BrowserSlot<B>,
-    launch_lock: Arc<Mutex<()>>,
-    spaces: Arc<StdMutex<HashMap<u64, Registration>>>,
+    spaces: StdMutex<HashMap<u64, Registration>>,
     next_id: AtomicU64,
-    next_generation: AtomicU64,
 }
 
-/// Clear `slot` when — and only when — it still holds `generation`. Returns
-/// whether it cleared anything.
-///
-/// This is the guard that stops a browser restart from ping-ponging: a
-/// supervisor that noticed generation *G* had died may arrive long after
-/// somebody else already launched *G+1* (a page launch takes seconds), and it
-/// must not take the live browser down with it.
+pub(crate) struct BrowserOwner<B = OwnedBrowser> {
+    config: ChromeConfig,
+    browser: BrowserSlot<B>,
+    launch_lock: Mutex<()>,
+    next_generation: AtomicU64,
+    stopped: watch::Sender<bool>,
+    profile: Mutex<Option<tempfile::TempDir>>,
+    metrics: StdMutex<crate::metrics::Metrics>,
+    status: AtomicU8,
+    restartable: AtomicBool,
+    transferred: AtomicBool,
+    terminal: AtomicBool,
+}
+
 fn clear_if_generation<T>(slot: &mut Option<(u64, T)>, generation: u64) -> bool {
     match slot {
         Some((current, _)) if *current == generation => {
@@ -63,11 +51,76 @@ fn clear_if_generation<T>(slot: &mut Option<(u64, T)>, generation: u64) -> bool 
     }
 }
 
-impl<B> ChromePool<B> {
-    /// Construct the pool. Generic over the browser handle so tests can build a
-    /// pool whose slot they are able to populate; `ChromePool::new` is the
-    /// production entry point.
-    fn build(config: ChromeConfig) -> Result<Arc<Self>, RuntimeError> {
+impl<B> BrowserOwner<B> {
+    fn new(config: ChromeConfig) -> Arc<Self> {
+        Arc::new(Self {
+            config,
+            browser: Mutex::new(None),
+            launch_lock: Mutex::new(()),
+            next_generation: AtomicU64::new(0),
+            stopped: watch::channel(false).0,
+            profile: Mutex::new(None),
+            metrics: StdMutex::new(crate::metrics::Metrics::default()),
+            status: AtomicU8::new(0),
+            restartable: AtomicBool::new(false),
+            transferred: AtomicBool::new(false),
+            terminal: AtomicBool::new(false),
+        })
+    }
+
+    pub(crate) fn is_stopped(&self) -> bool {
+        *self.stopped.borrow()
+    }
+
+    pub(crate) async fn cancelled(&self) {
+        let mut stopped = self.stopped.subscribe();
+        let _ = stopped.wait_for(|stopped| *stopped).await;
+    }
+
+    pub(crate) fn config(&self) -> &ChromeConfig {
+        &self.config
+    }
+
+    pub(crate) async fn discard_browser(&self, generation: u64) {
+        let _guard = self.launch_lock.lock().await;
+        let mut slot = self.browser.lock().await;
+        clear_if_generation(&mut slot, generation);
+    }
+}
+
+impl BrowserOwner {
+    pub(crate) async fn ensure_browser(&self) -> Result<(u64, Arc<OwnedBrowser>), String> {
+        const LAUNCH_TIMEOUT: Duration = Duration::from_secs(120);
+        tokio::select! {
+            biased;
+            _ = self.cancelled() => Err("runtime shut down".into()),
+            result = async {
+                let _guard = self.launch_lock.lock().await;
+                if let Some((generation, browser)) = self.browser.lock().await.as_ref() {
+                    return Ok((*generation, browser.clone()));
+                }
+                tracing::info!("runtime API used; launching isolated headless Chrome ({})", self.config.chrome_path);
+                let mut profile = self.profile.lock().await;
+                if profile.is_none() {
+                    std::fs::create_dir_all(&self.config.user_data_dir).map_err(|e| e.to_string())?;
+                    *profile = Some(tempfile::Builder::new().prefix("runtime-").tempdir_in(&self.config.user_data_dir).map_err(|e| e.to_string())?);
+                }
+                let profile_path = profile.as_ref().unwrap().path().to_path_buf();
+                drop(profile);
+                let browser = tokio::time::timeout(LAUNCH_TIMEOUT, launch_browser(&self.config, &profile_path))
+                    .await
+                    .map_err(|_| format!("browser launch timed out after {}s", LAUNCH_TIMEOUT.as_secs()))??;
+                let browser = Arc::new(browser);
+                let generation = self.next_generation.fetch_add(1, Ordering::Relaxed);
+                *self.browser.lock().await = Some((generation, browser.clone()));
+                Ok((generation, browser))
+            } => result,
+        }
+    }
+}
+
+impl ChromePool {
+    pub fn new(config: ChromeConfig) -> Result<Arc<Self>, RuntimeError> {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .enable_all()
@@ -76,16 +129,11 @@ impl<B> ChromePool<B> {
         Ok(Arc::new(Self {
             rt: Some(rt),
             config,
-            browser: Arc::new(Mutex::new(None)),
-            launch_lock: Arc::new(Mutex::new(())),
-            spaces: Arc::new(StdMutex::new(HashMap::new())),
+            spaces: StdMutex::new(HashMap::new()),
             next_id: AtomicU64::new(0),
-            next_generation: AtomicU64::new(0),
         }))
     }
 
-    /// The owned runtime. Always present until `Drop`; the `Option` exists only
-    /// so `Drop` can take it.
     fn rt(&self) -> &Runtime {
         self.rt.as_ref().expect("runtime present until drop")
     }
@@ -94,135 +142,55 @@ impl<B> ChromePool<B> {
         &self.config
     }
 
-    /// How many spaces currently hold a transport. Registration is per
-    /// *transport*, not per space id: a space being rebuilt briefly has two.
     pub fn registered_spaces(&self) -> usize {
         self.spaces.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 
-    /// Retire the browser of `generation` so the next `ensure_browser` launches
-    /// a fresh one. Called by a supervisor that saw *this* browser fail a
-    /// liveness probe.
-    pub(crate) async fn discard_browser(&self, generation: u64) {
-        // Taken before the slot lock so this cannot interleave with
-        // `ensure_browser`'s launch-then-store.
-        let _guard = self.launch_lock.lock().await;
-        let mut slot = self.browser.lock().await;
-        if clear_if_generation(&mut slot, generation) {
-            tracing::warn!("shared headless Chrome (generation {generation}) died; retiring it");
-        }
-    }
-
-    /// Whether a browser process is currently held. Exists to pin the laziness
-    /// guarantee in tests — nothing must launch Chrome before the first runtime
-    /// request.
-    #[cfg(test)]
-    pub(crate) async fn browser_is_launched(&self) -> bool {
-        self.browser.lock().await.is_some()
-    }
-
-    /// Install `browser` in the slot at `generation`, as a successful
-    /// `ensure_browser` would. Tests only: it is the sole way to exercise
-    /// `discard_browser` without launching real Chrome.
-    #[cfg(test)]
-    async fn seed_browser(&self, generation: u64, browser: B) {
-        *self.browser.lock().await = Some((generation, Arc::new(browser)));
-    }
-}
-
-impl ChromePool {
-    /// Create the pool. Returns an error only if the tokio runtime can't be
-    /// built.
-    pub fn new(config: ChromeConfig) -> Result<Arc<Self>, RuntimeError> {
-        Self::build(config)
-    }
-
-    /// Register a space and return its transport. Spawns the space's supervisor
-    /// parked on its trigger; no browser or page work happens until the first
-    /// runtime request.
     pub fn transport_for(
         self: &Arc<Self>,
         page: SpacePage,
         logs: LogBuffer,
     ) -> SharedChromeTransport {
+        self.transport_with_owner(page, logs, BrowserOwner::new(self.config.clone()))
+    }
+
+    fn transport_with_owner(
+        self: &Arc<Self>,
+        page: SpacePage,
+        logs: LogBuffer,
+        owner: Arc<BrowserOwner>,
+    ) -> SharedChromeTransport {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let live: Arc<Mutex<Option<Page>>> = Arc::new(Mutex::new(None));
+        let live = Arc::new(Mutex::new(None));
         let ready = Arc::new(AtomicBool::new(false));
         let trigger = Arc::new(Notify::new());
-
         let supervisor = self.rt().spawn(supervise_space(
-            self.clone(),
+            owner.clone(),
             page.clone(),
             live.clone(),
             ready.clone(),
             logs,
             trigger.clone(),
         ));
-
         self.spaces
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .insert(
-                id,
-                Registration {
-                    live: live.clone(),
-                    supervisor,
-                },
-            );
-
+            .insert(id, Registration { supervisor });
         SharedChromeTransport {
             pool: self.clone(),
+            owner,
             id,
             live,
             ready,
             trigger,
+            page,
+            management: StdMutex::new(()),
         }
-    }
-
-    /// The live browser and its generation, launching it if there isn't one.
-    /// Concurrent callers serialize on `launch_lock`; the second one finds the
-    /// slot already filled and returns it.
-    ///
-    /// The returned `Arc` is a *transient* clone: use it for one `new_page` and
-    /// drop it. Holding it would keep a dead Chrome's process alive across a
-    /// relaunch. The generation goes back to `discard_browser` if this browser
-    /// turns out to be dead.
-    pub(crate) async fn ensure_browser(&self) -> Result<(u64, Arc<Browser>), String> {
-        /// Cap on a single `Browser::launch`. It is awaited while holding
-        /// `launch_lock`, so a Chrome that hangs on startup would otherwise
-        /// block *every* space's supervisor forever.
-        const LAUNCH_TIMEOUT: Duration = Duration::from_secs(120);
-
-        if let Some((generation, b)) = self.browser.lock().await.as_ref() {
-            return Ok((*generation, b.clone()));
-        }
-        let _guard = self.launch_lock.lock().await;
-        if let Some((generation, b)) = self.browser.lock().await.as_ref() {
-            return Ok((*generation, b.clone()));
-        }
-        tracing::info!(
-            "runtime API used; launching shared headless Chrome ({})",
-            self.config.chrome_path
-        );
-        let browser = match tokio::time::timeout(LAUNCH_TIMEOUT, launch_browser(&self.config)).await
-        {
-            Err(_) => {
-                return Err(format!(
-                    "browser launch timed out after {}s",
-                    LAUNCH_TIMEOUT.as_secs()
-                ))
-            }
-            Ok(result) => Arc::new(result?),
-        };
-        let generation = self.next_generation.fetch_add(1, Ordering::Relaxed);
-        *self.browser.lock().await = Some((generation, browser.clone()));
-        Ok((generation, browser))
     }
 }
 
-impl<B> Drop for ChromePool<B> {
+impl Drop for ChromePool {
     fn drop(&mut self) {
-        // Abort every supervisor first so none of them races the teardown.
         for (_, reg) in self
             .spaces
             .lock()
@@ -230,103 +198,220 @@ impl<B> Drop for ChromePool<B> {
             .drain()
         {
             reg.supervisor.abort();
-            drop(reg.live);
         }
         if let Some(rt) = self.rt.take() {
-            // `shutdown_background` rather than a blocking shutdown: the pool is
-            // dropped from inside the server's own async context on Ctrl-C, and
-            // blocking there panics.
+            // The last reference may be released by a cleanup task on this runtime.
             rt.shutdown_background();
         }
     }
 }
 
-/// One space's view of the shared browser: its own page, readiness flag, and
-/// lazy-launch trigger.
 pub struct SharedChromeTransport {
     pool: Arc<ChromePool>,
+    owner: Arc<BrowserOwner>,
     id: u64,
     live: Arc<Mutex<Option<Page>>>,
     ready: Arc<AtomicBool>,
     trigger: Arc<Notify>,
+    page: SpacePage,
+    management: StdMutex<()>,
 }
 
 impl ClientTransport for SharedChromeTransport {
     fn eval_js(&self, js: &str, timeout: Duration) -> Result<Value, RuntimeError> {
-        // Any runtime use wakes this space's supervisor, which brings the shared
-        // browser up if needed and then this space's page.
-        self.trigger.notify_one();
-        let live = self.live.clone();
-        let js = js.to_string();
-        self.pool.rt().block_on(async move {
-            // Include the lock wait: this occupies a shared blocking-pool thread,
-            // and the supervisor liveness probe contends for the same lock.
-            let attempt = async {
-                let guard = live.lock().await;
-                let page = guard.as_ref().ok_or(RuntimeError::NotReady)?;
-                eval_on_page(page, &js).await
-            };
-            match tokio::time::timeout(timeout, attempt).await {
-                Err(_) => Err(RuntimeError::Timeout),
-                Ok(r) => r,
+        self.ensure_started();
+        self.pool.rt().block_on(async {
+            tokio::select! {
+                biased;
+                _ = self.owner.cancelled() => Err(RuntimeError::NotReady),
+                result = tokio::time::timeout(timeout, async {
+                    let guard = self.live.lock().await;
+                    let page = guard.as_ref().ok_or(RuntimeError::NotReady)?;
+                    eval_on_page(page, js).await
+                }) => result.unwrap_or(Err(RuntimeError::Timeout)),
             }
         })
     }
 
     fn wait_ready(&self, timeout: Duration) -> Result<(), RuntimeError> {
-        self.trigger.notify_one();
-        if self.ready.load(Ordering::Relaxed) {
-            return Ok(());
-        }
-        let ready = self.ready.clone();
-        self.pool.rt().block_on(async move {
-            let deadline = tokio::time::Instant::now() + timeout;
-            loop {
-                if ready.load(Ordering::Relaxed) {
-                    return Ok(());
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    return Err(RuntimeError::NotReady);
-                }
-                tokio::time::sleep(Duration::from_millis(100)).await;
+        self.ensure_started();
+        self.pool.rt().block_on(async {
+            tokio::select! {
+                biased;
+                _ = self.owner.cancelled() => Err(RuntimeError::NotReady),
+                result = tokio::time::timeout(timeout, async {
+                    while !self.ready.load(Ordering::Relaxed) {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                }) => result.map_err(|_| RuntimeError::NotReady),
             }
         })
     }
 
     fn is_ready(&self) -> bool {
-        self.ready.load(Ordering::Relaxed)
+        !self.owner.is_stopped() && self.ready.load(Ordering::Relaxed)
     }
 
     fn ensure_started(&self) {
-        // Same lazy-launch nudge as eval/wait: a log read alone is enough to
-        // bring this space's page up.
-        self.trigger.notify_one();
+        if !self.owner.is_stopped() {
+            self.trigger.notify_one();
+        }
     }
-}
 
-impl Drop for SharedChromeTransport {
-    fn drop(&mut self) {
-        // A space instance is rebuilt on *every* admin API space write, so
-        // without this each write would leak a tab in the shared browser.
+    fn snapshot(&self) -> Option<silverbullet_server::runtime::RuntimeSnapshot> {
+        let status = match self.owner.status.load(Ordering::Acquire) {
+            1 => "stopping",
+            2 => "stopped",
+            3 => "stop_failed",
+            _ if self.is_ready() => "running",
+            _ => "starting",
+        };
+        let identity = self
+            .owner
+            .browser
+            .blocking_lock()
+            .as_ref()
+            .and_then(|(_, browser)| browser.identity);
+        let profile = self
+            .owner
+            .profile
+            .blocking_lock()
+            .as_ref()
+            .map(|profile| profile.path().to_path_buf());
+        Some(
+            self.owner
+                .metrics
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .snapshot(status, identity, profile.as_deref()),
+        )
+    }
+
+    fn stop(&self, retain_profile: bool) -> Result<(), RuntimeError> {
+        let _guard = self.management.lock().unwrap_or_else(|e| e.into_inner());
+        self.owner.status.store(1, Ordering::Release);
+        self.owner.restartable.store(false, Ordering::Release);
+        self.owner.stopped.send_replace(true);
+        self.ready.store(false, Ordering::Relaxed);
         let reg = self
             .pool
             .spaces
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .remove(&self.id);
-        let Some(reg) = reg else { return };
-        let Registration { live, supervisor } = reg;
-        self.pool.rt().spawn(async move {
-            // Await cancellation so an in-progress launch drops its PageCloseGuard
-            // before teardown checks `live`; abort alone can leave an orphaned tab.
-            supervisor.abort();
-            let _ = supervisor.await;
-            // Drop the MutexGuard before awaiting close.
-            let stale = live.lock().await.take();
-            if let Some(page) = stale {
-                let _ = page.close().await;
+        let result = self.pool.rt().block_on(async {
+            if let Some(reg) = reg {
+                reg.supervisor.abort();
+                let _ = reg.supervisor.await;
             }
+            self.live.lock().await.take();
+            let _guard = self.owner.launch_lock.lock().await;
+            let browser = self.owner.browser.lock().await.take();
+            if let Some((generation, browser)) = browser {
+                match Arc::try_unwrap(browser) {
+                    Ok(mut browser) => {
+                        if let Err(error) = browser.shutdown(retain_profile).await {
+                            *self.owner.browser.lock().await =
+                                Some((generation, Arc::new(browser)));
+                            return Err(RuntimeError::Transport(error));
+                        }
+                    }
+                    Err(browser) => {
+                        *self.owner.browser.lock().await = Some((generation, browser));
+                        return Err(RuntimeError::Transport("browser still in use".into()));
+                    }
+                }
+            }
+            if !retain_profile {
+                let mut profile = self.owner.profile.lock().await;
+                if let Some(owned) = profile.as_ref() {
+                    std::fs::remove_dir_all(owned.path()).map_err(|e| {
+                        RuntimeError::Transport(format!("remove browser profile: {e}"))
+                    })?;
+                }
+                profile.take();
+            }
+            Ok(())
         });
+        self.owner
+            .status
+            .store(if result.is_ok() { 2 } else { 3 }, Ordering::Release);
+        self.owner.restartable.store(
+            result.is_ok() && retain_profile && !self.owner.terminal.load(Ordering::Acquire),
+            Ordering::Release,
+        );
+        result
+    }
+
+    fn restart(
+        &self,
+        token: &str,
+        logs: LogBuffer,
+    ) -> Result<Option<Box<dyn ClientTransport>>, RuntimeError> {
+        let _guard = self.management.lock().unwrap_or_else(|e| e.into_inner());
+        if self.owner.terminal.load(Ordering::Acquire)
+            || !self.owner.restartable.load(Ordering::Acquire)
+            || self.owner.transferred.load(Ordering::Acquire)
+            || self.owner.browser.blocking_lock().is_some()
+        {
+            return Err(RuntimeError::Transport(
+                "runtime must be stopped before restart".into(),
+            ));
+        }
+        self.owner.transferred.store(true, Ordering::Release);
+        let owner = BrowserOwner::new(self.pool.config.clone());
+        *owner.profile.blocking_lock() = self.owner.profile.blocking_lock().take();
+        let mut page = self.page.clone();
+        page.headless_token = token.into();
+        Ok(Some(Box::new(
+            self.pool.transport_with_owner(page, logs, owner),
+        )))
+    }
+
+    fn shutdown(&self) {
+        self.owner.terminal.store(true, Ordering::Release);
+        self.owner.restartable.store(false, Ordering::Release);
+        self.owner.status.store(1, Ordering::Release);
+        self.owner.stopped.send_replace(true);
+        self.ready.store(false, Ordering::Relaxed);
+        let reg = self
+            .pool
+            .spaces
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&self.id);
+        let live = self.live.clone();
+        let owner = self.owner.clone();
+        let pool = self.pool.clone();
+        self.pool.rt().spawn(async move {
+            if let Some(reg) = reg {
+                reg.supervisor.abort();
+                let _ = reg.supervisor.await;
+            }
+            live.lock().await.take();
+            let _guard = owner.launch_lock.lock().await;
+            if let Some((_, browser)) = owner.browser.lock().await.take() {
+                if let Ok(mut browser) = Arc::try_unwrap(browser) {
+                    if let Err(error) = browser.shutdown(false).await {
+                        owner.status.store(3, Ordering::Release);
+                        tracing::error!("{error}");
+                        if let Some(profile) = owner.profile.lock().await.take() {
+                            let _ = profile.keep();
+                        }
+                        return;
+                    }
+                }
+            }
+            owner.profile.lock().await.take();
+            owner.status.store(2, Ordering::Release);
+            drop(pool);
+        });
+    }
+}
+
+impl Drop for SharedChromeTransport {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }
 
@@ -336,8 +421,6 @@ mod tests {
 
     fn config() -> ChromeConfig {
         ChromeConfig {
-            // Never launched: registration and teardown are lazy, so no real
-            // browser is needed to exercise the pool's bookkeeping.
             chrome_path: "/nonexistent/chrome".into(),
             user_data_dir: "/tmp/sb-pool-test".into(),
             show: false,
@@ -351,6 +434,44 @@ mod tests {
             headless_token: "secret".into(),
             cookie_name: format!("silverbullet_headless_{name}"),
         }
+    }
+
+    #[test]
+    fn terminal_shutdown_cannot_be_undone_by_concurrent_stop() {
+        let pool = ChromePool::new(config()).unwrap();
+        let transport =
+            Arc::new(pool.transport_for(page("a", "http://127.0.0.1:3000"), LogBuffer::new()));
+        let locked = transport.owner.launch_lock.blocking_lock();
+        let stopping = transport.clone();
+        let task = std::thread::spawn(move || stopping.stop(true));
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !transport.owner.is_stopped() {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        transport.shutdown();
+        drop(locked);
+        task.join().unwrap().unwrap();
+        assert!(transport.restart("fresh", LogBuffer::new()).is_err());
+    }
+
+    #[test]
+    fn management_snapshot_does_not_launch_and_stop_is_terminal() {
+        let pool = ChromePool::new(config()).unwrap();
+        let transport = pool.transport_for(page("a", "http://127.0.0.1:3000"), LogBuffer::new());
+        assert_eq!(transport.snapshot().unwrap().status, "starting");
+        assert!(transport.owner.browser.blocking_lock().is_none());
+        transport.stop(true).unwrap();
+        assert_eq!(transport.snapshot().unwrap().status, "stopped");
+        assert!(transport.wait_ready(Duration::from_millis(20)).is_err());
+        let replacement = transport
+            .restart("fresh", LogBuffer::new())
+            .unwrap()
+            .unwrap();
+        assert!(transport.restart("duplicate", LogBuffer::new()).is_err());
+        drop(transport);
+        assert_eq!(replacement.snapshot().unwrap().status, "starting");
+        replacement.stop(false).unwrap();
     }
 
     #[test]
@@ -369,6 +490,449 @@ mod tests {
     }
 
     #[test]
+    fn shutdown_cancels_waiters_and_prevents_relaunch() {
+        let pool = ChromePool::new(config()).unwrap();
+        let transport =
+            Arc::new(pool.transport_for(page("a", "http://127.0.0.1:3000"), LogBuffer::new()));
+        let waiting = transport.clone();
+        let waiter = std::thread::spawn(move || waiting.wait_ready(Duration::from_secs(30)));
+        let locked = transport.live.blocking_lock();
+        let evaluating = transport.clone();
+        let eval = std::thread::spawn(move || evaluating.eval_js("1", Duration::from_secs(30)));
+        std::thread::sleep(Duration::from_millis(50));
+        let start = std::time::Instant::now();
+        transport.shutdown();
+        transport.shutdown();
+        assert!(matches!(
+            waiter.join().unwrap(),
+            Err(RuntimeError::NotReady)
+        ));
+        assert!(matches!(eval.join().unwrap(), Err(RuntimeError::NotReady)));
+        assert!(start.elapsed() < Duration::from_secs(2));
+        drop(locked);
+        assert!(!transport.is_ready());
+        assert_eq!(pool.registered_spaces(), 0);
+        transport.ensure_started();
+        assert!(pool
+            .rt()
+            .block_on(transport.owner.ensure_browser())
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn shutdown_cancels_a_launch_waiting_for_the_launch_lock() {
+        let pool = ChromePool::new(config()).unwrap();
+        let transport = pool.transport_for(page("a", "http://127.0.0.1:3000"), LogBuffer::new());
+        let _guard = transport.owner.launch_lock.lock().await;
+        let owner = transport.owner.clone();
+        let launch = tokio::spawn(async move { owner.ensure_browser().await });
+        tokio::task::yield_now().await;
+        transport.shutdown();
+        assert!(tokio::time::timeout(Duration::from_secs(1), launch)
+            .await
+            .unwrap()
+            .unwrap()
+            .is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shutdown_kills_a_process_that_has_not_finished_launching() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir().unwrap();
+        let pid_file = root.path().join("pid");
+        let executable = root.path().join("chrome");
+        std::fs::write(
+            &executable,
+            format!(
+                "#!/bin/sh\nprintf '%s' $$ > '{}'\nexec sleep 120\n",
+                pid_file.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let mut config = config();
+        config.chrome_path = executable.to_string_lossy().into_owned();
+        config.user_data_dir = root.path().join("profiles").to_string_lossy().into_owned();
+        let pool = ChromePool::new(config).unwrap();
+        let transport = pool.transport_for(page("a", "http://127.0.0.1:3000"), LogBuffer::new());
+        transport.ensure_started();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !pid_file.exists() {
+            assert!(std::time::Instant::now() < deadline, "launch did not start");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let pid = std::fs::read_to_string(pid_file).unwrap();
+        transport.shutdown();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while std::process::Command::new("kill")
+            .args(["-0", &pid])
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap()
+            .success()
+        {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "cancelled launch left process {pid} alive"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(
+            std::fs::read_dir(&pool.config.user_data_dir)
+                .unwrap()
+                .count(),
+            0
+        );
+        transport.ensure_started();
+        assert!(pool
+            .rt()
+            .block_on(transport.owner.ensure_browser())
+            .is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stop_finishes_cancelling_an_unfinished_launch_before_returning() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir().unwrap();
+        let pid_file = root.path().join("pid");
+        let executable = root.path().join("chrome");
+        std::fs::write(
+            &executable,
+            format!(
+                "#!/bin/sh\nprintf '%s' $$ > '{}'\nexec sleep 120\n",
+                pid_file.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let mut config = config();
+        config.chrome_path = executable.to_string_lossy().into_owned();
+        config.user_data_dir = root.path().join("profiles").to_string_lossy().into_owned();
+        let pool = ChromePool::new(config).unwrap();
+        let transport = pool.transport_for(page("a", "http://127.0.0.1:3000"), LogBuffer::new());
+        transport.ensure_started();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !pid_file.exists() {
+            assert!(std::time::Instant::now() < deadline, "launch did not start");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let pid = std::fs::read_to_string(pid_file).unwrap();
+        transport.stop(false).unwrap();
+        assert!(
+            !std::process::Command::new("kill")
+                .args(["-0", &pid])
+                .stderr(std::process::Stdio::null())
+                .status()
+                .unwrap()
+                .success(),
+            "stop returned before launching process exited"
+        );
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while std::process::Command::new("kill")
+            .args(["-0", &pid])
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap()
+            .success()
+        {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "cancelled launch left process {pid} alive"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(
+            std::fs::read_dir(&pool.config.user_data_dir)
+                .unwrap()
+                .count(),
+            0
+        );
+        transport.ensure_started();
+        assert!(pool
+            .rt()
+            .block_on(transport.owner.ensure_browser())
+            .is_err());
+    }
+
+    #[test]
+    #[ignore = "requires an installed Chrome browser"]
+    fn real_chrome_transports_isolate_storage_processes_and_shutdown() {
+        use chromiumoxide::cdp::browser_protocol::system_info::GetProcessInfoParams;
+        use chromiumoxide::cdp::browser_protocol::target::GetTargetsParams;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let root = tempfile::tempdir().unwrap();
+        let mut config = config();
+        config.chrome_path = std::env::var("SB_CHROME_PATH")
+            .ok()
+            .or_else(crate::config::find_chrome)
+            .expect("Chrome installed");
+        config.user_data_dir = root.path().to_string_lossy().into_owned();
+        let pool = ChromePool::new(config).unwrap();
+        let listener = pool
+            .rt()
+            .block_on(tokio::net::TcpListener::bind("127.0.0.1:0"))
+            .unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = pool.rt().spawn(async move {
+            loop {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                tokio::spawn(async move {
+                    let mut buffer = [0; 4096];
+                    let count = socket.read(&mut buffer).await.unwrap();
+                    let request = String::from_utf8_lossy(&buffer[..count]);
+                    let cookie = request.lines().find(|line| line.to_ascii_lowercase().starts_with("cookie:")).unwrap_or("");
+                    let body = format!("<script>globalThis.sbRuntime = {{ready: true}}; globalThis.receivedCookie = {}</script>", serde_json::to_string(cookie).unwrap());
+                    let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                    let _ = socket.write_all(response.as_bytes()).await;
+                });
+            }
+        });
+        let logs_a = LogBuffer::new();
+        let logs_b = LogBuffer::new();
+        let a = Arc::new(pool.transport_for(page("a", &url), logs_a.clone()));
+        let b = pool.transport_for(page("a", &url), logs_b.clone());
+        pool.rt().block_on(async {
+            let (first, second) = tokio::join!(a.owner.ensure_browser(), a.owner.ensure_browser());
+            let first = first.unwrap();
+            let second = second.unwrap();
+            assert_eq!(first.0, second.0);
+            assert!(Arc::ptr_eq(&first.1, &second.1));
+        });
+        a.wait_ready(Duration::from_secs(30)).unwrap();
+        b.wait_ready(Duration::from_secs(30)).unwrap();
+        pool.rt().block_on(async {
+            let slot = a.owner.browser.lock().await;
+            let targets = slot
+                .as_ref()
+                .unwrap()
+                .1
+                .execute(GetTargetsParams::default())
+                .await
+                .unwrap();
+            assert!(
+                targets
+                    .result
+                    .target_infos
+                    .iter()
+                    .all(|target| { !target.url.starts_with("chrome://omnibox-popup.") }),
+                "headless runtimes must not create unused address-bar renderers"
+            );
+        });
+        let snapshot = b.snapshot().unwrap();
+        assert_eq!(snapshot.status, "running");
+        assert!(snapshot.memory_bytes.unwrap() > 0);
+        assert!(snapshot.disk_bytes.unwrap() > 0);
+        assert!(snapshot.cpu_percent.is_none());
+        let process_and_profile = |transport: &SharedChromeTransport| {
+            pool.rt().block_on(async {
+                let slot = transport.owner.browser.lock().await;
+                let browser = &slot.as_ref().unwrap().1;
+                let processes = browser
+                    .execute(GetProcessInfoParams::default())
+                    .await
+                    .unwrap();
+                let pid = processes
+                    .result
+                    .process_info
+                    .iter()
+                    .find(|p| p.r#type == "browser")
+                    .unwrap()
+                    .id;
+                (
+                    pid,
+                    transport
+                        .owner
+                        .profile
+                        .lock()
+                        .await
+                        .as_ref()
+                        .unwrap()
+                        .path()
+                        .to_path_buf(),
+                )
+            })
+        };
+        let (pid_a, profile_a) = process_and_profile(&a);
+        let (pid_b, profile_b) = process_and_profile(&b);
+        assert_ne!(pid_a, pid_b);
+        assert_ne!(profile_a, profile_b);
+        a.eval_js("document.cookie = 'session=alpha'; localStorage.setItem('value', 'alpha'); console.log('alpha-runtime'); true", Duration::from_secs(5)).unwrap();
+        assert_eq!(
+            b.eval_js(
+                "[document.cookie, localStorage.getItem('value')]",
+                Duration::from_secs(5)
+            )
+            .unwrap(),
+            serde_json::json!(["", null])
+        );
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !logs_a
+            .query(100, None)
+            .iter()
+            .any(|entry| entry.text == "alpha-runtime")
+        {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!logs_b
+            .query(100, None)
+            .iter()
+            .any(|entry| entry.text == "alpha-runtime"));
+        let evaluating = a.clone();
+        let eval = std::thread::spawn(move || {
+            evaluating.eval_js("new Promise(() => {})", Duration::from_secs(30))
+        });
+        std::thread::sleep(Duration::from_millis(100));
+        let start = std::time::Instant::now();
+        a.shutdown();
+        assert!(matches!(eval.join().unwrap(), Err(RuntimeError::NotReady)));
+        assert!(start.elapsed() < Duration::from_secs(2));
+        assert_eq!(
+            b.eval_js("1 + 1", Duration::from_secs(5)).unwrap(),
+            serde_json::json!(2)
+        );
+        assert_eq!(process_and_profile(&b).0, pid_b);
+        assert!(a.wait_ready(Duration::from_secs(5)).is_err());
+        a.ensure_started();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while profile_a.exists() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "shutdown did not remove profile"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        #[cfg(unix)]
+        assert!(!std::process::Command::new("kill")
+            .args(["-0", &pid_a.to_string()])
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap()
+            .success());
+        let replacement = pool.transport_for(page("a", &url), LogBuffer::new());
+        replacement.wait_ready(Duration::from_secs(30)).unwrap();
+        assert_ne!(process_and_profile(&replacement).1, profile_a);
+        assert_eq!(
+            replacement
+                .eval_js(
+                    "[document.cookie, localStorage.getItem('value')]",
+                    Duration::from_secs(5)
+                )
+                .unwrap(),
+            serde_json::json!(["", null])
+        );
+        replacement
+            .eval_js(
+                r#"(async () => {
+                    localStorage.setItem('retained', 'yes');
+                    const key = await crypto.subtle.generateKey(
+                        {name: 'AES-GCM', length: 256}, false, ['encrypt', 'decrypt']);
+                    const db = await new Promise((resolve, reject) => {
+                        const request = indexedDB.open('retained', 1);
+                        request.onupgradeneeded = () => request.result.createObjectStore('values');
+                        request.onsuccess = () => resolve(request.result);
+                        request.onerror = () => reject(request.error);
+                    });
+                    await new Promise((resolve, reject) => {
+                        const tx = db.transaction('values', 'readwrite');
+                        tx.objectStore('values').put({key, bytes: new Uint8Array([1, 2, 3])}, 'state');
+                        tx.oncomplete = resolve;
+                        tx.onerror = () => reject(tx.error);
+                    });
+                    db.close();
+                    const cache = await caches.open('retained');
+                    await cache.put('/retained', new Response('cached'));
+                    const root = await navigator.storage.getDirectory();
+                    const file = await root.getFileHandle('retained.txt', {create: true});
+                    const writer = await file.createWritable();
+                    await writer.write('file');
+                    await writer.close();
+                    return true;
+                })()"#,
+                Duration::from_secs(5),
+            )
+            .unwrap();
+        let (old_pid, retained_profile) = process_and_profile(&replacement);
+        replacement.stop(true).unwrap();
+        assert!(retained_profile.exists());
+        #[cfg(unix)]
+        assert!(!std::process::Command::new("kill")
+            .args(["-0", &old_pid.to_string()])
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap()
+            .success());
+        let resumed = replacement
+            .restart("fresh-credential", LogBuffer::new())
+            .unwrap()
+            .unwrap();
+        drop(replacement);
+        resumed.wait_ready(Duration::from_secs(30)).unwrap();
+        assert_eq!(
+            resumed
+                .eval_js("localStorage.getItem('retained')", Duration::from_secs(5))
+                .unwrap(),
+            serde_json::json!("yes")
+        );
+        assert_eq!(
+            resumed.eval_js(r#"(async () => {
+                const db = await new Promise((resolve, reject) => {
+                    const request = indexedDB.open('retained', 1);
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error);
+                });
+                const state = await new Promise((resolve, reject) => {
+                    const request = db.transaction('values').objectStore('values').get('state');
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error);
+                });
+                db.close();
+                const iv = crypto.getRandomValues(new Uint8Array(12));
+                const encrypted = await crypto.subtle.encrypt({name: 'AES-GCM', iv}, state.key, state.bytes);
+                const decrypted = await crypto.subtle.decrypt({name: 'AES-GCM', iv}, state.key, encrypted);
+                const cache = await caches.open('retained');
+                const cached = await (await cache.match('/retained')).text();
+                const root = await navigator.storage.getDirectory();
+                const file = await (await root.getFileHandle('retained.txt')).getFile();
+                return [Array.from(new Uint8Array(decrypted)), state.key.extractable, cached, await file.text()];
+            })()"#, Duration::from_secs(5)).unwrap(),
+            serde_json::json!([[1, 2, 3], false, "cached", "file"])
+        );
+        let cookie = resumed
+            .eval_js("globalThis.receivedCookie", Duration::from_secs(5))
+            .unwrap();
+        assert!(cookie
+            .as_str()
+            .unwrap()
+            .contains("silverbullet_headless_a=fresh-credential"));
+        assert!(!cookie.as_str().unwrap().contains("secret"));
+        resumed.stop(false).unwrap();
+        assert!(!retained_profile.exists());
+        let held_browser = pool
+            .rt()
+            .block_on(async { b.owner.browser.lock().await.as_ref().unwrap().1.clone() });
+        assert!(b.stop(true).is_err());
+        assert_eq!(b.snapshot().unwrap().status, "stop_failed");
+        drop(held_browser);
+        b.stop(false).unwrap();
+        assert_eq!(b.snapshot().unwrap().status, "stopped");
+        server.abort();
+    }
+
+    #[test]
+    fn transports_do_not_share_browser_ownership() {
+        let pool = ChromePool::new(config()).unwrap();
+        let a = pool.transport_for(page("a", "http://127.0.0.1:3000"), LogBuffer::new());
+        let b = pool.transport_for(page("a", "http://127.0.0.1:3000"), LogBuffer::new());
+        assert!(!Arc::ptr_eq(&a.owner, &b.owner));
+    }
+
+    #[test]
     fn rebuilding_a_space_does_not_deregister_its_replacement() {
         let pool = ChromePool::new(config()).unwrap();
         let old = pool.transport_for(page("a", "http://127.0.0.1:3000"), LogBuffer::new());
@@ -384,11 +948,9 @@ mod tests {
     #[tokio::test]
     async fn no_browser_is_launched_before_any_runtime_request() {
         let pool = ChromePool::new(config()).unwrap();
-        assert!(!pool.browser_is_launched().await);
-
         let t = pool.transport_for(page("a", "http://127.0.0.1:3000"), LogBuffer::new());
         tokio::time::sleep(Duration::from_millis(50)).await;
-        assert!(!pool.browser_is_launched().await);
+        assert!(t.owner.browser.lock().await.is_none());
         assert!(!t.is_ready());
     }
 
@@ -408,20 +970,20 @@ mod tests {
 
     #[tokio::test]
     async fn discard_browser_retires_only_the_generation_it_was_given() {
-        let pool = ChromePool::<&'static str>::build(config()).unwrap();
-        pool.seed_browser(1, "browser-1").await;
+        let owner = BrowserOwner::<&'static str>::new(config());
+        *owner.browser.lock().await = Some((1, Arc::new("browser-1")));
 
         // A supervisor that watched generation 0 die, arriving after somebody
         // else already launched generation 1, must leave it alone.
-        pool.discard_browser(0).await;
+        owner.discard_browser(0).await;
         assert!(
-            pool.browser_is_launched().await,
+            owner.browser.lock().await.is_some(),
             "a stale generation must not retire the live browser"
         );
 
-        pool.discard_browser(1).await;
+        owner.discard_browser(1).await;
         assert!(
-            !pool.browser_is_launched().await,
+            owner.browser.lock().await.is_none(),
             "the current generation must clear the slot"
         );
     }
@@ -435,24 +997,32 @@ mod tests {
 
     #[test]
     fn generations_are_monotonic() {
-        let pool = ChromePool::new(config()).unwrap();
-        let first = pool.next_generation.fetch_add(1, Ordering::Relaxed);
-        let second = pool.next_generation.fetch_add(1, Ordering::Relaxed);
+        let owner = BrowserOwner::<&'static str>::new(config());
+        let first = owner.next_generation.fetch_add(1, Ordering::Relaxed);
+        let second = owner.next_generation.fetch_add(1, Ordering::Relaxed);
         assert_eq!((first, second), (0, 1));
     }
 
     #[tokio::test]
     async fn a_failed_launch_leaves_the_slot_empty() {
-        let pool = ChromePool::new(config()).unwrap();
-        assert!(pool.ensure_browser().await.is_err());
-        assert!(!pool.browser_is_launched().await);
+        let owner = BrowserOwner::new(config());
+        assert!(owner.ensure_browser().await.is_err());
+        assert!(owner.browser.lock().await.is_none());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn dropping_the_pool_inside_an_async_context_does_not_panic() {
         let pool = ChromePool::new(config()).unwrap();
         let t = pool.transport_for(page("a", "http://127.0.0.1:3000"), LogBuffer::new());
+        let weak = Arc::downgrade(&pool);
         drop(t);
         drop(pool);
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while weak.upgrade().is_some() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("cleanup must release the pool");
     }
 }

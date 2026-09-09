@@ -62,6 +62,29 @@ impl<T: ClientTransport> RuntimeBackend for ClientRuntime<T> {
     fn ready(&self) -> bool {
         self.transport.is_ready()
     }
+
+    fn snapshot(&self) -> Option<super::RuntimeSnapshot> {
+        self.transport.snapshot()
+    }
+    fn stop(&self, retain_profile: bool) -> Result<(), RuntimeError> {
+        self.transport.stop(retain_profile)
+    }
+    fn restart(
+        &self,
+        token: &str,
+    ) -> Result<Option<std::sync::Arc<dyn RuntimeBackend>>, RuntimeError> {
+        let logs = LogBuffer::new();
+        Ok(self
+            .transport
+            .restart(token, logs.clone())?
+            .map(|transport| {
+                std::sync::Arc::new(ClientRuntime::new(transport, logs))
+                    as std::sync::Arc<dyn RuntimeBackend>
+            }))
+    }
+    fn shutdown(&self) {
+        self.transport.shutdown();
+    }
 }
 
 #[cfg(test)]
@@ -69,6 +92,15 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Mutex;
+
+    #[test]
+    fn unsupported_management_cannot_report_success() {
+        let runtime =
+            ClientRuntime::new(FakeTransport::ok(serde_json::json!(null)), LogBuffer::new());
+        assert!(runtime.snapshot().is_none());
+        assert!(runtime.stop(true).is_err());
+        assert!(runtime.restart("fresh-token").is_err());
+    }
 
     #[test]
     fn builds_call_snippet_with_json_escaping() {
@@ -111,6 +143,7 @@ mod tests {
                 .as_ref()
                 .map(|v| v.clone())
                 .map_err(|e| match e {
+                    RuntimeError::Forbidden => RuntimeError::Forbidden,
                     RuntimeError::NotReady => RuntimeError::NotReady,
                     RuntimeError::Timeout => RuntimeError::Timeout,
                     RuntimeError::Transport(s) => RuntimeError::Transport(s.clone()),
@@ -120,6 +153,7 @@ mod tests {
         fn wait_ready(&self, _timeout: Duration) -> Result<(), RuntimeError> {
             match &self.wait_result {
                 Ok(()) => Ok(()),
+                Err(RuntimeError::Forbidden) => Err(RuntimeError::Forbidden),
                 Err(RuntimeError::NotReady) => Err(RuntimeError::NotReady),
                 Err(RuntimeError::Timeout) => Err(RuntimeError::Timeout),
                 Err(RuntimeError::Transport(s)) => Err(RuntimeError::Transport(s.clone())),

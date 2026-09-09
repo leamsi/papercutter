@@ -51,6 +51,23 @@ fn level_of_role(role: MemberRole) -> AccessLevel {
 }
 
 impl AccessPolicy for SpaceAccessPolicy {
+    fn runtime_allowed(&self, username: Option<&str>) -> bool {
+        if self.level_for(username) != AccessLevel::Write {
+            return false;
+        }
+        let Some(username) = username else {
+            return true;
+        };
+        if self.users.credential_version(username).is_none() {
+            return false;
+        }
+        self.users.is_admin(username)
+            || self
+                .members
+                .get(username)
+                .is_none_or(|entry| entry.runtime_api)
+    }
+
     fn level_for(&self, username: Option<&str>) -> AccessLevel {
         let mut level = level_of(self.access);
         if let Some(username) = username {
@@ -101,12 +118,40 @@ mod tests {
                     (*name).to_string(),
                     MemberEntry {
                         role: *role,
+                        runtime_api: true,
+                        runtime_api_explicit: true,
                         extra: Default::default(),
                     },
                 )
             })
             .collect();
         SpaceAccessPolicy::new(store, access, members, frozen)
+    }
+
+    #[test]
+    fn runtime_permission_requires_active_writer_and_honors_opt_out() {
+        let dir = tempfile::tempdir().unwrap();
+        let users = UserStore::create_empty(dir.path()).unwrap();
+        users
+            .create_user("owner", "owner-password", true, Profile::default())
+            .unwrap();
+        users
+            .create_user("writer", "writer-password", false, Profile::default())
+            .unwrap();
+        let members = BTreeMap::from([(
+            "writer".into(),
+            MemberEntry {
+                runtime_api: false,
+                ..Default::default()
+            },
+        )]);
+        let policy = SpaceAccessPolicy::new(users.clone(), SpaceAccess::None, members, false);
+        assert_eq!(policy.level_for(Some("writer")), AccessLevel::Write);
+        assert!(!policy.runtime_allowed(Some("writer")));
+        assert!(policy.runtime_allowed(Some("owner")));
+        users.set_disabled("writer", true).unwrap();
+        assert!(!policy.runtime_allowed(Some("writer")));
+        assert!(!policy.runtime_allowed(None));
     }
 
     #[test]

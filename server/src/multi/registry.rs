@@ -116,6 +116,7 @@ mod tests {
             status: InstanceStatus::Running,
             router: None,
             revisions: None,
+            runtime: None,
         })
     }
 

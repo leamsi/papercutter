@@ -5,11 +5,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::auth::Actor;
 use axum::body::Bytes;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::Json;
+use axum::{Extension, Json};
 use serde_json::json;
 
 use crate::runtime::RuntimeError;
@@ -38,6 +39,7 @@ fn not_enabled() -> Response {
 
 fn runtime_error_response(e: RuntimeError) -> Response {
     let (status, code) = match e {
+        RuntimeError::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
         RuntimeError::NotReady | RuntimeError::Transport(_) => {
             (StatusCode::SERVICE_UNAVAILABLE, "bridge_unavailable")
         }
@@ -61,22 +63,25 @@ enum EvalKind {
 
 pub async fn handle_runtime_lua(
     State(state): State<Arc<ServerState>>,
+    Extension(actor): Extension<Actor>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    runtime_eval(state, headers, body, EvalKind::Lua).await
+    runtime_eval(state, actor, headers, body, EvalKind::Lua).await
 }
 
 pub async fn handle_runtime_lua_script(
     State(state): State<Arc<ServerState>>,
+    Extension(actor): Extension<Actor>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    runtime_eval(state, headers, body, EvalKind::Script).await
+    runtime_eval(state, actor, headers, body, EvalKind::Script).await
 }
 
 async fn runtime_eval(
     state: Arc<ServerState>,
+    actor: Actor,
     headers: HeaderMap,
     body: Bytes,
     kind: EvalKind,
@@ -105,9 +110,11 @@ async fn runtime_eval(
     // the blocking pool so it never stalls an async worker.
     let st = state.clone();
     let result = tokio::task::spawn_blocking(move || {
-        st.runtime
+        let runtime = st.runtime.as_ref().expect("runtime present");
+        let selected = runtime.for_actor(&actor)?;
+        selected
             .as_ref()
-            .expect("runtime present (checked above)")
+            .unwrap_or(runtime)
             .eval_global(fn_name, &code, timeout)
     })
     .await;
@@ -131,14 +138,28 @@ pub struct LogsQuery {
 
 pub async fn handle_runtime_logs(
     State(state): State<Arc<ServerState>>,
+    Extension(actor): Extension<Actor>,
     Query(params): Query<LogsQuery>,
 ) -> Response {
     let Some(rt) = state.runtime.as_ref() else {
         return not_enabled();
     };
-    let limit = params.limit.unwrap_or(100);
-    let logs = rt.logs(limit, params.since);
-    (StatusCode::OK, Json(json!({ "logs": logs }))).into_response()
+    let runtime = rt.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let selected = runtime.for_actor(&actor)?;
+        Ok::<_, RuntimeError>(
+            selected
+                .as_ref()
+                .unwrap_or(&runtime)
+                .logs(params.limit.unwrap_or(100), params.since),
+        )
+    })
+    .await;
+    match result {
+        Ok(Ok(logs)) => (StatusCode::OK, Json(json!({ "logs": logs }))).into_response(),
+        Ok(Err(error)) => runtime_error_response(error),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
 }
 
 #[cfg(test)]

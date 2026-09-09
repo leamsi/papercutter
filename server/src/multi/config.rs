@@ -189,12 +189,55 @@ pub enum MemberRole {
     Write,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MemberEntry {
-    #[serde(default)]
     pub role: MemberRole,
+    pub runtime_api: bool,
+    #[serde(skip)]
+    pub(crate) runtime_api_explicit: bool,
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl PartialEq for MemberEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.role == other.role
+            && self.runtime_api == other.runtime_api
+            && self.extra == other.extra
+    }
+}
+
+impl Default for MemberEntry {
+    fn default() -> Self {
+        Self {
+            role: MemberRole::Write,
+            runtime_api: true,
+            runtime_api_explicit: true,
+            extra: Default::default(),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for MemberEntry {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Input {
+            #[serde(default)]
+            role: MemberRole,
+            runtime_api: Option<bool>,
+            #[serde(flatten)]
+            extra: serde_json::Map<String, serde_json::Value>,
+        }
+        let input = Input::deserialize(deserializer)?;
+        Ok(Self {
+            role: input.role,
+            runtime_api_explicit: input.runtime_api.is_some(),
+            runtime_api: input.runtime_api.unwrap_or(input.role == MemberRole::Write),
+            extra: input.extra,
+        })
+    }
 }
 
 /// A single space's full configuration — parity with the single-space `SB_*`
@@ -370,6 +413,28 @@ mod tests {
             "futureField": { "nested": 1 }
           }
         }"#
+    }
+
+    #[test]
+    fn member_serialization_does_not_change_configuration_equality() {
+        let old: MemberEntry = serde_json::from_str("{}").unwrap();
+        let roundtrip: MemberEntry =
+            serde_json::from_value(serde_json::to_value(&old).unwrap()).unwrap();
+        assert_eq!(old, roundtrip);
+    }
+
+    #[test]
+    fn member_runtime_defaults_follow_write_and_preserve_opt_out() {
+        for (input, enabled) in [
+            (r#"{}"#, true),
+            (r#"{"role":"write"}"#, true),
+            (r#"{"role":"read"}"#, false),
+            (r#"{"role":"write","runtimeApi":false}"#, false),
+        ] {
+            let entry: MemberEntry = serde_json::from_str(input).unwrap();
+            let output = serde_json::to_value(entry).unwrap();
+            assert_eq!(output["runtimeApi"], enabled, "{input}");
+        }
     }
 
     #[test]

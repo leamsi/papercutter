@@ -11,12 +11,13 @@ pub struct AuthContext<'a> {
 }
 
 /// The verified result of an authorization attempt. `grant` is set only by
-/// authorizers that carry their own authority — the headless runtime cookie
-/// and single-space env credentials — where there is no username for a policy
+/// authorizers that carry their own authority, such as single-space env
+/// credentials, where there is no username for a policy
 /// to grade. `None` means "ask the policy".
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct AuthOutcome {
     pub username: Option<String>,
+    pub credential_version: Option<String>,
     pub grant: Option<AccessLevel>,
 }
 
@@ -24,8 +25,14 @@ impl AuthOutcome {
     pub fn user(username: String) -> Self {
         Self {
             username: Some(username),
+            credential_version: None,
             grant: None,
         }
+    }
+
+    pub fn with_version(mut self, version: Option<String>) -> Self {
+        self.credential_version = version;
+        self
     }
 
     pub fn anonymous() -> Self {
@@ -35,6 +42,7 @@ impl AuthOutcome {
     pub fn trusted() -> Self {
         Self {
             username: None,
+            credential_version: None,
             grant: Some(AccessLevel::Write),
         }
     }
@@ -53,6 +61,7 @@ pub trait RequestAuthorizer: Send + Sync {
 #[derive(Debug, Clone, Default)]
 pub struct Actor {
     pub username: Option<String>,
+    pub credential_version: Option<String>,
     pub full_name: Option<String>,
     pub email: Option<String>,
     pub level: AccessLevel,

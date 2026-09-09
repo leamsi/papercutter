@@ -26,8 +26,7 @@ fn chrome_path_from(
         .ok_or(RuntimeUnavailable::NoChrome)
 }
 
-/// Configuration for the single, server-wide headless browser. Resolved once at
-/// startup and shared by every space's page.
+/// Browser launch settings; `user_data_dir` is the parent of temporary profiles.
 #[derive(Debug, Clone)]
 pub struct ChromeConfig {
     pub chrome_path: String,
@@ -41,9 +40,20 @@ impl ChromeConfig {
     /// directory, used for the default profile location. The error says which
     /// of the two ways this can fail actually happened.
     pub fn from_env(server_root: &Path) -> Result<Self, RuntimeUnavailable> {
+        Self::from_env_mode(server_root, true)
+    }
+
+    pub fn from_env_for_multi(server_root: &Path) -> Result<Self, RuntimeUnavailable> {
+        Self::from_env_mode(server_root, false)
+    }
+
+    fn from_env_mode(
+        server_root: &Path,
+        honor_runtime_env: bool,
+    ) -> Result<Self, RuntimeUnavailable> {
         let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
-        let runtime_api_enabled =
-            !matches!(env("SB_RUNTIME_API").as_deref(), Some("0") | Some("false"));
+        let runtime_api_enabled = !honor_runtime_env
+            || !matches!(env("SB_RUNTIME_API").as_deref(), Some("0") | Some("false"));
         Self::resolve(
             env("SB_CHROME_PATH"),
             env("CHROMIUM_PATH"),
@@ -68,10 +78,16 @@ impl ChromeConfig {
         log_console: bool,
         runtime_api_enabled: bool,
     ) -> Result<Self, RuntimeUnavailable> {
+        let scan = if show { find_full_chrome } else { find_chrome };
+        let chrome_path = chrome_path_from(sb_chrome_path, chromium_path, scan);
+        match &chrome_path {
+            Ok(path) => tracing::info!("runtime Chrome detected: {path}"),
+            Err(_) => tracing::info!("runtime Chrome not found"),
+        }
         if !runtime_api_enabled {
             return Err(RuntimeUnavailable::DisabledByEnv);
         }
-        let chrome_path = chrome_path_from(sb_chrome_path, chromium_path, find_chrome)?;
+        let chrome_path = chrome_path?;
         let user_data_dir = chrome_data_dir
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| {
@@ -133,6 +149,19 @@ impl SpacePage {
 
 /// Find a Chrome/Chromium executable from platform-specific candidates.
 pub fn find_chrome() -> Option<String> {
+    resolve_candidates(&[
+        "chrome-headless-shell",
+        "chrome-headless-shell.exe",
+        "chromium-headless-shell",
+        "chromium-headless-shell.exe",
+        "headless_shell",
+        "headless_shell.exe",
+        "headless-shell",
+    ])
+    .or_else(find_full_chrome)
+}
+
+fn find_full_chrome() -> Option<String> {
     if cfg!(target_os = "macos") {
         let candidates: &[&str] = &[
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -168,8 +197,6 @@ pub fn find_chrome() -> Option<String> {
     }
 
     let candidates: &[&str] = &[
-        "headless_shell",
-        "headless-shell",
         "chromium",
         "chromium-browser",
         "google-chrome",
@@ -209,6 +236,71 @@ fn which_on_path(name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn discovery_prefers_headless_shell_except_when_showing_chrome() {
+        const CHILD: &str = "SB_TEST_HEADLESS_DISCOVERY_CHILD";
+        if let Some(expected) = std::env::var_os(CHILD) {
+            let expected = expected.to_string_lossy();
+            assert_eq!(find_chrome().as_deref(), Some(expected.as_ref()));
+            let visible =
+                ChromeConfig::resolve(None, None, None, Path::new("/unused"), true, false, true);
+            if let Ok(visible) = visible {
+                assert_ne!(visible.chrome_path, expected);
+            }
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("headless_shell"), "").unwrap();
+        for base in ["chrome-headless-shell", "chromium-headless-shell"] {
+            let name = if cfg!(windows) {
+                format!("{base}.exe")
+            } else {
+                base.to_string()
+            };
+            let shell = dir.path().join(name);
+            std::fs::write(&shell, "").unwrap();
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "config::tests::discovery_prefers_headless_shell_except_when_showing_chrome",
+                ])
+                .env(CHILD, &shell)
+                .env("PATH", dir.path())
+                .status()
+                .unwrap();
+            assert!(status.success());
+            std::fs::remove_file(shell).unwrap();
+        }
+    }
+
+    #[test]
+    fn multi_space_discovery_ignores_the_environment_disable() {
+        const CHILD: &str = "SB_TEST_RUNTIME_DISCOVERY_CHILD";
+        if std::env::var_os(CHILD).is_some() {
+            let root = Path::new("/unused");
+            let config = ChromeConfig::from_env_for_multi(root).unwrap();
+            assert_eq!(config.chrome_path, "/configured/chrome");
+            assert_eq!(
+                ChromeConfig::from_env(root).unwrap_err(),
+                RuntimeUnavailable::DisabledByEnv
+            );
+            return;
+        }
+        for disabled in ["0", "false"] {
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "config::tests::multi_space_discovery_ignores_the_environment_disable",
+                ])
+                .env(CHILD, "1")
+                .env("SB_RUNTIME_API", disabled)
+                .env("SB_CHROME_PATH", "/configured/chrome")
+                .status()
+                .unwrap();
+            assert!(status.success());
+        }
+    }
 
     fn resolve(
         root: &str,

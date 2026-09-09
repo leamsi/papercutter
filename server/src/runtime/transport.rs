@@ -21,4 +21,53 @@ pub trait ClientTransport: Send + Sync {
     /// Non-blocking readiness check.
     fn is_ready(&self) -> bool;
     fn ensure_started(&self) {}
+    fn shutdown(&self) {}
+    fn snapshot(&self) -> Option<super::RuntimeSnapshot> {
+        None
+    }
+    fn stop(&self, _retain_profile: bool) -> Result<(), RuntimeError> {
+        Err(RuntimeError::Transport(
+            "runtime management unavailable".into(),
+        ))
+    }
+    fn restart(
+        &self,
+        _headless_token: &str,
+        _logs: super::LogBuffer,
+    ) -> Result<Option<Box<dyn ClientTransport>>, RuntimeError> {
+        Err(RuntimeError::Transport(
+            "runtime management unavailable".into(),
+        ))
+    }
+}
+
+impl ClientTransport for Box<dyn ClientTransport> {
+    fn eval_js(&self, js: &str, timeout: Duration) -> Result<serde_json::Value, RuntimeError> {
+        (**self).eval_js(js, timeout)
+    }
+    fn wait_ready(&self, timeout: Duration) -> Result<(), RuntimeError> {
+        (**self).wait_ready(timeout)
+    }
+    fn is_ready(&self) -> bool {
+        (**self).is_ready()
+    }
+    fn ensure_started(&self) {
+        (**self).ensure_started()
+    }
+    fn shutdown(&self) {
+        (**self).shutdown()
+    }
+    fn snapshot(&self) -> Option<super::RuntimeSnapshot> {
+        (**self).snapshot()
+    }
+    fn stop(&self, retain_profile: bool) -> Result<(), RuntimeError> {
+        (**self).stop(retain_profile)
+    }
+    fn restart(
+        &self,
+        token: &str,
+        logs: super::LogBuffer,
+    ) -> Result<Option<Box<dyn ClientTransport>>, RuntimeError> {
+        (**self).restart(token, logs)
+    }
 }

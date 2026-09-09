@@ -4,13 +4,6 @@ use crate::auth::authorizer::{AuthContext, AuthOutcome, RequestAuthorizer};
 use crate::auth::config::constant_time_eq;
 use crate::auth::cookie::cookie_value;
 
-/// Session-cookie name carrying a space's headless token.
-///
-/// Every space gets its own name. The server-managed browser is shared by all
-/// spaces, so all their cookies land in one jar; `Path` scoping alone is
-/// ambiguous because a space bound at the root prefix sets `Path=/` and its
-/// cookie then rides along on every other space's requests. A per-space name
-/// removes any dependence on the browser's cookie ordering.
 pub fn headless_cookie_name(space_id: &str) -> String {
     format!("silverbullet_headless_{space_id}")
 }
@@ -49,6 +42,23 @@ impl RequestAuthorizer for HeadlessTokenAuthorizer {
             return Some(AuthOutcome::trusted());
         }
         self.inner.authorize(ctx)
+    }
+}
+
+pub struct RejectHeadlessCookie {
+    pub inner: Option<std::sync::Arc<dyn RequestAuthorizer>>,
+    pub cookie_name: String,
+}
+
+impl RequestAuthorizer for RejectHeadlessCookie {
+    fn authorize(&self, ctx: &AuthContext) -> Option<AuthOutcome> {
+        if cookie_value(ctx.headers, &self.cookie_name).is_some() {
+            return None;
+        }
+        match &self.inner {
+            Some(inner) => inner.authorize(ctx),
+            None => Some(AuthOutcome::trusted()),
+        }
     }
 }
 

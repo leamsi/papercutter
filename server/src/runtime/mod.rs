@@ -7,10 +7,14 @@ pub mod availability;
 pub mod backend;
 pub mod client;
 pub mod logs;
+pub mod management;
 pub mod transport;
 
 pub use availability::RuntimeAvailability;
 pub use backend::{RuntimeBackend, RuntimeError};
 pub use client::{build_global_call_js, ClientRuntime};
 pub use logs::{LogBuffer, LogEntry};
+pub use management::{RuntimeInstance, RuntimeSnapshot};
 pub use transport::ClientTransport;
+
+pub mod scoped;

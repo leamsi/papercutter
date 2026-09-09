@@ -12,6 +12,8 @@ use super::logs::LogEntry;
 /// success envelope as `{ "error": ... }`.
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeError {
+    #[error("runtime access denied")]
+    Forbidden,
     /// The client runtime has not signaled readiness within the deadline.
     #[error("runtime not ready")]
     NotReady,
@@ -31,6 +33,38 @@ pub enum RuntimeError {
 /// `sbRuntime.evalLuaScript`. Only infrastructure failures surface as `Err`;
 /// a Lua-level error travels back inside the success value.
 pub trait RuntimeBackend: Send + Sync {
+    fn for_actor(
+        &self,
+        _actor: &crate::auth::Actor,
+    ) -> Result<Option<std::sync::Arc<dyn RuntimeBackend>>, RuntimeError> {
+        Ok(None)
+    }
+
+    fn snapshot(&self) -> Option<super::RuntimeSnapshot> {
+        None
+    }
+    fn stop(&self, _retain_profile: bool) -> Result<(), RuntimeError> {
+        Err(RuntimeError::Transport(
+            "runtime management unavailable".into(),
+        ))
+    }
+    fn restart(
+        &self,
+        _headless_token: &str,
+    ) -> Result<Option<std::sync::Arc<dyn RuntimeBackend>>, RuntimeError> {
+        Err(RuntimeError::Transport(
+            "runtime management unavailable".into(),
+        ))
+    }
+    fn runtime_instances(&self) -> Vec<super::RuntimeInstance> {
+        Vec::new()
+    }
+    fn manage_runtime(&self, _id: &str, _reset: bool) -> Result<bool, RuntimeError> {
+        Ok(false)
+    }
+    fn reset(&self) {}
+    fn revoke_user(&self, _username: &str) {}
+
     /// Evaluate `<fn_name>(<arg as a single JSON-encoded string>)` in the client
     /// runtime and return its JSON result, blocking up to `timeout`.
     fn eval_global(
@@ -46,4 +80,5 @@ pub trait RuntimeBackend: Send + Sync {
 
     /// Whether the client runtime is ready to evaluate.
     fn ready(&self) -> bool;
+    fn shutdown(&self) {}
 }

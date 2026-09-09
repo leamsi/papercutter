@@ -133,9 +133,9 @@ impl RequestAuthorizer for UserTokenAuthorizer {
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.strip_prefix("Bearer "))
         {
-            if let Some(user) = self.store.resolve_token(token) {
+            if let Some((user, version)) = self.store.resolve_token_identity(token) {
                 return if (self.allow)(&user) {
-                    Some(AuthOutcome::user(user))
+                    Some(AuthOutcome::user(user).with_version(Some(version)))
                 } else {
                     None
                 };
@@ -222,6 +222,8 @@ mod tests {
             "bob".to_string(),
             crate::multi::config::MemberEntry {
                 role: crate::multi::config::MemberRole::Write,
+                runtime_api: true,
+                runtime_api_explicit: true,
                 extra: Default::default(),
             },
         );
@@ -229,6 +231,8 @@ mod tests {
             "sam".to_string(),
             crate::multi::config::MemberEntry {
                 role: crate::multi::config::MemberRole::Read,
+                runtime_api: false,
+                runtime_api_explicit: true,
                 extra: Default::default(),
             },
         );

@@ -1,3 +1,4 @@
+import { changeMemberAccess } from "../runtime_permissions.ts";
 import {
   Alert,
   Button,
@@ -25,7 +26,7 @@ import {
 import type {
   CommitTiming,
   FieldError,
-  MemberRole,
+  MemberEntry,
   RevisionsMode,
   SpaceAccess,
   SpaceInfo,
@@ -95,10 +96,8 @@ export function SpaceForm({
   }, []);
 
   const [access, setAccess] = useState<SpaceAccess>(initial?.access ?? "none");
-  const [members, setMembers] = useState<Record<string, MemberRole>>(
-    Object.fromEntries(
-      Object.entries(initial?.members ?? {}).map(([name, m]) => [name, m.role]),
-    ),
+  const [members, setMembers] = useState<Record<string, MemberEntry>>(
+    initial?.members ?? {},
   );
   const [users, setUsers] = useState<Record<string, UserInfo>>({});
   const [usersError, setUsersError] = useState(false);
@@ -114,14 +113,14 @@ export function SpaceForm({
   const [shellWhitelist, setShellWhitelist] = useState(
     (initial?.shell.whitelist ?? []).join(" "),
   );
-  // Matches the server's own `runtimeApi` default for a fresh space.
-  const [runtimeApi, setRuntimeApi] = useState(initial?.runtimeApi ?? true);
+  const [runtimeApi, setRuntimeApi] = useState(initial?.runtimeApi ?? false);
   const [revisions, setRevisions] = useState<RevisionsMode>(
     initial?.revisions ?? "disabled",
   );
   const [revisionsCommit, setRevisionsCommit] = useState<CommitTiming>(
     initial?.revisionsCommit ?? { quietSecs: 30, maxIntervalSecs: 300 },
   );
+  const [runtimeServerEnabled, setRuntimeServerEnabled] = useState(false);
   const [runtimeAvailability, setRuntimeAvailability] =
     useState<RuntimeAvailability | null>(null);
   const [indexPage, setIndexPage] = useState(initial?.indexPage ?? "index");
@@ -182,27 +181,31 @@ export function SpaceForm({
   };
   useEffect(loadUsers, []);
 
-  // Whether this server can run the Lua runtime at all — decided at server
-  // boot, not per space. A failure here deliberately leaves the checkbox
-  // usable: a transient error should not lock an admin out of a setting.
   useEffect(() => {
     getServerInfo()
       .then((info) => {
         setRuntimeAvailability(info.runtimeApi);
+        setRuntimeServerEnabled(info.runtimeApiEnabled);
+        if (!initial)
+          setRuntimeApi(
+            info.runtimeApi.status === "available" && info.runtimeApiEnabled,
+          );
       })
       .catch(() => {});
   }, []);
   const runtimeApiUnavailable =
-    runtimeApiUnavailableReason(runtimeAvailability);
+    (bindType === "host"
+      ? "Runtime API requires a prefix-bound space."
+      : null) ??
+    runtimeApiUnavailableReason(runtimeAvailability) ??
+    (!runtimeServerEnabled ? "Disabled in Server settings." : null);
 
   const values: Partial<SpaceInfo> = {
     name,
     folder,
     binding: bindType === "host" ? { host: hostValue } : { prefix },
     access,
-    members: Object.fromEntries(
-      Object.entries(members).map(([username, role]) => [username, { role }]),
-    ),
+    members,
     readOnly,
     shell: {
       enabled: shellEnabled,
@@ -430,15 +433,29 @@ export function SpaceForm({
               users={users}
               members={members}
               frozen={readOnly}
+              runtimeAvailable={runtimeApi && runtimeApiUnavailable === null}
+              onRuntimeChange={(username, enabled) =>
+                setMembers((previous) => ({
+                  ...previous,
+                  [username]: { ...previous[username], runtimeApi: enabled },
+                }))
+              }
               onChange={(username, role) =>
                 setMembers((previous) => {
                   const next = { ...previous };
-                  if (role === "none") delete next[username];
-                  else next[username] = role;
+                  const member = changeMemberAccess(previous[username], role);
+                  if (member) next[username] = member;
+                  else delete next[username];
                   return next;
                 })
               }
             />
+            {(runtimeApiUnavailable || !runtimeApi) && (
+              <p class="sb-help-text">
+                {runtimeApiUnavailable ??
+                  "Enable the runtime API in Advanced settings to grant runtime access."}
+              </p>
+            )}
             {readOnly && (
               <p class="sb-help-text">
                 Write access is suspended while this space is frozen. Checked

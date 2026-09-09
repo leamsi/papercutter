@@ -172,3 +172,83 @@ test("user settings sections preserve drafts and confirm successful saves", asyn
     page.getByRole("heading", { name: "API tokens", exact: true }),
   ).toBeVisible();
 });
+
+test("runtime permissions require write and preserve opt-outs across server toggles", async ({
+  page,
+}) => {
+  await page.request.post(`${base}/.spaces/api/login`, {
+    data: { username: ADMIN_USER, password: ADMIN_PASSWORD },
+  });
+  const admin = `${base}/.spaces/api/admin`;
+  await page.request.post(`${admin}/users`, {
+    data: {
+      username: "runtime-writer",
+      password: "runtime-password",
+      admin: false,
+    },
+  });
+  const created = await page.request.post(`${admin}/spaces`, {
+    data: {
+      name: "Runtime permissions",
+      binding: { prefix: "/runtime-permissions" },
+      runtimeApi: true,
+      members: { "runtime-writer": { role: "write" } },
+    },
+  });
+  expect(created.ok()).toBe(true);
+  const { id } = await created.json();
+  await page.route("**/.spaces/api/admin/server-info", async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      json: { ...(await response.json()), runtimeApi: { status: "available" } },
+    });
+  });
+  await page.goto(`${base}/.spaces/${id}?section=access`);
+  const runtime = page.getByLabel("runtime-writer: Runtime API", {
+    exact: true,
+  });
+  const write = page.getByLabel("runtime-writer: Write", { exact: true });
+  await expect(runtime).toBeChecked();
+  await runtime.uncheck();
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Saved");
+  await page.reload();
+  await expect(runtime).not.toBeChecked();
+  await runtime.check();
+  await write.uncheck();
+  await expect(runtime).not.toBeChecked();
+  await expect(runtime).toBeDisabled();
+  await write.check();
+  await expect(runtime).toBeEnabled();
+  await expect(runtime).not.toBeChecked();
+  await expect(
+    page.getByRole("button", { name: "Save changes", exact: true }),
+  ).toBeDisabled();
+
+  await page.goto(`${base}/.spaces/admin?section=server`);
+  const serverToggle = page.getByLabel("Enable runtime API", { exact: true });
+  await expect(serverToggle).toBeChecked();
+  await serverToggle.uncheck();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Server settings saved.");
+  await page.reload();
+  await expect(serverToggle).not.toBeChecked();
+  const next = await page.request.post(`${admin}/spaces`, {
+    data: {
+      name: "Runtime disabled default",
+      binding: { prefix: "/runtime-default" },
+    },
+  });
+  expect(next.ok()).toBe(true);
+  const nextId = (await next.json()).id;
+  const nextConfig = await (
+    await page.request.get(`${admin}/spaces/${nextId}`)
+  ).json();
+  expect(nextConfig.runtimeApi).toBe(false);
+  await serverToggle.check();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Server settings saved.");
+  await page.goto(`${base}/.spaces/${id}?section=access`);
+  await expect(runtime).toBeEnabled();
+  await expect(runtime).not.toBeChecked();
+});

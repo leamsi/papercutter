@@ -111,7 +111,14 @@ pub fn validate(
                 }
             }
         }
-        for member in space.members.keys() {
+        for (member, entry) in &space.members {
+            if entry.runtime_api && entry.role != super::config::MemberRole::Write {
+                err(
+                    &mut errors,
+                    format!("{id}.members.{member}.runtimeApi"),
+                    "runtime API requires Write access",
+                );
+            }
             if !known_users.contains(member) {
                 err(
                     &mut errors,

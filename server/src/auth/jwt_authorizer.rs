@@ -96,7 +96,7 @@ impl RequestAuthorizer for JwtAuthorizer {
                 return None;
             }
         }
-        Some(AuthOutcome::user(claims.username))
+        Some(AuthOutcome::user(claims.username).with_version(claims.credential_version))
     }
 }
 

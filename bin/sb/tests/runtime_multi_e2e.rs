@@ -1,20 +1,4 @@
-//! End-to-end test for the Runtime API in **multi-space** mode, driven through
-//! the real `sb` CLI.
-//!
-//! Two spaces are created on one authenticated server — one bound at the root
-//! prefix, one at `/notes` — each holding a different marker page. The test then
-//! evaluates Lua in each space through `sb eval` and asserts each answers with
-//! its *own* content. That is the assertion that matters: a shared browser must
-//! not collapse two spaces into one client.
-//!
-//! It also asserts the shared browser is genuinely shared, by requiring the
-//! server to log its launch line exactly once across both spaces.
-//!
-//! Skips cleanly when Chrome is absent or when the sibling `silverbullet`
-//! server binary hasn't been built (run `cargo test --workspace`, which builds
-//! every bin) — except under `CI`, where either missing prerequisite is a hard
-//! failure rather than a silent skip (see `common::chrome_available_or_skip`
-//! and `server_bin_or_skip`).
+//! Runs the real CLI against isolated runtimes on a multi-space server.
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -144,7 +128,7 @@ fn run_sb(args: &[&str], config_home: &std::path::Path) -> (i32, String, String)
 }
 
 #[test]
-fn runtime_api_serves_two_spaces_from_one_shared_chrome() {
+fn runtime_api_serves_two_spaces_from_isolated_chrome() {
     if !chrome_available_or_skip("runtime_multi_e2e") {
         return;
     }
@@ -177,7 +161,8 @@ fn runtime_api_serves_two_spaces_from_one_shared_chrome() {
         .args(["-p", &port.to_string(), "-L", "127.0.0.1"])
         .env_remove("SB_MULTI_SPACE")
         .env_remove("SB_USER")
-        .env_remove("SB_RUNTIME_API")
+        .env("SB_RUNTIME_API", "0")
+        .env("RUST_LOG", "info")
         .env("SB_DISABLE_SERVICE_WORKER", "1")
         .env("SB_CHROME_DATA_DIR", &chrome_data);
     let server_proc = Server::spawn(cmd);
@@ -208,9 +193,6 @@ fn runtime_api_serves_two_spaces_from_one_shared_chrome() {
         .unwrap();
     assert!(r.status().is_success(), "admin login failed");
 
-    // Two spaces with the runtime API on. One is bound at the ROOT prefix, so
-    // its auth cookie is set with Path=/ and rides along on the other space's
-    // requests — exactly the case per-space cookie names exist to handle.
     for (name, prefix, folder) in [
         ("Root", "/", "spaceRoot"),
         ("Notes", "/notes", "spaceNotes"),
@@ -308,9 +290,9 @@ fn runtime_api_serves_two_spaces_from_one_shared_chrome() {
     }
 
     let log = server_proc.finish();
-    let launches = log.matches("launching shared headless Chrome").count();
+    let launches = log.matches("launching isolated headless Chrome").count();
     assert_eq!(
-        launches, 1,
-        "expected exactly one shared Chrome launch, saw {launches}\n--- server log ---\n{log}"
+        launches, 2,
+        "expected one isolated Chrome launch per space, saw {launches}\n--- server log ---\n{log}"
     );
 }

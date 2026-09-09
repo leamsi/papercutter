@@ -15,6 +15,10 @@ pub enum AccessLevel {
 /// the multi-space `access`/roles/admin policy built per space.
 pub trait AccessPolicy: Send + Sync {
     fn level_for(&self, username: Option<&str>) -> AccessLevel;
+
+    fn runtime_allowed(&self, username: Option<&str>) -> bool {
+        self.level_for(username) == AccessLevel::Write
+    }
 }
 
 /// Reaching the policy at all means the authorizer already said yes, which on

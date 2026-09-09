@@ -13,8 +13,8 @@ use silverbullet_server_common::space::{
 use silverbullet_server_common::{BootConfig, FileMeta, SpaceError, SpacePrimitives};
 
 use crate::auth::{
-    headless_cookie_name, AuthConfig, Authenticator, HeadlessTokenAuthorizer, JwtAuthorizer,
-    LockoutTimer, LoginManager, RequestAuthorizer,
+    headless_cookie_name, AuthConfig, Authenticator, JwtAuthorizer, LockoutTimer, LoginManager,
+    RequestAuthorizer,
 };
 use crate::multi::access::{SessionPolicy, SpaceUsersAuth, UserTokenAuthorizer};
 use crate::multi::config::{Binding, SpaceAccess, SpaceConfig};
@@ -41,13 +41,14 @@ pub struct RuntimeRequest<'a> {
 
 /// Builds a runtime backend for a space, or `None` when unavailable/disabled.
 pub type RuntimeFactory =
-    Box<dyn Fn(&RuntimeRequest) -> Option<Box<dyn crate::runtime::RuntimeBackend>> + Send + Sync>;
+    Arc<dyn Fn(&RuntimeRequest) -> Option<Box<dyn crate::runtime::RuntimeBackend>> + Send + Sync>;
 
 /// Shared inputs for building every space instance.
 pub struct InstanceDeps {
     pub root: PathBuf,
     pub assets: AssetFactories,
     pub runtime: RuntimeFactory,
+    pub runtime_enabled: Arc<std::sync::atomic::AtomicBool>,
     pub metrics: Option<Arc<crate::metrics::Metrics>>,
     /// Authentication source for every instance built by this manager.
     pub auth: InstanceAuth,
@@ -250,6 +251,7 @@ pub struct SpaceInstance {
     /// admin git-sync routes reach the live engine through this rather than
     /// through the space's own router, which they are not nested inside.
     pub revisions: Option<Arc<crate::revisions::RevisionEngine>>,
+    pub runtime: Option<Arc<dyn crate::runtime::RuntimeBackend>>,
 }
 
 /// Resolve a space's folder: empty -> `<root>/spaces/<id>`, `"."` -> `<root>`
@@ -289,14 +291,6 @@ pub fn seed_index(folder: &Path, index_page: &str, content: &str, space_ignore: 
     }
 }
 
-/// Random 256-bit hex token (headless-browser authorization).
-fn generate_token() -> String {
-    let mut bytes = [0u8; 32];
-    getrandom::getrandom(&mut bytes).expect("OS RNG must be available");
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
-/// A space's authorizer + login manager (both `None` for an open space).
 type AuthPair = (
     Option<Arc<dyn RequestAuthorizer>>,
     Option<Arc<LoginManager>>,
@@ -309,7 +303,6 @@ fn build_env_style_auth(
     folder: &Path,
     prefix: &str,
     ac: &AuthConfig,
-    headless_token: &str,
 ) -> Result<AuthPair, String> {
     let authenticator = Arc::new(
         Authenticator::load_or_init(folder, ac)
@@ -323,11 +316,7 @@ fn build_env_style_auth(
         )
         .for_space(space_id),
     );
-    let authorizer: Arc<dyn RequestAuthorizer> = Arc::new(HeadlessTokenAuthorizer::new(
-        inner,
-        headless_cookie_name(space_id),
-        headless_token.to_string(),
-    ));
+    let authorizer: Arc<dyn RequestAuthorizer> = Arc::from(inner);
     let lockout = LockoutTimer::from_config(ac.lockout_time_secs, ac.lockout_limit);
     let login = Arc::new(
         LoginManager::new(
@@ -372,6 +361,7 @@ pub fn build_instance(id: &str, config: &SpaceConfig, deps: &InstanceDeps) -> Sp
     match result {
         Ok(state) => {
             let revisions = state.revisions.clone();
+            let runtime = state.runtime.clone();
             SpaceInstance {
                 id: id.to_string(),
                 config: config.clone(),
@@ -379,6 +369,7 @@ pub fn build_instance(id: &str, config: &SpaceConfig, deps: &InstanceDeps) -> Sp
                 status: InstanceStatus::Running,
                 router: Some(crate::build_router(Arc::new(state))),
                 revisions,
+                runtime,
             }
         }
         Err(reason) => {
@@ -390,6 +381,7 @@ pub fn build_instance(id: &str, config: &SpaceConfig, deps: &InstanceDeps) -> Sp
                 status: InstanceStatus::Errored(reason),
                 router: None,
                 revisions: None,
+                runtime: None,
             }
         }
     }
@@ -428,7 +420,6 @@ fn try_build_state(
     // Authentication establishes identity. Account-managed servers share that
     // identity across every prefix; each space still grades it against its
     // own live `SpaceAccessPolicy` (access level, member role, admin, freeze).
-    let headless_token = generate_token();
     let members: BTreeSet<String> = config.members.keys().cloned().collect();
 
     let access_policy: Arc<dyn crate::auth::AccessPolicy> = match &deps.auth {
@@ -462,9 +453,7 @@ fn try_build_state(
 
     let (authorizer, login): AuthPair = match &deps.auth {
         InstanceAuth::Single(None) => (None, None),
-        InstanceAuth::Single(Some(config)) => {
-            build_env_style_auth(id, &folder, prefix, config, &headless_token)?
-        }
+        InstanceAuth::Single(Some(config)) => build_env_style_auth(id, &folder, prefix, config)?,
         InstanceAuth::Accounts {
             users: store,
             authenticator,
@@ -484,13 +473,8 @@ fn try_build_state(
                 store.clone(),
                 any_account_filter(store.clone()),
             ));
-            let inner: Box<dyn RequestAuthorizer> = Box::new(HeadlessTokenAuthorizer::new(
-                tokens,
-                headless_cookie_name(id),
-                headless_token.clone(),
-            ));
             let authorizer: Arc<dyn RequestAuthorizer> =
-                Arc::new(crate::auth::AnonymousFallbackAuthorizer::new(inner));
+                Arc::new(crate::auth::AnonymousFallbackAuthorizer::new(tokens));
             let verifier = Arc::new(SpaceUsersAuth {
                 store: store.clone(),
                 policy: access_policy.clone(),
@@ -516,30 +500,45 @@ fn try_build_state(
         }
     };
 
-    // Runtime: only when enabled, writable, and reachable via 127.0.0.1.
-    // Host-bound spaces can't be addressed by IP, so their runtime is disabled.
     let runtime = if config.runtime_api && !config.read_only {
-        let server_url = match &config.binding {
-            Binding::Prefix { .. } => format!("http://127.0.0.1:{}{prefix}", deps.main_port),
-            Binding::Host { .. } => {
-                tracing::debug!("space {id}: runtimeApi unsupported for host bindings, disabled");
-                String::new()
-            }
-        };
-        if server_url.is_empty() {
-            None
-        } else {
-            (deps.runtime)(&RuntimeRequest {
-                space_id: id,
-                server_url,
-                headless_token: &headless_token,
-                read_only: config.read_only,
-            })
+        match &config.binding {
+            Binding::Prefix { .. } => Some(crate::runtime::scoped::ScopedRuntime::new(
+                id.into(),
+                format!("http://127.0.0.1:{}{prefix}", deps.main_port),
+                deps.runtime.clone(),
+                access_policy.clone(),
+                match &deps.auth {
+                    InstanceAuth::Accounts { users, .. } => Some(users.clone()),
+                    _ => None,
+                },
+                deps.runtime_enabled.clone(),
+            )),
+            Binding::Host { .. } => None,
         }
     } else {
         None
     };
-    let runtime: Option<Arc<dyn crate::runtime::RuntimeBackend>> = runtime.map(Arc::from);
+    let authorizer = match &runtime {
+        Some(runtime) => Some(Arc::new(crate::runtime::scoped::ScopedRuntimeAuthorizer {
+            inner: authorizer,
+            cookie_name: headless_cookie_name(id),
+            runtime: runtime.clone(),
+        }) as Arc<dyn RequestAuthorizer>),
+        None => Some(Arc::new(crate::auth::headless_token::RejectHeadlessCookie {
+            inner: authorizer,
+            cookie_name: headless_cookie_name(id),
+        }) as Arc<dyn RequestAuthorizer>),
+    };
+    let runtime = runtime.map(|runtime| runtime as Arc<dyn crate::runtime::RuntimeBackend>);
+    if let (Some(runtime), Some(mut shutdown)) = (&runtime, deps.shutdown.clone()) {
+        let runtime = Arc::downgrade(runtime);
+        tokio::spawn(async move {
+            let _ = shutdown.changed().await;
+            if let Some(runtime) = runtime.upgrade() {
+                runtime.shutdown();
+            }
+        });
+    }
 
     let shell_enabled = config.shell.enabled && !config.read_only && !deps.shell_disabled;
     let fs_guard = Arc::new(crate::fs_guard::FsGuard::default());
@@ -674,7 +673,8 @@ mod tests {
                 client_bundle: Box::new(|| Box::new(MemorySpacePrimitives::new())),
                 base_fs: Box::new(|| Box::new(MemorySpacePrimitives::new())),
             },
-            runtime: Box::new(|_req| None),
+            runtime: Arc::new(|_req| None),
+            runtime_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             metrics: None,
             auth: InstanceAuth::Single(Some(
                 crate::auth::AuthConfig::try_parse(Some("admin:pw"), None, None, None, None)

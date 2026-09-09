@@ -219,6 +219,20 @@ impl UserEntry {
         }
     }
 
+    fn credential_version(&self, username: &str) -> String {
+        let mut h = Sha256::new();
+        h.update(username.as_bytes());
+        h.update([0]);
+        h.update(self.password_hash.as_deref().unwrap_or_default().as_bytes());
+        h.update([0]);
+        h.update(self.session_epoch.to_string().as_bytes());
+        if let Some(generation) = &self.account_generation {
+            h.update([0]);
+            h.update(generation.as_bytes());
+        }
+        hex(&h.finalize())
+    }
+
     fn is_usable_local_admin(&self) -> bool {
         self.admin && !self.disabled && self.password_hash.is_some()
     }
@@ -392,17 +406,7 @@ impl UserStore {
         if user.disabled {
             return None;
         }
-        let mut h = Sha256::new();
-        h.update(username.as_bytes());
-        h.update([0]);
-        h.update(user.password_hash.as_deref().unwrap_or_default().as_bytes());
-        h.update([0]);
-        h.update(user.session_epoch.to_string().as_bytes());
-        if let Some(generation) = &user.account_generation {
-            h.update([0]);
-            h.update(generation.as_bytes());
-        }
-        Some(hex(&h.finalize()))
+        Some(user.credential_version(username))
     }
 
     pub fn session_is_current(&self, username: &str, version: Option<&str>) -> bool {
@@ -417,6 +421,11 @@ impl UserStore {
 
     /// Bearer token -> owning username.
     pub fn resolve_token(&self, token: &str) -> Option<String> {
+        self.resolve_token_identity(token)
+            .map(|(username, _)| username)
+    }
+
+    pub fn resolve_token_identity(&self, token: &str) -> Option<(String, String)> {
         let want = hash_token(token);
         let guard = self.read();
         for (name, user) in &guard.users {
@@ -426,7 +435,7 @@ impl UserStore {
             if user.tokens.values().any(|t| {
                 crate::auth::config::constant_time_eq(t.token_hash.as_bytes(), want.as_bytes())
             }) {
-                return Some(name.clone());
+                return Some((name.clone(), user.credential_version(name)));
             }
         }
         None

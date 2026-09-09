@@ -369,7 +369,8 @@ mod tests {
                 client_bundle: Box::new(|| Box::new(MemorySpacePrimitives::new())),
                 base_fs: Box::new(|| Box::new(MemorySpacePrimitives::new())),
             },
-            runtime: Box::new(|_| None),
+            runtime_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            runtime: Arc::new(|_| None),
             metrics: None,
             auth: InstanceAuth::Accounts {
                 users: users.clone(),

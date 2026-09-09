@@ -36,6 +36,14 @@ pub struct VisibleSpace {
     pub access: SpaceAccess,
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedRuntime {
+    pub space_name: String,
+    #[serde(flatten)]
+    pub instance: crate::runtime::RuntimeInstance,
+}
+
 pub struct MultiManager {
     root: PathBuf,
     pub(super) git_connections: Mutex<()>,
@@ -69,6 +77,12 @@ struct Retired {
     table: Option<Arc<RoutingTable>>,
 }
 
+impl Drop for MultiManager {
+    fn drop(&mut self) {
+        self.shutdown_runtimes();
+    }
+}
+
 impl MultiManager {
     /// Load spaces.json (hard error when malformed), build all instances, and
     /// return the manager. `known_users` seeds member validation; refresh it
@@ -96,6 +110,10 @@ impl MultiManager {
                 .collect();
             return Err(format!("invalid spaces.json: {}", msgs.join("; ")));
         }
+        deps.runtime_enabled.store(
+            server_config.runtime_api,
+            std::sync::atomic::Ordering::SeqCst,
+        );
         let instances: HashMap<String, Arc<SpaceInstance>> = config
             .spaces
             .iter()
@@ -166,18 +184,25 @@ impl MultiManager {
         self.state.lock().unwrap().server_config.primary_url.clone()
     }
 
+    pub fn runtime_enabled(&self) -> bool {
+        self.deps
+            .runtime_enabled
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
+
     pub fn server_name(&self) -> String {
         self.state.lock().unwrap().server_config.server_name.clone()
     }
 
     pub fn set_primary_url(&self, value: &str) -> Result<(), ApiError> {
-        self.set_server_config(Some(value), None)
+        self.set_server_config(Some(value), None, None)
     }
 
     pub fn set_server_config(
         &self,
         primary_url: Option<&str>,
         server_name: Option<&str>,
+        runtime_api: Option<bool>,
     ) -> Result<(), ApiError> {
         let mut inner = self.state.lock().unwrap();
         let mut config = inner.server_config.clone();
@@ -186,6 +211,9 @@ impl MultiManager {
         }
         if let Some(value) = server_name {
             config.server_name = value.into();
+        }
+        if let Some(value) = runtime_api {
+            config.runtime_api = value;
         }
         config
             .validate(&inner.config)
@@ -196,8 +224,86 @@ impl MultiManager {
         config
             .save(&self.root.join("server.json"))
             .map_err(ApiError::Internal)?;
+        self.deps
+            .runtime_enabled
+            .store(config.runtime_api, std::sync::atomic::Ordering::SeqCst);
+        if !config.runtime_api {
+            for instance in inner.instances.values() {
+                if let Some(runtime) = &instance.runtime {
+                    runtime.reset();
+                }
+            }
+        }
         inner.server_config = config;
         Ok(())
+    }
+
+    pub fn runtime_instances(&self) -> Vec<ManagedRuntime> {
+        let runtimes: Vec<_> = self
+            .state
+            .lock()
+            .unwrap()
+            .instances
+            .values()
+            .filter_map(|instance| Some((instance.config.name.clone(), instance.runtime.clone()?)))
+            .collect();
+        let mut instances: Vec<_> = runtimes
+            .into_iter()
+            .flat_map(|(space_name, runtime)| {
+                runtime
+                    .runtime_instances()
+                    .into_iter()
+                    .map(move |instance| ManagedRuntime {
+                        space_name: space_name.clone(),
+                        instance,
+                    })
+            })
+            .collect();
+        instances.sort_by(|a, b| {
+            (&a.space_name, &a.instance.space_id, &a.instance.username).cmp(&(
+                &b.space_name,
+                &b.instance.space_id,
+                &b.instance.username,
+            ))
+        });
+        instances
+    }
+
+    pub fn manage_runtime(
+        &self,
+        id: &str,
+        reset: bool,
+    ) -> Result<bool, crate::runtime::RuntimeError> {
+        let runtimes: Vec<_> = self
+            .state
+            .lock()
+            .unwrap()
+            .instances
+            .values()
+            .filter_map(|instance| instance.runtime.clone())
+            .collect();
+        for runtime in runtimes {
+            if runtime.manage_runtime(id, reset)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    pub fn revoke_user_runtime(&self, username: &str) {
+        for instance in self.state.lock().unwrap().instances.values() {
+            if let Some(runtime) = &instance.runtime {
+                runtime.revoke_user(username);
+            }
+        }
+    }
+
+    pub fn shutdown_runtimes(&self) {
+        for instance in self.state.lock().unwrap().instances.values() {
+            if let Some(runtime) = &instance.runtime {
+                runtime.shutdown();
+            }
+        }
     }
 
     pub fn registry(&self) -> &Registry {
@@ -272,7 +378,7 @@ impl MultiManager {
     fn apply_locked(
         &self,
         inner: &mut Inner,
-        new_config: MultiConfig,
+        mut new_config: MultiConfig,
         retired: &mut Retired,
         journal_id: Option<&str>,
         preserve_sync_history: bool,
@@ -286,6 +392,29 @@ impl MultiManager {
             .server_config
             .validate_paths(&self.root, &new_config)
             .map_err(ApiError::Validation)?;
+        for (id, config) in &mut new_config.spaces {
+            if let Some(previous) = inner.config.spaces.get(id) {
+                for (name, entry) in &mut config.members {
+                    if !entry.runtime_api_explicit
+                        && previous
+                            .members
+                            .get(name)
+                            .is_some_and(|old| !old.runtime_api)
+                    {
+                        entry.runtime_api = false;
+                    }
+                    entry.runtime_api_explicit = true;
+                    if entry.role == super::config::MemberRole::Read
+                        && previous
+                            .members
+                            .get(name)
+                            .is_some_and(|old| old.role == super::config::MemberRole::Write)
+                    {
+                        entry.runtime_api = false;
+                    }
+                }
+            }
+        }
         let known_users = self.known_users.read().unwrap().clone();
         let errors = validate(&new_config, &self.root, &known_users);
         if !errors.is_empty() {
@@ -296,6 +425,9 @@ impl MultiManager {
             .map_err(ApiError::Internal)?;
         for (id, instance) in &inner.instances {
             if new_config.spaces.get(id) != Some(&instance.config) {
+                if let Some(runtime) = &instance.runtime {
+                    runtime.shutdown();
+                }
                 if let Some(engine) = &instance.revisions {
                     engine.quiesce_sync();
                 }
@@ -596,7 +728,8 @@ mod tests {
                 client_bundle: Box::new(|| Box::new(MemorySpacePrimitives::new())),
                 base_fs: Box::new(|| Box::new(MemorySpacePrimitives::new())),
             },
-            runtime: Box::new(|_| None),
+            runtime_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            runtime: Arc::new(|_| None),
             metrics: None,
             auth: InstanceAuth::Single(Some(
                 crate::auth::AuthConfig::try_parse(Some("admin:pw"), None, None, None, None)
@@ -662,13 +795,15 @@ mod tests {
         )
         .unwrap();
         let m = boot(dir.path());
-        m.set_server_config(None, Some("  Notebook Server  "))
+        m.set_server_config(None, Some("  Notebook Server  "), None)
             .unwrap();
         assert_eq!(m.server_name(), "Notebook Server");
         m.set_primary_url("https://other.example.test").unwrap();
         assert_eq!(m.server_name(), "Notebook Server");
-        assert!(m.set_server_config(None, Some("  ")).is_err());
-        assert!(m.set_server_config(None, Some(&"x".repeat(101))).is_err());
+        assert!(m.set_server_config(None, Some("  "), None).is_err());
+        assert!(m
+            .set_server_config(None, Some(&"x".repeat(101)), None)
+            .is_err());
         drop(m);
         let m = boot(dir.path());
         assert_eq!(m.server_name(), "Notebook Server");
@@ -1361,6 +1496,8 @@ mod tests {
             "sam".into(),
             MemberEntry {
                 role: MemberRole::Read,
+                runtime_api: false,
+                runtime_api_explicit: true,
                 extra: Default::default(),
             },
         );

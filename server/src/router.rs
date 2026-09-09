@@ -149,7 +149,12 @@ async fn require_authorization(
     // The authorizer itself refusing the request (`None`) is not gradeable —
     // it never reaches the access policy, or an anonymous grade from a
     // permissive policy could paper over an outright denial.
-    let Some(AuthOutcome { username, grant }) = outcome else {
+    let Some(AuthOutcome {
+        username,
+        grant,
+        credential_version,
+    }) = outcome
+    else {
         return refuse(&state, false);
     };
     let level = grant.unwrap_or_else(|| state.access_policy.level_for(username.as_deref()));
@@ -173,7 +178,9 @@ async fn require_authorization(
 
     req.extensions_mut().insert(RevisionAccess(is_account));
     let profile = state.identity.resolve(username.as_deref());
-    req.extensions_mut().insert(actor_from(profile, level));
+    let mut actor = actor_from(profile, level);
+    actor.credential_version = credential_version;
+    req.extensions_mut().insert(actor);
     next.run(req).await
 }
 
@@ -200,6 +207,7 @@ fn refuse(state: &ServerState, is_account: bool) -> Response {
 fn actor_from(profile: crate::auth::UserProfile, level: AccessLevel) -> crate::auth::Actor {
     crate::auth::Actor {
         username: profile.username,
+        credential_version: None,
         full_name: profile.full_name,
         email: profile.email,
         level,

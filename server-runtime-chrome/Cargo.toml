@@ -16,3 +16,5 @@ tokio = { workspace = true, features = ["time"] }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 futures = "0.3"
+tempfile = { workspace = true }
+sysinfo = { version = "0.37", default-features = false, features = ["system"] }

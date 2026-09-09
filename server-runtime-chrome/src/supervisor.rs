@@ -1,12 +1,4 @@
-//! Browser launch and per-space page supervision: brings up the shared
-//! `Browser` for the pool, opens a space's `Page` in it, captures console output
-//! into that space's log buffer, waits for the client runtime to signal
-//! readiness, and restarts (with exponential backoff) whenever the page dies.
-//!
-//! One supervisor task per space runs on the pool's tokio runtime. It is
-//! deliberately tolerant of a not-yet-listening server: transports are
-//! constructed *before* the server binds its port, so the first navigation may
-//! fail and is simply retried with backoff.
+//! Browser launch and supervision for one isolated runtime transport.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -120,10 +112,52 @@ pub(crate) fn headless_cookie(page: &SpacePage) -> Result<CookieParam, String> {
         .build()
 }
 
-pub(crate) async fn launch_browser(config: &ChromeConfig) -> Result<Browser, String> {
+pub(crate) struct OwnedBrowser {
+    browser: Browser,
+    handler: tokio::task::JoinHandle<()>,
+    pub(crate) identity: Option<(u32, u64)>,
+}
+
+impl std::ops::Deref for OwnedBrowser {
+    type Target = Browser;
+
+    fn deref(&self) -> &Browser {
+        &self.browser
+    }
+}
+
+impl OwnedBrowser {
+    pub(crate) async fn shutdown(&mut self, graceful: bool) -> Result<(), String> {
+        if graceful {
+            let _ = tokio::time::timeout(PROBE_TIMEOUT, self.browser.close()).await;
+            if matches!(
+                tokio::time::timeout(PROBE_TIMEOUT, self.browser.wait()).await,
+                Ok(Ok(_))
+            ) {
+                return Ok(());
+            }
+        }
+        match tokio::time::timeout(PROBE_TIMEOUT, self.browser.kill()).await {
+            Ok(Some(Ok(()))) | Ok(None) => Ok(()),
+            Ok(Some(Err(e))) => Err(format!("stop browser: {e}")),
+            Err(_) => Err("stop browser timed out".into()),
+        }
+    }
+}
+
+impl Drop for OwnedBrowser {
+    fn drop(&mut self) {
+        self.handler.abort();
+    }
+}
+
+pub(crate) async fn launch_browser(
+    config: &ChromeConfig,
+    profile: &std::path::Path,
+) -> Result<OwnedBrowser, String> {
     let mut builder = BrowserConfig::builder()
         .chrome_executable(&config.chrome_path)
-        .user_data_dir(&config.user_data_dir)
+        .user_data_dir(profile)
         .window_size(800, 600)
         .no_sandbox()
         .args([
@@ -134,14 +168,27 @@ pub(crate) async fn launch_browser(config: &ChromeConfig) -> Result<Browser, Str
         ]);
     if config.show {
         builder = builder.with_head();
+    } else {
+        // Newer Chrome versions otherwise create hidden address-bar renderers
+        // for headless windows, each retaining a separate JavaScript heap.
+        builder = builder
+            .arg((
+                "disable-features",
+                "WebUIOmniboxPopup,WebUIOmniboxAimPopup,WebUIOmniboxFullPopup",
+            ))
+            .arg(("js-flags", "--optimize-for-size"));
     }
     let browser_config = builder.build()?;
 
-    let (browser, mut handler) = Browser::launch(browser_config)
+    let (mut browser, mut handler) = Browser::launch(browser_config)
         .await
         .map_err(|e| format!("browser launch: {e}"))?;
 
-    tokio::spawn(async move {
+    let identity = browser
+        .get_mut_child()
+        .and_then(|child| child.as_mut_inner().id())
+        .and_then(crate::metrics::process_identity);
+    let handler = tokio::spawn(async move {
         while let Some(event) = handler.next().await {
             if event.is_err() {
                 break;
@@ -149,7 +196,11 @@ pub(crate) async fn launch_browser(config: &ChromeConfig) -> Result<Browser, Str
         }
     });
 
-    Ok(browser)
+    Ok(OwnedBrowser {
+        identity,
+        browser,
+        handler,
+    })
 }
 
 /// A page handle whose tab must be closed explicitly rather than dropped.
@@ -245,10 +296,6 @@ async fn launch_page(
 
     wait_for_client_ready(page).await?;
 
-    // Publish first, disarm second, and never await in between: from here on the
-    // supervisor (or `SharedChromeTransport::Drop`) closes the page via `live`.
-    // `Page` is `Clone` and the clones share one underlying tab, so closing any
-    // of them closes it.
     *live.lock().await = Some(page.clone());
     guard.disarm();
     ready.store(true, Ordering::Relaxed);
@@ -363,7 +410,7 @@ async fn browser_is_dead(browser: &Browser) -> bool {
 
 /// Supervise one space's page for the lifetime of its transport.
 pub(crate) async fn supervise_space(
-    pool: Arc<crate::pool::ChromePool>,
+    owner: Arc<crate::pool::BrowserOwner>,
     page_cfg: SpacePage,
     live: Arc<Mutex<Option<Page>>>,
     ready: Arc<AtomicBool>,
@@ -393,29 +440,21 @@ pub(crate) async fn supervise_space(
             let _ = tokio::time::timeout(PROBE_TIMEOUT, old.close()).await;
         }
 
-        // `browser` is deliberately scoped to this block: the pool holds the
-        // owning handle, and a lingering clone here would keep a dead Chrome
-        // process alive across a relaunch.
-        let attempt = match pool.ensure_browser().await {
+        let attempt = match owner.ensure_browser().await {
             Ok((generation, browser)) => {
                 let result = launch_page(
                     &browser,
                     &page_cfg,
-                    pool.config().log_console,
+                    owner.config().log_console,
                     &live,
                     &ready,
                     &logs,
                 )
                 .await;
-                // Retire the browser only when it is genuinely gone. Discarding
-                // on every failed attempt would let one space's persistent
-                // navigation failure keep killing the browser for everyone.
                 let dead = result.is_err() && browser_is_dead(&browser).await;
-                // Drop the transient clone *before* retiring the pool's handle,
-                // so clearing the slot really does release the process tree.
                 drop(browser);
                 if dead {
-                    pool.discard_browser(generation).await;
+                    owner.discard_browser(generation).await;
                 }
                 result
             }

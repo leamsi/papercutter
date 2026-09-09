@@ -3,6 +3,11 @@ export type RevisionsMode = "managed" | "unmanaged" | "disabled";
 
 export type SpaceAccess = "none" | "read" | "write";
 export type MemberRole = "read" | "write";
+export type MemberEntry = {
+  role: MemberRole;
+  runtimeApi?: boolean;
+  [key: string]: unknown;
+};
 
 export type Binding =
   | { prefix: string; host?: never }
@@ -79,7 +84,7 @@ export type SpaceInfo = {
   // grades individual accounts. Admins always have full access and are never
   // listed here. `readOnly` caps everyone, admins included.
   access: SpaceAccess;
-  members: Record<string, { role: MemberRole }>;
+  members: Record<string, MemberEntry>;
   readOnly: boolean;
   shell: { enabled: boolean; whitelist: string[] };
   runtimeApi: boolean;

@@ -3,6 +3,7 @@
 //! server can evaluate Space Lua and answer the objects API.
 
 mod config;
+mod metrics;
 mod pool;
 mod supervisor;
 

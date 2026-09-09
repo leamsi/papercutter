@@ -98,7 +98,7 @@ pub async fn build_multi_stack(
 
     let metrics = config.metrics_port.map(|_| Arc::new(Metrics::new()));
     let started = std::time::Instant::now();
-    let (runtime, runtime_availability) = space_runtime_factory(&root);
+    let (runtime, runtime_availability) = space_runtime_factory(&root, false);
     tracing::debug!(
         elapsed_ms = started.elapsed().as_millis(),
         "multi-space runtime configured"
@@ -109,6 +109,7 @@ pub async fn build_multi_stack(
             client_bundle: Box::new(|| Box::new(EmbeddedSpace::<ClientAssets>::new())),
             base_fs: Box::new(|| Box::new(EmbeddedSpace::<BaseFsAssets>::new())),
         },
+        runtime_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         runtime,
         metrics: metrics.clone(),
         auth: InstanceAuth::Accounts {
@@ -275,41 +276,39 @@ pub(crate) async fn run_multi(
         .map_err(|e| format!("server error: {e}"))
 }
 
-/// Build the runtime factory for a server rooted at `server_root`, plus the
-/// availability the Space Manager reports to administrators.
-///
-/// One `ChromePool` — one Chrome process — serves every space; each space gets
-/// its own page, log buffer, and auth cookie. The pool is created eagerly but
-/// launches nothing until some space's runtime API is first used.
 pub(crate) fn space_runtime_factory(
     server_root: &std::path::Path,
+    single_instance: bool,
 ) -> (RuntimeFactory, RuntimeAvailability) {
     use silverbullet_server_runtime_chrome::RuntimeUnavailable;
 
-    let (pool, availability) =
-        match silverbullet_server_runtime_chrome::ChromeConfig::from_env(server_root) {
-            Ok(config) => match silverbullet_server_runtime_chrome::ChromePool::new(config) {
-                Ok(pool) => (Some(pool), RuntimeAvailability::Available),
-                Err(e) => {
-                    tracing::warn!("runtime API disabled: could not create the Chrome pool: {e}");
-                    (
-                        None,
-                        RuntimeAvailability::Failed {
-                            message: e.to_string(),
-                        },
-                    )
-                }
-            },
-            Err(RuntimeUnavailable::DisabledByEnv) => {
-                tracing::info!("runtime API disabled by SB_RUNTIME_API=0");
-                (None, RuntimeAvailability::DisabledByEnv)
+    let (pool, availability) = match if single_instance {
+        silverbullet_server_runtime_chrome::ChromeConfig::from_env(server_root)
+    } else {
+        silverbullet_server_runtime_chrome::ChromeConfig::from_env_for_multi(server_root)
+    } {
+        Ok(config) => match silverbullet_server_runtime_chrome::ChromePool::new(config) {
+            Ok(pool) => (Some(pool), RuntimeAvailability::Available),
+            Err(e) => {
+                tracing::warn!("runtime API disabled: could not create the Chrome pool: {e}");
+                (
+                    None,
+                    RuntimeAvailability::Failed {
+                        message: e.to_string(),
+                    },
+                )
             }
-            Err(RuntimeUnavailable::NoChrome) => {
-                tracing::info!("runtime API disabled: no Chrome or Chromium found");
-                (None, RuntimeAvailability::NoChrome)
-            }
-        };
-    let factory: RuntimeFactory = Box::new(move |req: &RuntimeRequest| {
+        },
+        Err(RuntimeUnavailable::DisabledByEnv) => {
+            tracing::info!("runtime API disabled by SB_RUNTIME_API=0");
+            (None, RuntimeAvailability::DisabledByEnv)
+        }
+        Err(RuntimeUnavailable::NoChrome) => {
+            tracing::info!("runtime API disabled: no Chrome or Chromium found");
+            (None, RuntimeAvailability::NoChrome)
+        }
+    };
+    let factory: RuntimeFactory = Arc::new(move |req: &RuntimeRequest| {
         let pool = pool.as_ref()?;
         if req.read_only {
             return None;

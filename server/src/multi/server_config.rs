@@ -12,8 +12,14 @@ pub struct ServerConfig {
     pub primary_url: Option<String>,
     #[serde(default = "default_server_name")]
     pub server_name: String,
+    #[serde(default = "default_runtime_api")]
+    pub runtime_api: bool,
     #[serde(flatten)]
     pub extra: BTreeMap<String, serde_json::Value>,
+}
+
+fn default_runtime_api() -> bool {
+    true
 }
 
 pub fn default_server_name() -> String {
@@ -25,6 +31,7 @@ impl Default for ServerConfig {
         Self {
             primary_url: None,
             server_name: default_server_name(),
+            runtime_api: true,
             extra: BTreeMap::new(),
         }
     }
@@ -169,6 +176,14 @@ pub fn canonical_origin(value: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_defaults_enabled_and_preserves_opt_out() {
+        let config: ServerConfig = serde_json::from_str("{}").unwrap();
+        assert_eq!(serde_json::to_value(config).unwrap()["runtimeApi"], true);
+        let config: ServerConfig = serde_json::from_str(r#"{"runtimeApi":false}"#).unwrap();
+        assert_eq!(serde_json::to_value(config).unwrap()["runtimeApi"], false);
+    }
 
     #[test]
     fn validates_canonical_origins() {

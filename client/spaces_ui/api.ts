@@ -69,6 +69,7 @@ export function formatApiError(e: unknown): string {
 /** Server-level facts for admin screens. See `RuntimeAvailability`. */
 export function getServerInfo(): Promise<{
   runtimeApi: RuntimeAvailability;
+  runtimeApiEnabled: boolean;
   primaryUrl?: string | null;
 }> {
   return adminApi("GET", "server-info");

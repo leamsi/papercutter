@@ -4,6 +4,8 @@ import { useNavigate } from "../navigation.ts";
 import { ServerSettingsView } from "./ServerSettingsView.tsx";
 import { AuthenticationView } from "./AuthenticationView.tsx";
 
+import { RuntimesView } from "./RuntimesView.tsx";
+
 export function AdminView({
   section,
   onUnauthorized,
@@ -52,6 +54,8 @@ export function AdminView({
           <h2>{ADMIN_SECTIONS[section]}</h2>
           {section === "server" ? (
             <ServerSettingsView onUnauthorized={onUnauthorized} />
+          ) : section === "runtimes" ? (
+            <RuntimesView onUnauthorized={onUnauthorized} />
           ) : (
             <AuthenticationView onUnauthorized={onUnauthorized} />
           )}

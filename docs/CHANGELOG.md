@@ -13,7 +13,8 @@ Whenever a commit is pushed to the `main` branch, within ~10 minutes, it will be
   * Public space support (no auth)
   * Admin tab:
     * [[Features/Single Sign-On]] (Google Workspace Auth, Pocket ID, other OIDC provider support) support
-    * Configurable Server name (used in headerz)
+    * Configurable Server name (used in headers)
+    * Runtime management showing space/user, CPU, memory, and profile disk usage, with Stop and Reset controls.
 * Beginnings of more solid [[Features/Collaboration]] functionality, comprising of a slew of new improvements/features:
   * **Near real-time sync**: changes made to pages are now synced (and will appear in other clients) within ~2-3s.
   * **Near real-time content updates**: if multiple clients/process edit the same page, SilverBullet will do its best to reconcile those changes with local ones. In cases of unresolvable conflicts a new _conflict widget_ will show helping you to resolve the conflict.
@@ -32,7 +33,7 @@ Whenever a commit is pushed to the `main` branch, within ~10 minutes, it will be
   * **New [[Concepts/Page Decoration|page decorations]] for the tree:** `icon` gives a page its own (Feather) icon wherever the navigator draws one, `tree.priority` floats a page above its siblings in the otherwise alphabetical space tree (a priority reorders one level only — pin a folder through the folder's own page), and `tree.hide` keeps a page out of the tree alone. `hide` now also hides a page from the tree, not just from the page picker and completions.
 * [[Features/Space Manager|Multi-space]] mode:
   * **Breaking**: _shell commands are now off unless a space explicitly enables them_. From a security perspective, this should have been the default all along, but... yeah. Better late than never. This will affect users using the Git library (that uses the [[API/shell]] API), you can _re-enable_ this feature by editing the space in the [[Features/Space Manager]] and enabling shell access.
-  * The [[Features/Runtime API]] (`runtimeApi`) is now **on by default** for new and existing spaces, instead of off.
+  * The [[Features/Runtime API]] has a server-wide toggle under **Server** and an independent per-user permission in each space’s access grid. Runtime permission requires Write access and defaults on for existing writers unless explicitly disabled. New spaces default on when Chrome is available and runtime is enabled for the server. `SB_RUNTIME_API` applies only to single-instance mode.
   * Spaces now have three [[Features/Space Manager#Access|access levels]] configurable per user.
 * **[[Concepts/Link|Wiki links]] now resolve by page name, not just by full path (think: Obsidian compatibility).** A `[[Note]]` link resolves to `some/folder/Note` when that name is unique in the space, matching how Obsidian resolves links, so an Obsidian-authored space works in SilverBullet without rewriting every link. See [[Architecture/ADR/011 Link Resolution by Name]] for reasoning. The `linkWriteFormat` option decides how SilverBullet writes the links it generates (auto complete, rename backlink rewriting), it defaults to `full-path`, so generated links keep spelling out the whole path.
 * Fix: a linked-mention snippet that contained a `![[transclusion]]` inlined the entire target page into the Linked Mentions widget -- frontmatter first, rendered as garbage. Snippets now show such a mention as a plain link, and a transcluded page's frontmatter no longer leaks into rendered widget content. (Triggers a full space reindex on upgrade.)
@@ -57,7 +58,7 @@ Whenever a commit is pushed to the `main` branch, within ~10 minutes, it will be
 * Fix: the docker image ignored `PUID`/`PGID` and space folder ownership, running as `root` and creating root-owned files
 * Fix: the FreeBSD **server** binary is being built and released again
 * Fix: [[Features/Space Manager|multi-space]] mode silently ignored `SB_REMEMBER_ME_HOURS`, `SB_LOCKOUT_TIME`, and `SB_LOCKOUT_LIMIT`, hardcoding “remember me” sessions to 7 days and lockout to 10 attempts per minute. All three now apply there too — server-wide, like the session itself — matching what [[Install/Configuration]] documents.
-* Multi-space servers now share a single headless Chrome across all spaces instead of launching one browser per space.
+* The [[Features/Runtime API]] now uses a separate Chrome process and temporary profile for each user and space, isolating cookies, browser storage, and logs. Runtime requests carry the user’s identity; revoking access stops the affected browser. Chrome detection is reported at startup.
 * Fix: the Runtime API failed to start when authentication was enabled.
 * Fixes around casing in page/file names:
   * Renaming a page or folder to a different casing of the same name now works on case-insensitive filesystems (macOS, Windows)
@@ -184,6 +185,7 @@ Whenever a commit is pushed to the `main` branch, within ~10 minutes, it will be
 * Configuration Manager: Key Bindings tab now says "Filter commands" instead of "Search commands".
 * More sensible fallback values for config options before the initial index has populated defaults.
 * Lint: the `name` attribute uniqueness check is now limited to `#meta/library` pages.
+* [[Features/Runtime API]] uses less browser memory by disabling unused Chrome address-bar renderers and tuning V8 for memory usage. Headless shell is now detected across platforms and included in the runtime Docker image, with per-user storage isolation preserved.
 * [[Features/Runtime API]]: better debug output when the headless Chrome instance fails to boot.
 * Fix: more robust markdown tree traversal in the face of invalid markdown trees.
 * Fix: [outline operation edge cases](https://github.com/silverbulletmd/silverbullet/issues/1936).

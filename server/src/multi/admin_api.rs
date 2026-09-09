@@ -134,8 +134,49 @@ async fn require_admin(State(state): State<Arc<AdminState>>, req: Request, next:
     }
 }
 
+async fn handle_runtimes(State(state): State<Arc<AdminState>>) -> Response {
+    match run_blocking(move || Ok(state.manager.runtime_instances())).await {
+        Ok(instances) => Json(instances).into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "task failed").into_response(),
+    }
+}
+
+async fn handle_stop_runtime(
+    State(state): State<Arc<AdminState>>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    manage_runtime(state, id, false).await
+}
+
+async fn handle_reset_runtime(
+    State(state): State<Arc<AdminState>>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    manage_runtime(state, id, true).await
+}
+
+async fn manage_runtime(state: Arc<AdminState>, id: String, reset: bool) -> Response {
+    match run_blocking(move || Ok(state.manager.manage_runtime(&id, reset))).await {
+        Ok(Ok(true)) => StatusCode::NO_CONTENT.into_response(),
+        Ok(Ok(false)) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"errors": [{"field": "", "message": "Runtime no longer exists"}]})),
+        )
+            .into_response(),
+        Ok(Err(error)) => {
+            tracing::error!(%error, "runtime management failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"errors": [{"field": "", "message": "Could not stop or reset runtime. Please retry."}]})),
+            )
+                .into_response()
+        }
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "task failed").into_response(),
+    }
+}
+
 async fn handle_server_config(State(state): State<Arc<AdminState>>) -> Response {
-    Json(json!({ "primaryUrl": state.manager.primary_url(), "serverName": state.manager.server_name() })).into_response()
+    Json(json!({ "primaryUrl": state.manager.primary_url(), "serverName": state.manager.server_name(), "runtimeApi": state.manager.runtime_enabled() })).into_response()
 }
 
 async fn handle_set_server_config(
@@ -164,7 +205,24 @@ async fn handle_set_server_config(
             },
         ]));
     }
-    match state.manager.set_server_config(fields[0], fields[1]) {
+    let runtime_api = match value.get("runtimeApi") {
+        None => None,
+        Some(value) => match value.as_bool() {
+            Some(enabled) => Some(enabled),
+            None => {
+                return api_error(ApiError::Validation(vec![
+                    crate::multi::validate::FieldError {
+                        field: "runtimeApi".into(),
+                        message: "runtimeApi must be a boolean".into(),
+                    },
+                ]))
+            }
+        },
+    };
+    match state
+        .manager
+        .set_server_config(fields[0], fields[1], runtime_api)
+    {
         Ok(()) => handle_server_config(State(state)).await,
         Err(error) => api_error(error),
     }
@@ -254,6 +312,7 @@ enum CreateLoginMethod {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CreateBody {
+    runtime_api: Option<bool>,
     #[serde(default = "default_true")]
     seed_index: bool,
     #[serde(flatten)]
@@ -268,7 +327,12 @@ async fn handle_create(
     let CreateBody {
         seed_index,
         mut config,
+        runtime_api,
     } = body;
+    config.runtime_api = runtime_api.unwrap_or(
+        state.runtime_availability == crate::runtime::RuntimeAvailability::Available
+            && manager.runtime_enabled(),
+    );
     config.git_sync = None;
     match run_blocking(move || Ok(manager.create(config, seed_index))).await {
         Ok(Ok(id)) => Json(json!({ "id": id })).into_response(),
@@ -709,6 +773,7 @@ async fn handle_delete_user(
         Ok(Err(e)) => return user_store_error(e),
         Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "task failed").into_response(),
     }
+    state.manager.revoke_user_runtime(&name);
     let manager = state.manager.clone();
     let users_for_sweep = state.users.clone();
     let name_for_sweep = name;
@@ -735,9 +800,11 @@ async fn handle_set_user_password(
     Json(body): Json<PasswordBody>,
 ) -> Response {
     let users = state.users.clone();
+    let runtime_user = name.clone();
     let result = run_blocking(move || Ok(users.set_password(&name, &body.password))).await;
     match result {
         Ok(Ok(())) => {
+            state.manager.revoke_user_runtime(&runtime_user);
             state.manager.set_known_users(state.users.usernames());
             Json(json!({ "status": "ok" })).into_response()
         }
@@ -753,9 +820,13 @@ async fn handle_delete_sessions(
     AxumPath(name): AxumPath<String>,
 ) -> Response {
     let users = state.users.clone();
+    let runtime_user = name.clone();
     let result = run_blocking(move || Ok(users.bump_session_epoch(&name))).await;
     match result {
-        Ok(Ok(())) => Json(json!({ "status": "ok" })).into_response(),
+        Ok(Ok(())) => {
+            state.manager.revoke_user_runtime(&runtime_user);
+            Json(json!({ "status": "ok" })).into_response()
+        }
         Ok(Err(e)) => user_store_error(e),
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "task failed").into_response(),
     }
@@ -772,9 +843,11 @@ async fn handle_set_admin(
     Json(body): Json<SetAdminBody>,
 ) -> Response {
     let users = state.users.clone();
+    let runtime_user = name.clone();
     let result = run_blocking(move || Ok(users.set_admin(&name, body.admin))).await;
     match result {
         Ok(Ok(())) => {
+            state.manager.revoke_user_runtime(&runtime_user);
             state.manager.set_known_users(state.users.usernames());
             Json(json!({ "status": "ok" })).into_response()
         }
@@ -794,8 +867,12 @@ async fn handle_set_disabled(
     Json(body): Json<SetDisabledBody>,
 ) -> Response {
     let users = state.users.clone();
+    let runtime_user = name.clone();
     match run_blocking(move || Ok(users.set_disabled(&name, body.disabled))).await {
-        Ok(Ok(())) => Json(json!({ "status": "ok" })).into_response(),
+        Ok(Ok(())) => {
+            state.manager.revoke_user_runtime(&runtime_user);
+            Json(json!({ "status": "ok" })).into_response()
+        }
         Ok(Err(e)) => user_store_error(e),
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "task failed").into_response(),
     }
@@ -858,7 +935,7 @@ async fn handle_fs_dirs(
 }
 
 async fn handle_server_info(State(state): State<Arc<AdminState>>) -> Response {
-    Json(json!({ "runtimeApi": state.runtime_availability, "primaryUrl": state.manager.primary_url() })).into_response()
+    Json(json!({ "runtimeApi": state.runtime_availability, "runtimeApiEnabled": state.manager.runtime_enabled(), "primaryUrl": state.manager.primary_url() })).into_response()
 }
 
 /// Path status + subdirectory suggestions for a folder-picker field. Relative
@@ -955,6 +1032,9 @@ fn admin_api_routes() -> Router<Arc<AdminState>> {
         .route("/spaces/{id}/git/sync", post(handle_git_sync_now))
         .route("/fs/dirs", get(handle_fs_dirs))
         .route("/server-info", get(handle_server_info))
+        .route("/runtimes", get(handle_runtimes))
+        .route("/runtimes/{id}/stop", post(handle_stop_runtime))
+        .route("/runtimes/{id}/reset", post(handle_reset_runtime))
         .route(
             "/server-config",
             get(handle_server_config).put(handle_set_server_config),
@@ -1020,7 +1100,8 @@ mod tests {
                 client_bundle: Box::new(|| Box::new(MemorySpacePrimitives::new())),
                 base_fs: Box::new(|| Box::new(MemorySpacePrimitives::new())),
             },
-            runtime: Box::new(|_| None),
+            runtime_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            runtime: Arc::new(|_| None),
             metrics: None,
             auth: InstanceAuth::Accounts {
                 users,
@@ -1144,6 +1225,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn runtime_server_toggle_persists_and_preserves_other_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let (router, _manager, users) = admin_router(&dir);
+        let cookie = session_cookie(&users, "admin");
+        let response = authed(
+            &router,
+            "PUT",
+            "/api/server-config",
+            r#"{"runtimeApi":false}"#,
+            &cookie,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(body_json(response).await["runtimeApi"], false);
+        let stored =
+            super::super::server_config::ServerConfig::load(&dir.path().join("server.json"))
+                .unwrap();
+        assert!(!stored.runtime_api);
+        let response = authed(
+            &router,
+            "PUT",
+            "/api/server-config",
+            r#"{"serverName":"Notebook"}"#,
+            &cookie,
+        )
+        .await;
+        assert_eq!(body_json(response).await["runtimeApi"], false);
+        let response = authed(
+            &router,
+            "PUT",
+            "/api/server-config",
+            r#"{"runtimeApi":"yes"}"#,
+            &cookie,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
     async fn server_config_is_admin_gated_and_reports_validation_errors() {
         let dir = tempfile::tempdir().unwrap();
         let (router, manager, users) = admin_router(&dir);
@@ -1155,7 +1275,7 @@ mod tests {
         let response = authed(&router, "GET", "/api/server-config", "", &cookie).await;
         assert_eq!(
             body_json(response).await,
-            json!({ "primaryUrl": null, "serverName": "SilverBullet" })
+            json!({ "primaryUrl": null, "serverName": "SilverBullet", "runtimeApi": true })
         );
         let response = authed(
             &router,
@@ -1208,7 +1328,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(
             body_json(response).await,
-            json!({"primaryUrl":"https://manager.example.test", "serverName":"Notebook Server"})
+            json!({"primaryUrl":"https://manager.example.test", "serverName":"Notebook Server", "runtimeApi":true})
         );
         let response = authed(
             &router,
@@ -1255,7 +1375,7 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
         assert_eq!(
             body_json(resp).await,
-            serde_json::json!({ "runtimeApi": { "status": "no_chrome" }, "primaryUrl": null }),
+            serde_json::json!({ "runtimeApi": { "status": "no_chrome" }, "runtimeApiEnabled": true, "primaryUrl": null }),
         );
     }
 

@@ -1,5 +1,10 @@
 import { Badge, Checkbox } from "@silverbulletmd/silverbullet/ui";
-import type { MemberRole, SpaceAccess, UserInfo } from "../types.ts";
+import type {
+  MemberEntry,
+  MemberRole,
+  SpaceAccess,
+  UserInfo,
+} from "../types.ts";
 
 const PERMISSIONS: {
   role: MemberRole;
@@ -15,9 +20,13 @@ export function AccessGrid({
   members,
   frozen,
   onChange,
+  runtimeAvailable,
+  onRuntimeChange,
 }: {
   users: Record<string, UserInfo>;
-  members: Record<string, MemberRole>;
+  members: Record<string, MemberEntry>;
+  runtimeAvailable: boolean;
+  onRuntimeChange: (username: string, enabled: boolean) => void;
   frozen: boolean;
   onChange: (username: string, role: SpaceAccess) => void;
 }) {
@@ -32,6 +41,7 @@ export function AccessGrid({
                 {label}
               </th>
             ))}
+            <th scope="col">Runtime API</th>
           </tr>
         </thead>
         <tbody>
@@ -41,7 +51,7 @@ export function AccessGrid({
               const level = user.admin
                 ? PERMISSIONS.length - 1
                 : PERMISSIONS.findIndex(
-                    ({ role }) => role === members[username],
+                    ({ role }) => role === members[username]?.role,
                   );
               return (
                 <tr key={username}>
@@ -65,6 +75,22 @@ export function AccessGrid({
                       />
                     </td>
                   ))}
+                  <td>
+                    <Checkbox
+                      aria-label={`${username}: Runtime API`}
+                      checked={
+                        !frozen &&
+                        level >= 1 &&
+                        (user.admin || (members[username]?.runtimeApi ?? true))
+                      }
+                      disabled={
+                        user.admin || frozen || level < 1 || !runtimeAvailable
+                      }
+                      onChange={(event) =>
+                        onRuntimeChange(username, event.currentTarget.checked)
+                      }
+                    />
+                  </td>
                 </tr>
               );
             })}
