@@ -60,7 +60,6 @@ local navPages = {
   "Install",
   "Install/Docker",
   "Install/Binary",
-  "Install/Configuration",
   "Manual",
 
   "Guides/Getting Started",

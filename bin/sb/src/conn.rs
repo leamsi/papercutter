@@ -163,6 +163,7 @@ pub fn resolve(flags: &GlobalFlags, cfg: &Config) -> Result<SpaceConnection, Str
     }
 
     let auth = match space.auth.method.as_str() {
+        "browser" => Auth::Bearer(crate::browser_credentials::access_token(space)?),
         "token" if !space.auth.encrypted_token.is_empty() => {
             let key = crypto::load_or_create_key(&config::config_dir())
                 .map_err(|e| format!("loading encryption key: {e}"))?;

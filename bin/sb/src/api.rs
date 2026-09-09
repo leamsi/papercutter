@@ -20,8 +20,11 @@ pub struct LogEntry {
 }
 
 fn runtime_error(status: StatusCode, body: &[u8]) -> String {
+    if status == StatusCode::UNAUTHORIZED || status.is_redirection() {
+        return "authentication required; run `sb space login <name>` for a saved browser connection, or provide --token.".into();
+    }
     if status == StatusCode::UNAUTHORIZED || (status.as_u16() >= 300 && status.as_u16() < 400) {
-        return "authentication required; use --token, or configure a space with 'space add'"
+        return "authentication required; run `sb space login <name>`, use --token, or configure a space with 'space add'"
             .to_string();
     }
 
@@ -96,7 +99,7 @@ impl SpaceConnection {
 
         if status == StatusCode::UNAUTHORIZED || (status.as_u16() >= 300 && status.as_u16() < 400) {
             return Err(
-                "authentication required; use --token, or configure a space with 'space add'"
+                "authentication required; run `sb space login <name>`, use --token, or configure a space with 'space add'"
                     .to_string(),
             );
         }
@@ -177,6 +180,12 @@ impl SpaceConnection {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn revoked_authentication_points_to_login_without_replaying() {
+        let error = super::runtime_error(reqwest::StatusCode::UNAUTHORIZED, b"unauthorized");
+        assert!(error.contains("sb space login"));
+    }
+
     use crate::conn::{Auth, SpaceConnection};
     use reqwest::blocking::Client;
     use std::{

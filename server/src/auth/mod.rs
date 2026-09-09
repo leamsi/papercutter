@@ -9,6 +9,7 @@ pub mod authorizer;
 pub mod browser_sessions;
 pub mod config;
 pub mod cookie;
+pub mod device;
 pub mod handoff;
 pub mod headless_token;
 pub mod identity;

@@ -1,18 +1,12 @@
-//! `space` subcommand implementations for the `sb` CLI.
-//!
-//! The interactive flow lives in [`space_add_interactive`], which is `pub`
-//! so the App's CLI can call it with a pre-set URL (skipping the URL prompt).
-
 use std::io::{BufRead, BufReader, Write};
 use std::time::Duration;
 
 use crate::{
     config::{self, AuthConfig, Config, SpaceConfig},
     conn::{self, Auth, SpaceConnection},
-    crypto,
+    crypto, device_auth,
 };
 
-/// Space names must be alphanumeric + hyphens (`^[a-zA-Z0-9-]+$`).
 pub fn is_valid_space_name(name: &str) -> bool {
     !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
@@ -61,8 +55,8 @@ pub fn space_ls() -> Result<(), String> {
     Ok(())
 }
 
-/// `sb space rm <name>` — remove a configured space.
 pub fn space_rm(name: &str) -> Result<(), String> {
+    let _lock = config::lock(&config::config_dir())?;
     let mut cfg = config::load()?;
     remove_space(&mut cfg, name)?;
     config::save(&cfg)?;
@@ -70,246 +64,291 @@ pub fn space_rm(name: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// `sb space add` — interactive space-add flow.
-///
-/// If `preset_url` is `Some`, the URL prompt is skipped (used by the App's
-/// CLI for folder-path-aware or pre-filled URL flows).
 pub fn space_add_interactive(preset_url: Option<&str>) -> Result<(), String> {
-    let mut cfg = config::load()?;
-    let stdin = std::io::stdin();
-    let mut reader = BufReader::new(stdin);
+    space_add_with_options(preset_url, false)
+}
 
-    print!("Space name: ");
-    std::io::stdout()
-        .flush()
-        .map_err(|e| format!("flushing stdout: {e}"))?;
-    let mut name = String::new();
-    reader
-        .read_line(&mut name)
-        .map_err(|e| format!("reading stdin: {e}"))?;
-    let name = name.trim().to_string();
+pub fn space_add_with_options(preset_url: Option<&str>, no_browser: bool) -> Result<(), String> {
+    let mut reader = BufReader::new(std::io::stdin());
+    let name = prompt(&mut reader, "Space name: ", "")?;
     if !is_valid_space_name(&name) {
-        return Err("name must be alphanumeric with hyphens only".to_string());
+        return Err("name must be alphanumeric with hyphens only".into());
     }
-    for s in &cfg.spaces {
-        if s.name == name {
-            return Err(format!("space {name:?} already exists"));
-        }
+    if config::load()?.spaces.iter().any(|s| s.name == name) {
+        return Err(format!("space {name:?} already exists"));
     }
-
-    let space_url: String = if let Some(u) = preset_url {
-        u.to_string()
-    } else {
-        print!("URL (e.g. http://localhost:3000): ");
-        std::io::stdout()
-            .flush()
-            .map_err(|e| format!("flushing stdout: {e}"))?;
-        let mut raw = String::new();
-        reader
-            .read_line(&mut raw)
-            .map_err(|e| format!("reading stdin: {e}"))?;
-        raw.trim().to_string()
+    let url = match preset_url {
+        Some(url) => url.to_string(),
+        None => prompt(&mut reader, "URL (e.g. https://notes.example.com): ", "")?,
     };
-
-    let parsed = reqwest::Url::parse(&space_url).map_err(|_| "invalid URL format".to_string())?;
-    if !parsed.has_host() {
-        return Err("invalid URL format".to_string());
+    let parsed = reqwest::Url::parse(&url).map_err(|_| "invalid URL format".to_string())?;
+    if !parsed.has_host() || !matches!(parsed.scheme(), "http" | "https") {
+        return Err("invalid URL format".into());
     }
-    let space_url = space_url.trim_end_matches('/').to_string();
-
-    let probe_timeout = Duration::from_secs(30);
-    let probe_conn = SpaceConnection {
-        client: conn::new_client(probe_timeout)?,
-        base_url: space_url.clone(),
-        auth: Auth::None,
-        timeout: probe_timeout,
-    };
-
-    let mut auth_type = String::from("none");
-    let (reachable, needs_auth) = probe_conn.probe();
-    if !reachable {
-        eprintln!("Warning: could not reach server at that URL (saving anyway)");
-        print!("Auth type (token / password / none) [none]: ");
-        std::io::stdout()
-            .flush()
-            .map_err(|e| format!("flushing stdout: {e}"))?;
-        let mut input = String::new();
-        reader
-            .read_line(&mut input)
-            .map_err(|e| format!("reading stdin: {e}"))?;
-        let trimmed = input.trim().to_string();
-        if !trimmed.is_empty() {
-            auth_type = trimmed;
+    let url = url.trim_end_matches('/').to_string();
+    let timeout = Duration::from_secs(30);
+    let client = conn::new_client(timeout)?;
+    let probe = client
+        .get(format!("{url}/.config"))
+        .send()
+        .map_err(|e| format!("Cannot reach server: {e}"))?;
+    let needs_auth = match probe.status().as_u16() {
+        200..=299 => false,
+        300..=399 | 401 | 403 => true,
+        404 => {
+            let multi = client
+                .get(format!("{url}/.instance"))
+                .send()
+                .is_ok_and(|r| r.status().is_success());
+            return Err(if multi {
+                format!("This is a multi-space server. Use a specific space URL; see {url}/.spaces")
+            } else {
+                "No SilverBullet space at this URL. Check the space URL.".into()
+            });
         }
-    } else if needs_auth {
-        println!("Server requires authentication.");
-        print!("Auth type (password / token) [password]:");
-        std::io::stdout()
-            .flush()
-            .map_err(|e| format!("flushing stdout: {e}"))?;
-        let mut input = String::new();
-        reader
-            .read_line(&mut input)
-            .map_err(|e| format!("reading stdin: {e}"))?;
-        let trimmed = input.trim().to_string();
-        auth_type = if trimmed.is_empty() {
-            "password".to_string()
+        status => {
+            return Err(format!(
+                "Cannot check space authentication: server returned {status}"
+            ))
+        }
+    };
+    let auth = if needs_auth {
+        eprintln!("Server requires authentication.");
+        let browser = device_auth::supported(&url)?;
+        let default = if browser { "browser" } else { "password" };
+        if !browser {
+            eprintln!("This server does not support device sign-in. Use a password or token.");
+        }
+        let question = if browser {
+            "Auth type (browser / token / password) [browser]: "
         } else {
-            trimmed
+            "Auth type (password / token) [password]: "
         };
+        loop {
+            let method = prompt(&mut reader, question, default)?;
+            if method == "browser" {
+                if !browser {
+                    return Err("This server does not support device sign-in.".into());
+                }
+                break device_auth::sign_in(&url, no_browser)?;
+            }
+            let (auth, verify_auth) = match method.as_str() {
+                "token" => {
+                    let token = prompt(&mut reader, "Token: ", "")?;
+                    let key = encryption_key()?;
+                    (
+                        AuthConfig {
+                            method,
+                            encrypted_token: crypto::encrypt_with_key(&key, &token)
+                                .map_err(|e| e.to_string())?,
+                            ..Default::default()
+                        },
+                        Auth::Bearer(token),
+                    )
+                }
+                "password" => {
+                    let username = prompt(&mut reader, "Username: ", "")?;
+                    let password = prompt(&mut reader, "Password: ", "")?;
+                    let (name, value) =
+                        match conn::login_for_jwt(&client, &url, &username, &password) {
+                            Ok(pair) => pair,
+                            Err(e) => {
+                                eprintln!("Authentication failed: {e}. Try again.");
+                                continue;
+                            }
+                        };
+                    let key = encryption_key()?;
+                    (
+                        AuthConfig {
+                            method,
+                            username,
+                            encrypted_password: crypto::encrypt_with_key(&key, &password)
+                                .map_err(|e| e.to_string())?,
+                            ..Default::default()
+                        },
+                        Auth::Cookie { name, value },
+                    )
+                }
+                _ => return Err("auth type must be browser, token, or password".into()),
+            };
+            let verify = SpaceConnection {
+                client: client.clone(),
+                base_url: url.clone(),
+                auth: verify_auth,
+                timeout,
+            };
+            if verify.auth_check() {
+                break auth;
+            }
+            eprintln!("Authentication failed. Try again.");
+        }
     } else {
-        println!("Server is reachable (no authentication required).");
-    }
-
-    if auth_type != "token" && auth_type != "password" && auth_type != "none" {
-        return Err("auth type must be token, password, or none".to_string());
-    }
-
-    let mut space = SpaceConfig {
+        eprintln!("Server is reachable (no authentication required).");
+        AuthConfig {
+            method: "none".into(),
+            ..Default::default()
+        }
+    };
+    let space = SpaceConfig {
         id: config::new_uuid(),
         name: name.clone(),
-        url: space_url.clone(),
-        auth: AuthConfig {
-            method: auth_type.clone(),
-            ..Default::default()
-        },
+        url,
+        auth,
         ..Default::default()
     };
-
-    while auth_type != "none" {
-        if auth_type == "token" {
-            print!("Token: ");
-            std::io::stdout()
-                .flush()
-                .map_err(|e| format!("flushing stdout: {e}"))?;
-            let mut token_line = String::new();
-            reader
-                .read_line(&mut token_line)
-                .map_err(|e| format!("reading stdin: {e}"))?;
-            let plain_token = token_line.trim().to_string();
-
-            let key = crypto::load_or_create_key(&config::config_dir())
-                .map_err(|e| format!("loading encryption key: {e}"))?;
-            let enc = crypto::encrypt_with_key(&key, &plain_token)
-                .map_err(|e| format!("encrypting token: {e}"))?;
-            space.auth.encrypted_token = enc;
-            space.auth.encrypted_password = String::new();
-            space.auth.username = String::new();
-            space.auth.method = auth_type.clone();
-
-            let verify_conn = SpaceConnection {
-                client: conn::new_client(probe_timeout)?,
-                base_url: space_url.clone(),
-                auth: Auth::Bearer(plain_token),
-                timeout: probe_timeout,
-            };
-            if verify_conn.auth_check() {
-                println!("Authentication verified.");
-                break;
-            }
-        } else if auth_type == "password" {
-            print!("Username: ");
-            std::io::stdout()
-                .flush()
-                .map_err(|e| format!("flushing stdout: {e}"))?;
-            let mut user_line = String::new();
-            reader
-                .read_line(&mut user_line)
-                .map_err(|e| format!("reading stdin: {e}"))?;
-            let username = user_line.trim().to_string();
-
-            print!("Password: ");
-            std::io::stdout()
-                .flush()
-                .map_err(|e| format!("flushing stdout: {e}"))?;
-            let mut pass_line = String::new();
-            reader
-                .read_line(&mut pass_line)
-                .map_err(|e| format!("reading stdin: {e}"))?;
-            let plain_password = pass_line.trim().to_string();
-
-            let key = crypto::load_or_create_key(&config::config_dir())
-                .map_err(|e| format!("loading encryption key: {e}"))?;
-            let enc = crypto::encrypt_with_key(&key, &plain_password)
-                .map_err(|e| format!("encrypting password: {e}"))?;
-            space.auth.username = username.clone();
-            space.auth.encrypted_password = enc;
-            space.auth.encrypted_token = String::new();
-            space.auth.method = auth_type.clone();
-
-            let verify_client = conn::new_client(probe_timeout)?;
-            let verify_auth =
-                match conn::login_for_jwt(&verify_client, &space_url, &username, &plain_password) {
-                    Ok((cookie_name, jwt)) => Auth::Cookie {
-                        name: cookie_name,
-                        value: jwt,
-                    },
-                    Err(e) => {
-                        println!("Authentication failed: {e}. Try again.");
-                        print!("Auth type (password / token) [password]:");
-                        std::io::stdout()
-                            .flush()
-                            .map_err(|e2| format!("flushing stdout: {e2}"))?;
-                        let mut input = String::new();
-                        reader
-                            .read_line(&mut input)
-                            .map_err(|e2| format!("reading stdin: {e2}"))?;
-                        let trimmed = input.trim().to_string();
-                        auth_type = if trimmed.is_empty() {
-                            "password".to_string()
-                        } else {
-                            trimmed
-                        };
-                        if auth_type != "token" && auth_type != "password" {
-                            return Err("auth type must be token or password".to_string());
-                        }
-                        continue;
-                    }
-                };
-
-            let verify_conn = SpaceConnection {
-                client: conn::new_client(probe_timeout)?,
-                base_url: space_url.clone(),
-                auth: verify_auth,
-                timeout: probe_timeout,
-            };
-            if verify_conn.auth_check() {
-                println!("Authentication verified.");
-                break;
-            }
-        }
-
-        println!("Authentication failed. Try again.");
-        print!("Auth type (password / token) [password]:");
-        std::io::stdout()
-            .flush()
-            .map_err(|e| format!("flushing stdout: {e}"))?;
-        let mut input = String::new();
-        reader
-            .read_line(&mut input)
-            .map_err(|e| format!("reading stdin: {e}"))?;
-        let trimmed = input.trim().to_string();
-        auth_type = if trimmed.is_empty() {
-            "password".to_string()
-        } else {
-            trimmed
-        };
-        if auth_type != "token" && auth_type != "password" {
-            return Err("auth type must be token or password".to_string());
-        }
-        space.auth.method = auth_type.clone();
-    }
-
-    cfg.spaces.push(space);
+    let dir = config::config_dir();
+    let _lock = config::lock(&dir)?;
+    let mut cfg = config::load()?;
+    insert_space(&mut cfg, space)?;
     config::save(&cfg)?;
-    println!("Space {name:?} added.");
+    eprintln!("Space {name:?} added.");
     Ok(())
+}
+
+fn insert_space(cfg: &mut Config, space: SpaceConfig) -> Result<(), String> {
+    if cfg.spaces.iter().any(|s| s.name == space.name) {
+        return Err(format!("space {:?} already exists", space.name));
+    }
+    cfg.spaces.push(space);
+    Ok(())
+}
+
+pub fn space_login(name: &str, no_browser: bool) -> Result<(), String> {
+    let cfg = config::load()?;
+    let space = config::resolve_space(&cfg, Some(name))?;
+    if space.url.is_empty() || !space.folder_path.is_empty() {
+        return Err(
+            "Browser sign-in is for remote URL spaces. Local folder spaces use App authentication."
+                .into(),
+        );
+    }
+    let auth = device_auth::sign_in(&space.url, no_browser)?;
+    let _lock = config::lock(&config::config_dir())?;
+    let mut latest = config::load()?;
+    replace_auth(&mut latest, space, auth)?;
+    config::save(&latest)?;
+    eprintln!("Signed in to space {name:?}.");
+    Ok(())
+}
+
+fn replace_auth(
+    cfg: &mut Config,
+    original: &SpaceConfig,
+    mut auth: AuthConfig,
+) -> Result<(), String> {
+    let current = cfg
+        .spaces
+        .iter_mut()
+        .find(|s| s.id == original.id)
+        .ok_or_else(|| {
+            "Space was removed while signing in; credentials were not saved".to_string()
+        })?;
+    if current.url != original.url
+        || current.folder_path != original.folder_path
+        || current.auth != original.auth
+    {
+        return Err(
+            "Space changed while signing in; credentials were not saved. Run the command again."
+                .into(),
+        );
+    }
+    auth.extra = current.auth.extra.clone();
+    current.auth = auth;
+    Ok(())
+}
+
+fn encryption_key() -> Result<[u8; crypto::KEY_LEN], String> {
+    let dir = config::config_dir();
+    let _lock = config::lock(&dir)?;
+    crypto::load_or_create_key(&dir).map_err(|e| format!("loading encryption key: {e}"))
+}
+
+fn prompt(reader: &mut impl BufRead, message: &str, default: &str) -> Result<String, String> {
+    eprint!("{message}");
+    std::io::stderr().flush().map_err(|e| e.to_string())?;
+    let mut line = String::new();
+    if reader
+        .read_line(&mut line)
+        .map_err(|e| format!("reading stdin: {e}"))?
+        == 0
+    {
+        return Err("Input ended; space configuration cancelled.".into());
+    }
+    let value = line.trim();
+    Ok(if value.is_empty() { default } else { value }.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::{AuthConfig, Config, SpaceConfig};
+
+    #[test]
+    fn cancelled_prompt_does_not_accept_a_default() {
+        assert!(prompt(&mut std::io::Cursor::new(b""), "", "browser").is_err());
+    }
+
+    #[test]
+    fn registration_preserves_existing_spaces_and_rejects_duplicates() {
+        let mut cfg = Config::default();
+        insert_space(
+            &mut cfg,
+            SpaceConfig {
+                name: "notes".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(insert_space(
+            &mut cfg,
+            SpaceConfig {
+                name: "notes".into(),
+                ..Default::default()
+            }
+        )
+        .is_err());
+        insert_space(
+            &mut cfg,
+            SpaceConfig {
+                name: "archive".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(cfg.spaces.len(), 2);
+    }
+
+    #[test]
+    fn reauthentication_preserves_renames_and_rejects_changed_target() {
+        let original = SpaceConfig {
+            id: "space-id".into(),
+            name: "notes".into(),
+            url: "https://notes.example.com".into(),
+            ..Default::default()
+        };
+        let mut renamed = original.clone();
+        renamed.name = "renamed".into();
+        renamed
+            .extra
+            .insert("appField".into(), serde_json::json!(42));
+        let mut cfg = Config {
+            spaces: vec![renamed],
+        };
+        replace_auth(
+            &mut cfg,
+            &original,
+            AuthConfig {
+                method: "browser".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(cfg.spaces[0].name, "renamed");
+        assert_eq!(cfg.spaces[0].extra["appField"], 42);
+        cfg.spaces[0].url = "https://different.example.com".into();
+        assert!(replace_auth(&mut cfg, &original, AuthConfig::default()).is_err());
+        assert_eq!(cfg.spaces[0].auth.method, "browser");
+    }
 
     #[test]
     fn valid_space_names() {

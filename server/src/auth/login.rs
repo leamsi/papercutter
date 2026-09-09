@@ -47,6 +47,7 @@ pub struct LoginManager {
     /// it and only redeemable against it; empty leaves them unscoped.
     space_id: String,
     auth_codes: crate::auth::oauth::AuthCodeStore,
+    device_codes: crate::auth::device::DeviceStore,
 }
 
 impl LoginManager {
@@ -67,6 +68,7 @@ impl LoginManager {
             host_url_prefix,
             space_id: String::new(),
             auth_codes: crate::auth::oauth::AuthCodeStore::new(),
+            device_codes: crate::auth::device::DeviceStore::default(),
         }
     }
 
@@ -107,6 +109,10 @@ impl LoginManager {
 
     pub fn session_url_prefix(&self) -> &str {
         &self.session_url_prefix
+    }
+
+    pub fn device_codes(&self) -> &crate::auth::device::DeviceStore {
+        &self.device_codes
     }
 
     pub fn auth_codes(&self) -> &crate::auth::oauth::AuthCodeStore {
@@ -191,6 +197,14 @@ impl LoginManager {
         &self,
         username: &str,
     ) -> Result<DeviceTokens, jsonwebtoken::errors::Error> {
+        self.issue_client_tokens(username, crate::auth::oauth::CLIENT_ID)
+    }
+
+    pub fn issue_client_tokens(
+        &self,
+        username: &str,
+        client: &str,
+    ) -> Result<DeviceTokens, jsonwebtoken::errors::Error> {
         let version = self.credential_version.as_ref().map(|p| p(username));
         let expires_in = access_token_expiry_secs();
         let space = self.scoped_space();
@@ -205,7 +219,11 @@ impl LoginManager {
             refresh_token: self.authenticator.issue_token(
                 username,
                 version,
-                Some("refresh"),
+                Some(if client == crate::auth::device::CLIENT_ID {
+                    "refresh:silverbullet-cli"
+                } else {
+                    "refresh"
+                }),
                 space,
                 REFRESH_TOKEN_DAYS * 24 * 3600,
             )?,
@@ -218,8 +236,17 @@ impl LoginManager {
     }
 
     pub fn verify_refresh_token(&self, token: &str) -> Option<String> {
+        self.verify_client_refresh_token(token, crate::auth::oauth::CLIENT_ID)
+    }
+
+    pub fn verify_client_refresh_token(&self, token: &str, client: &str) -> Option<String> {
         let claims = self.authenticator.verify_jwt(token).ok()?;
-        if claims.token_use.as_deref() != Some("refresh") {
+        let token_use = if client == crate::auth::device::CLIENT_ID {
+            "refresh:silverbullet-cli"
+        } else {
+            "refresh"
+        };
+        if claims.token_use.as_deref() != Some(token_use) {
             return None;
         }
         if claims.space.as_deref() != self.scoped_space() {
@@ -244,6 +271,28 @@ impl LoginManager {
 mod tests {
     use super::*;
     use crate::auth::config::AuthConfig;
+
+    #[test]
+    fn cli_and_app_refresh_credentials_are_isolated() {
+        let manager = manager();
+        let cli = manager
+            .issue_client_tokens("river", crate::auth::device::CLIENT_ID)
+            .unwrap();
+        let app = manager.issue_device_tokens("river").unwrap();
+        assert_eq!(
+            manager.verify_client_refresh_token(&cli.refresh_token, crate::auth::device::CLIENT_ID),
+            Some("river".into())
+        );
+        assert_eq!(manager.verify_refresh_token(&cli.refresh_token), None);
+        assert_eq!(
+            manager.verify_client_refresh_token(&app.refresh_token, crate::auth::device::CLIENT_ID),
+            None
+        );
+        assert_eq!(
+            manager.verify_client_refresh_token(&cli.access_token, crate::auth::device::CLIENT_ID),
+            None
+        );
+    }
 
     fn manager() -> LoginManager {
         let auth = Arc::new(Authenticator::from_parts(

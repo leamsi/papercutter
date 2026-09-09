@@ -11,8 +11,14 @@
     <div class="center">
       <main class="floating-island flow">
         <h1>Authorize access</h1>
+        {% if device_flow and not user_code %}
+        <form method="get" action="{{ host_prefix }}/.auth/device">
+          <label>Code from your terminal <input name="user_code" required autocomplete="off" /></label>
+          <button type="submit" class="sb-button-primary">Continue</button>
+        </form>
+        {% else %}
         <p>
-          An application is asking for access to <strong>{{ space_name }}</strong>
+          {% if device_flow %}SilverBullet CLI{% else %}An application{% endif %} is asking for access to <strong>{{ space_name }}</strong>
           as <strong>{{ username }}</strong>.
         </p>
         <p>
@@ -26,15 +32,24 @@
           space.
         </p>
         <p class="sb-help-text">
+          {% if device_flow %}
+          Confirm that <strong>{{ user_code }}</strong> matches the code in your terminal.
+          Only approve if you started this sign-in, on this computer or another device you trust.
+          {% else %}
           Only approve this if you just started a sign-in from an application you
           trust on this computer.
+          {% endif %}
         </p>
-        <form method="post" action="{{ host_prefix | safe }}/.auth/authorize">
+        <form method="post" action="{{ host_prefix }}/.auth/{% if device_flow %}device{% else %}authorize{% endif %}">
+          {% if device_flow %}
+          <input type="hidden" name="user_code" value="{{ user_code }}" />
+          {% else %}
           <input type="hidden" name="client_id" value="{{ client_id }}" />
           <input type="hidden" name="redirect_uri" value="{{ redirect_uri }}" />
           <input type="hidden" name="state" value="{{ state }}" />
           <input type="hidden" name="code_challenge" value="{{ code_challenge }}" />
           <input type="hidden" name="device_name" value="{{ device_name }}" />
+          {% endif %}
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
           <div class="row">
             <button type="submit" name="decision" value="approve" class="sb-button-primary">
@@ -45,6 +60,7 @@
             </button>
           </div>
         </form>
+        {% endif %}
       </main>
     </div>
   </body>

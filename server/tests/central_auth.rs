@@ -104,11 +104,20 @@ fn cookie_from(response: &axum::response::Response) -> String {
 }
 #[tokio::test]
 async fn local_login_handoff_requires_the_originating_browser_and_revokes_globally() {
-    local_handoff(false).await;
-    local_handoff(true).await;
+    local_handoff(false, "https://notes.test/Page?x=1").await;
+    local_handoff(true, "https://notes.test/Page?x=1").await;
 }
 
-async fn local_handoff(primary_without_sso: bool) {
+#[tokio::test]
+async fn device_verification_survives_central_login() {
+    local_handoff(
+        true,
+        "https://notes.test/notes/.auth/device?user_code=ABCD-EFGH",
+    )
+    .await;
+}
+
+async fn local_handoff(primary_without_sso: bool, destination: &str) {
     use silverbullet_server::auth::{oidc::config::ProviderConfig, BrowserSessions};
     let dir = tempfile::tempdir().unwrap();
     let users = UserStore::create_empty(dir.path()).unwrap();
@@ -168,7 +177,13 @@ async fn local_handoff(primary_without_sso: bool) {
         .oneshot(request(
             "GET",
             "notes.test",
-            "/.auth/central/start?destination=https%3A%2F%2Fnotes.test%2FPage%3Fx%3D1",
+            &format!(
+                "/.auth/central/start?destination={}",
+                percent_encoding::utf8_percent_encode(
+                    destination,
+                    percent_encoding::NON_ALPHANUMERIC
+                )
+            ),
             "",
             None,
         ))
@@ -228,6 +243,18 @@ async fn local_handoff(primary_without_sso: bool) {
         .unwrap();
     assert_eq!(returned.status(), StatusCode::SEE_OTHER);
     let host_cookie = cookie_from(&returned);
+    let resume = returned.headers()["location"]
+        .to_str()
+        .unwrap()
+        .replace("/.auth/central/unlock", "/.auth/central/resume");
+    let resumed = body(
+        app.clone()
+            .oneshot(request("GET", "notes.test", &resume, &host_cookie, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(resumed["destination"], destination);
     let duplicate = app
         .clone()
         .oneshot(request(

@@ -103,7 +103,16 @@ impl CoreCommand {
 #[derive(Subcommand)]
 pub enum SpaceCmd {
     /// Add a space connection interactively.
-    Add,
+    Add {
+        #[arg(long)]
+        no_browser: bool,
+    },
+    /// Sign in again to a saved remote space.
+    Login {
+        name: String,
+        #[arg(long)]
+        no_browser: bool,
+    },
     /// List saved spaces.
     #[command(alias = "list")]
     Ls,
@@ -115,6 +124,12 @@ pub enum SpaceCmd {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_auth_commands_accept_no_browser() {
+        assert!(Cli::try_parse_from(["sb", "space", "add", "--no-browser"]).is_ok());
+        assert!(Cli::try_parse_from(["sb", "space", "login", "notes", "--no-browser"]).is_ok());
+    }
 
     #[test]
     fn get_is_not_a_supported_subcommand() {

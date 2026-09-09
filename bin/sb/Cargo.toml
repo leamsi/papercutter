@@ -25,12 +25,13 @@ serde_yaml = { workspace = true }
 uuid = { workspace = true }
 rustyline = { workspace = true }
 chrono = { workspace = true }
+open = "5"
+tempfile = { workspace = true }
 
 [build-dependencies]
 serde_json = { workspace = true }
 
 [dev-dependencies]
-tempfile = { workspace = true }
 # Only for `find_chrome()`, so the runtime e2e test skips cleanly on machines
 # without a browser instead of failing.
 silverbullet-server-runtime-chrome = { path = "../../server-runtime-chrome" }

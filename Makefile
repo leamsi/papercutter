@@ -10,7 +10,7 @@ build:
 # covered separately by test-e2e-release.
 build-e2e:
 	npm run build
-	cargo build -p silverbullet
+	cargo build -p silverbullet -p sb
 
 setup:
 	npm install

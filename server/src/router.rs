@@ -287,7 +287,7 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
 
     // Unauthenticated POST bodies are otherwise buffered (via `Form<...>`)
     // before any auth/CSRF check runs, and the global body limit below is
-    // disabled — so these three routes get their own cap.
+    // disabled — so authentication routes get their own cap.
     let auth_routes = Router::new()
         .route(
             "/.auth",
@@ -298,6 +298,11 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
             "/.auth/authorize",
             get(crate::handlers::oauth::handle_authorize_get)
                 .post(crate::handlers::oauth::handle_authorize_post),
+        )
+        .route("/.auth/device/code", post(crate::handlers::device::issue))
+        .route(
+            "/.auth/device",
+            get(crate::handlers::device::verify).post(crate::handlers::device::decide),
         )
         .route("/.auth/token", post(crate::handlers::oauth::handle_token))
         .route_layer(DefaultBodyLimit::max(64 * 1024));

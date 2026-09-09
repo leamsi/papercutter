@@ -15,7 +15,7 @@ use crate::state::ServerState;
 /// Percent-encode a value for placement inside a query string.
 /// `NON_ALPHANUMERIC` is deliberately aggressive here — correct for values
 /// (codes, `state`, redirect URLs) landing inside a `?...` query string.
-fn enc(v: &str) -> String {
+pub(super) fn enc(v: &str) -> String {
     utf8_percent_encode(v, NON_ALPHANUMERIC).to_string()
 }
 
@@ -53,7 +53,7 @@ fn check_params(p: &AuthorizeParams) -> Result<(), &'static str> {
 /// The verified session identity, or `None` when the caller is not signed in.
 /// A `HeadlessTokenAuthorizer` hit yields `username: None`; treated as signed
 /// out, because a code must be attributable to an account.
-fn session_username(
+pub(super) fn session_username(
     state: &ServerState,
     headers: &HeaderMap,
     path: &str,
@@ -76,7 +76,7 @@ fn session_username(
         .username
 }
 
-fn session_cookie(headers: &HeaderMap, login: &LoginManager) -> String {
+pub(super) fn session_cookie(headers: &HeaderMap, login: &LoginManager) -> String {
     let name = crate::auth::scoped_auth_cookie_name(
         &crate::auth::request_host(headers),
         login.session_url_prefix(),
@@ -105,72 +105,52 @@ pub async fn handle_authorize_get(
         return (StatusCode::FOUND, [("location", location)]).into_response();
     };
 
-    let s = state.clone();
+    let csrf = login.csrf_token(&session_cookie(&headers, &login));
+    let device_name = if params.device_name.is_empty() {
+        "An application"
+    } else {
+        &params.device_name
+    };
+    let context = minijinja::context! {
+        host_prefix => login.host_url_prefix(),
+        space_name => state.boot_config.space_name,
+        username => username,
+        device_name => device_name,
+        client_id => params.client_id,
+        redirect_uri => params.redirect_uri,
+        state => params.state,
+        code_challenge => params.code_challenge,
+        csrf_token => csrf,
+        device_flow => false,
+    };
+    consent_page(state, context).await
+}
+
+pub(super) async fn consent_page(state: Arc<ServerState>, context: minijinja::Value) -> Response {
     let shell =
-        match run_blocking(move || s.client_bundle.read_file(".client/authorize.html")).await {
+        match run_blocking(move || state.client_bundle.read_file(".client/authorize.html")).await {
             Ok((data, _)) => data,
             Err(_) => return (StatusCode::NOT_FOUND, "Consent page not found").into_response(),
         };
-
-    let csrf = login.csrf_token(&session_cookie(&headers, &login));
-    let Some(body) = render(
-        &shell,
-        login.host_url_prefix(),
-        &state.boot_config.space_name,
-        &username,
-        &params,
-        &csrf,
-    ) else {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Consent page failed to render",
-        )
-            .into_response();
-    };
-    (
-        [
-            (axum::http::header::CONTENT_TYPE, "text/html"),
-            (axum::http::header::CACHE_CONTROL, "no-store"),
-        ],
-        body,
-    )
-        .into_response()
-}
-
-/// `None` on a template render failure — the caller must fail closed (500),
-/// never serve a blank page as if it were a successful consent screen.
-fn render(
-    shell: &[u8],
-    host_prefix: &str,
-    space_name: &str,
-    username: &str,
-    p: &AuthorizeParams,
-    csrf_token: &str,
-) -> Option<Vec<u8>> {
-    let shell = String::from_utf8_lossy(shell);
     let mut env = minijinja::Environment::new();
     env.set_auto_escape_callback(|_| minijinja::AutoEscape::Html);
-    let device_name = if p.device_name.is_empty() {
-        "An application"
-    } else {
-        &p.device_name
-    };
-    let ctx = minijinja::context! {
-        host_prefix => host_prefix,
-        space_name => space_name,
-        username => username,
-        device_name => device_name,
-        client_id => &p.client_id,
-        redirect_uri => &p.redirect_uri,
-        state => &p.state,
-        code_challenge => &p.code_challenge,
-        csrf_token => csrf_token,
-    };
-    match env.render_str(&shell, ctx) {
-        Ok(rendered) => Some(rendered.into_bytes()),
-        Err(err) => {
-            tracing::error!("authorize.html template render failed: {err}");
-            None
+    match env.render_str(&String::from_utf8_lossy(&shell), context) {
+        Ok(body) => (
+            [
+                ("content-type", "text/html; charset=utf-8"),
+                ("cache-control", "no-store"),
+                ("referrer-policy", "no-referrer"),
+            ],
+            body,
+        )
+            .into_response(),
+        Err(error) => {
+            tracing::error!("authorize.html template render failed: {error}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Consent page failed to render",
+            )
+                .into_response()
         }
     }
 }
@@ -251,6 +231,7 @@ pub async fn handle_authorize_post(
 #[serde(default)]
 pub struct TokenRequest {
     pub grant_type: String,
+    pub device_code: String,
     pub code: String,
     pub code_verifier: String,
     pub redirect_uri: String,
@@ -265,12 +246,12 @@ pub async fn handle_token(
     let Some(login) = state.login.clone() else {
         return (StatusCode::FORBIDDEN, "Authentication not enabled").into_response();
     };
-    if req.client_id != CLIENT_ID {
+    if req.client_id != CLIENT_ID && req.client_id != crate::auth::device::CLIENT_ID {
         return oauth_error(&crate::auth::OAuthError::UnauthorizedClient);
     }
 
     let username = match req.grant_type.as_str() {
-        "authorization_code" => match login.auth_codes().consume(
+        "authorization_code" if req.client_id == CLIENT_ID => match login.auth_codes().consume(
             &req.code,
             &req.code_verifier,
             &req.redirect_uri,
@@ -279,18 +260,28 @@ pub async fn handle_token(
             Ok(u) => u,
             Err(e) => return oauth_error(&e),
         },
-        "refresh_token" => match login.verify_refresh_token(&req.refresh_token) {
-            Some(u) => u,
-            None => {
-                return oauth_error(&crate::auth::OAuthError::InvalidGrant(
-                    "refresh token is expired, revoked, or not a refresh token",
-                ))
-            }
+        crate::auth::device::GRANT_TYPE => match login.device_codes().poll(
+            &req.device_code,
+            &req.client_id,
+            crate::auth::device::now(),
+        ) {
+            Ok(u) => u,
+            Err(e) => return super::device::error(e),
         },
+        "refresh_token" => {
+            match login.verify_client_refresh_token(&req.refresh_token, &req.client_id) {
+                Some(u) => u,
+                None => {
+                    return oauth_error(&crate::auth::OAuthError::InvalidGrant(
+                        "refresh token is expired, revoked, or not a refresh token",
+                    ))
+                }
+            }
+        }
         _ => return oauth_error(&crate::auth::OAuthError::UnsupportedGrantType),
     };
 
-    match login.issue_device_tokens(&username) {
+    match login.issue_client_tokens(&username, &req.client_id) {
         Ok(tokens) => (
             [(axum::http::header::CACHE_CONTROL, "no-store")],
             axum::Json(serde_json::json!({
@@ -327,6 +318,243 @@ mod tests {
     use axum::body::Body;
     use axum::http::Request;
     use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn device_code_route_issues_an_attempt() {
+        let (state, _) = login_state();
+        let response = crate::build_router(state)
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/.auth/device/code")
+                    .header("host", "localhost")
+                    .header("content-type", "application/x-www-form-urlencoded")
+                    .body(Body::from(
+                        "client_id=silverbullet-cli&device_name=Workshop",
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), 65536)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["expires_in"], 300);
+        assert_eq!(body["interval"], 5);
+        assert!(body["device_code"].as_str().unwrap().len() >= 40);
+    }
+
+    async fn device_post(
+        state: Arc<ServerState>,
+        path: &str,
+        body: String,
+        cookie: Option<&str>,
+    ) -> Response {
+        let mut request = Request::builder()
+            .method("POST")
+            .uri(path)
+            .header("host", "localhost")
+            .header("content-type", "application/x-www-form-urlencoded");
+        if let Some(cookie) = cookie {
+            request = request.header("cookie", cookie);
+        }
+        crate::build_router(state)
+            .oneshot(request.body(Body::from(body)).unwrap())
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn device_browser_approval_tokens_refresh_and_replay() {
+        let (state, cookie) = login_state();
+        let attempt = state
+            .login
+            .as_ref()
+            .unwrap()
+            .device_codes()
+            .issue("<Workshop>".into(), crate::auth::device::now())
+            .unwrap();
+        let response = get(
+            state.clone(),
+            &format!("/.auth/device?user_code={}", attempt.user_code),
+            Some(&cookie),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let page = String::from_utf8(
+            axum::body::to_bytes(response.into_body(), 65536)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(page.contains("&lt;Workshop&gt;"));
+        assert!(page.contains("<h1>Authorize access</h1>"));
+        assert!(page.contains("Cancel"));
+        assert!(page.contains("action=\"/.auth/device\""));
+        assert!(!page.contains("name=\"code_challenge\""));
+        assert!(page.contains(&attempt.user_code));
+        assert!(!page.contains(&attempt.device_code));
+        let csrf = state
+            .login
+            .as_ref()
+            .unwrap()
+            .csrf_token(cookie.split_once('=').unwrap().1);
+        let form = format!(
+            "user_code={}&csrf_token={csrf}&decision=approve",
+            attempt.user_code
+        );
+        assert_eq!(
+            device_post(state.clone(), "/.auth/device", form.clone(), None)
+                .await
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            device_post(
+                state.clone(),
+                "/.auth/device",
+                form.replace(&csrf, "bogus"),
+                Some(&cookie)
+            )
+            .await
+            .status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            device_post(state.clone(), "/.auth/device", form.clone(), Some(&cookie))
+                .await
+                .status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            device_post(state.clone(), "/.auth/device", form, Some(&cookie))
+                .await
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+        let poll = format!(
+            "grant_type={}&client_id=silverbullet-cli&device_code={}",
+            enc(crate::auth::device::GRANT_TYPE),
+            attempt.device_code
+        );
+        let (status, tokens) = post_token(state.clone(), poll.clone()).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(tokens["username"], "alice");
+        let refresh = tokens["refresh_token"].as_str().unwrap();
+        let (status, _) = post_token(
+            state.clone(),
+            format!("grant_type=refresh_token&client_id=silverbullet-cli&refresh_token={refresh}"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (_, error) = post_token(
+            state.clone(),
+            format!("grant_type=refresh_token&client_id=silverbullet-app&refresh_token={refresh}"),
+        )
+        .await;
+        assert_eq!(error["error"], "invalid_grant");
+        let (_, error) = post_token(state, poll).await;
+        assert_eq!(error["error"], "invalid_grant");
+    }
+
+    #[tokio::test]
+    async fn device_code_entry_uses_shared_consent_screen() {
+        let (state, cookie) = login_state();
+        let response = get(state, "/.auth/device", Some(&cookie)).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let page = String::from_utf8(
+            axum::body::to_bytes(response.into_body(), 65536)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(page.contains("<h1>Authorize access</h1>"));
+        assert!(page.contains("method=\"get\""));
+        assert!(page.contains("name=\"user_code\""));
+        assert!(!page.contains("value=\"approve\""));
+    }
+
+    #[tokio::test]
+    async fn device_prefill_does_not_approve_and_denial_is_terminal() {
+        let (state, cookie) = login_state();
+        let login = state.login.as_ref().unwrap();
+        let attempt = login
+            .device_codes()
+            .issue("Workshop".into(), crate::auth::device::now())
+            .unwrap();
+        let response = get(
+            state.clone(),
+            &format!("/.auth/device?user_code={}", attempt.user_code),
+            Some(&cookie),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(login
+            .device_codes()
+            .lookup(&attempt.user_code, crate::auth::device::now())
+            .is_ok());
+        let csrf = login.csrf_token(cookie.split_once('=').unwrap().1);
+        let response = device_post(
+            state.clone(),
+            "/.auth/device",
+            format!(
+                "user_code={}&csrf_token={csrf}&decision=deny",
+                attempt.user_code
+            ),
+            Some(&cookie),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let (_, error) = post_token(
+            state.clone(),
+            format!(
+                "grant_type={}&client_id=silverbullet-cli&device_code={}",
+                enc(crate::auth::device::GRANT_TYPE),
+                attempt.device_code
+            ),
+        )
+        .await;
+        assert_eq!(error["error"], "access_denied");
+        assert_eq!(
+            device_post(state.clone(), "/.auth/device/code", String::new(), None)
+                .await
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[tokio::test]
+    async fn device_login_preserves_space_prefix_and_user_code() {
+        let (state, _) = login_state_with_prefix("/notes");
+        let response = get(state.clone(), "/.auth/device?user_code=ABCD-EFGH", None).await;
+        let location = response.headers()["location"].to_str().unwrap();
+        assert!(location.starts_with("/notes/.auth?from="));
+        let decoded = percent_encoding::percent_decode_str(location)
+            .decode_utf8()
+            .unwrap();
+        assert!(decoded.contains("/notes/.auth/device?user_code=ABCD"));
+        let response = device_post(
+            state,
+            "/.auth/device/code",
+            "client_id=silverbullet-cli".into(),
+            None,
+        )
+        .await;
+        let body: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(response.into_body(), 65536)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            body["verification_uri"],
+            "http://localhost/notes/.auth/device"
+        );
+    }
 
     const CB: &str = "http://127.0.0.1:51234/cb";
 
@@ -428,6 +656,9 @@ mod tests {
             "device name must be escaped: {body}"
         );
         assert!(body.contains("csrf_token"));
+        assert!(body.contains("name=\"code_challenge\""));
+        assert!(body.contains("name=\"redirect_uri\""));
+        assert!(!body.contains("name=\"user_code\""));
     }
 
     #[tokio::test]
@@ -477,6 +708,10 @@ mod tests {
     /// `request_host` produces once the request carries `Host: localhost` —
     /// the same one `router.rs`'s `jwt_authorizer_guards_fs_end_to_end` uses.
     fn login_state() -> (Arc<ServerState>, String) {
+        login_state_with_prefix("")
+    }
+
+    fn login_state_with_prefix(prefix: &str) -> (Arc<ServerState>, String) {
         use crate::auth::authenticator::Authenticator;
         use crate::auth::config::AuthConfig;
         use crate::auth::{JwtAuthorizer, LockoutTimer, LoginManager};
@@ -504,7 +739,7 @@ mod tests {
             Arc::new(config),
             48,
             lockout,
-            String::new(),
+            prefix.into(),
         ));
 
         let mut state = crate::test_support::test_state();
@@ -518,7 +753,13 @@ mod tests {
         let jwt = authenticator
             .issue_token("alice", None, None, None, 3600)
             .unwrap();
-        (Arc::new(state), format!("auth_localhost={jwt}"))
+        (
+            Arc::new(state),
+            format!(
+                "{}={jwt}",
+                crate::auth::scoped_auth_cookie_name("localhost", prefix)
+            ),
+        )
     }
 
     /// Render the consent page, scrape its CSRF token, and build the approve /

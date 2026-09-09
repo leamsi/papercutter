@@ -42,7 +42,12 @@ fn dispatch(cli: Cli) -> Result<ExitCode, String> {
         }
         Command::Space(sub) => {
             match sub {
-                crate::cli::SpaceCmd::Add => commands::space::space_add_interactive(None)?,
+                crate::cli::SpaceCmd::Add { no_browser } => {
+                    commands::space::space_add_with_options(None, no_browser)?
+                }
+                crate::cli::SpaceCmd::Login { name, no_browser } => {
+                    commands::space::space_login(&name, no_browser)?
+                }
                 crate::cli::SpaceCmd::Ls => commands::space::space_ls()?,
                 crate::cli::SpaceCmd::Rm { name } => commands::space::space_rm(&name)?,
             }
