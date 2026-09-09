@@ -95,16 +95,8 @@ async fn eval_sync(page: &Page, js: &str) -> Result<Value, RuntimeError> {
     Ok(result.value().cloned().unwrap_or(Value::Null))
 }
 
-/// Bound on the CDP round trips this module makes against a page it has reason
-/// to distrust: the liveness probe, and every `close`.
-///
-/// Nothing here was ever *unbounded* — chromiumoxide gives every command its own
-/// `REQUEST_TIMEOUT` (~30s) and resolves it to `CdpError::Timeout` — but 30s is
-/// the wrong bound for these call sites, and inheriting it from a dependency's
-/// internals leaves the policy invisible. A liveness probe evaluates the literal
-/// `1` and a close is a single command; five seconds is already enormously
-/// generous for either, and the difference between 5s and 30s is paid by the
-/// server (see `page_is_alive`) or by a space's restart latency.
+/// Bound probes and closes on unresponsive pages below chromiumoxide's
+/// default 30-second timeout to limit restart latency.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Current wall-clock time in milliseconds since the Unix epoch.
@@ -149,7 +141,6 @@ pub(crate) async fn launch_browser(config: &ChromeConfig) -> Result<Browser, Str
         .await
         .map_err(|e| format!("browser launch: {e}"))?;
 
-    // Drive the connection handler until it ends (browser closed/crashed).
     tokio::spawn(async move {
         while let Some(event) = handler.next().await {
             if event.is_err() {
@@ -183,14 +174,8 @@ impl ClosablePage for Page {
     }
 }
 
-/// Owns a freshly opened page and **closes** it on drop, unless disarmed.
-///
-/// chromiumoxide implements `Drop` for `Browser` but *not* for `Page` —
-/// `Page::close` is an explicit `async fn` — so a dropped `Page` leaves its tab
-/// and renderer process running inside the browser every other space depends
-/// on. This used to be impossible: each attempt owned its own `Browser`, so a
-/// failed attempt took the whole process tree with it. Sharing the browser
-/// removed that implicit cleanup, and this guard replaces it.
+/// Closes a newly opened page on drop unless ownership has been transferred.
+/// Chromiumoxide does not close tabs when Page handles are dropped.
 struct PageCloseGuard<P: ClosablePage> {
     page: Option<P>,
 }
@@ -223,23 +208,10 @@ impl<P: ClosablePage> Drop for PageCloseGuard<P> {
     }
 }
 
-/// Open this space's page in the shared browser: blank page, auth cookie,
-/// console capture, navigation, then wait for the client runtime to report
-/// ready. Publishes into `live` and sets `ready` on success.
-///
-/// The tab is owned by a `PageCloseGuard` for the whole of this function, so
-/// every exit — `?`, a returned `Err`, or the task being aborted at any of the
-/// await points — closes it. That is the single mechanism; there is
-/// deliberately no separate close on the error paths. Without it, a space that
-/// keeps timing out in `wait_for_client_ready` (a large space still indexing on
-/// first boot is the likeliest trigger), or one whose supervisor is aborted
-/// mid-launch by an admin API space write, abandons a live renderer per attempt,
-/// forever — the browser never looks dead, so nothing ever retires it.
-///
-/// One residual window is out of reach: an abort landing *inside* `new_page`
-/// itself can leave a target that was created browser-side but whose handle
-/// never reached this task. It is a single CDP round trip rather than a 60s
-/// poll loop, so the exposure is tiny compared to what the guard covers.
+/// Open and initialize the space's page, publishing it to `live` when ready.
+/// PageCloseGuard closes it on errors or cancellation during initialization.
+/// Cancellation inside new_page itself can still orphan a browser-side target
+/// before its handle reaches the guard.
 async fn launch_page(
     browser: &Browser,
     page_cfg: &SpacePage,
@@ -496,11 +468,9 @@ mod tests {
         let page = guard.page();
         entered.notify_one();
 
-        // set_cookie / attach_console_capture / goto.
         for _ in 0..3 {
             tokio::task::yield_now().await;
         }
-        // wait_for_client_ready.
         hold.notified().await;
 
         *live.lock().await = Some(page.clone());
@@ -538,7 +508,6 @@ mod tests {
             hold.clone(),
         ));
 
-        // Let it reach the readiness wait, then cancel it there.
         entered.notified().await;
         tokio::time::sleep(Duration::from_millis(50)).await;
         assert_eq!(closed.load(Ordering::SeqCst), 0, "nothing closed yet");
@@ -680,7 +649,6 @@ mod tests {
 
     #[test]
     fn clean_exception_message_strips_v8_framing() {
-        // The real shape for a thrown Lua error.
         assert_eq!(
             clean_exception_message(
                 "Uncaught (in promise) Error: attempt to call a nil value",

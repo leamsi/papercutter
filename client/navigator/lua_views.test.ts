@@ -464,7 +464,6 @@ test("a dropdown projects its placeholder and allLabel into the meta, options st
     allLabel: "All Recipients",
   });
 
-  // A static list is as good as a function, and both labels are optional.
   const withList = wireMeta(
     luaSpec(`{ name = "v", ${SOURCE}, ${ON_SELECT}, dropdown = {
       options = { { label = "Pete", value = "p" } },
@@ -698,7 +697,6 @@ test("the content hook returns the markdown the view's own closure built", async
   await expect(
     luaHandle(spec, "content", { ctx: { phrase: "there" } }),
   ).resolves.toEqual({ markdown: "# Hi there" });
-  // No ctx at all is an empty phrase, not a nil dereference.
   await expect(luaHandle(spec, "content", {})).resolves.toEqual({
     markdown: "# Hi ",
   });
@@ -786,9 +784,7 @@ test("the rows hook runs the spec's own closures", async () => {
   ]);
 });
 
-// `ipairs(nil)` used to throw inside the source's own pcall, so a spec whose
-// source forgets to return anything showed the panel an error rather than an
-// empty list that looks like a legitimately empty view.
+// A source returning nil must surface an error, not an apparently empty view.
 test("a source that returns no list at all comes back as an error", async () => {
   const spec = luaSpec(`{ name = "v", source = function() end, ${ON_SELECT} }`);
 
@@ -815,8 +811,7 @@ test("a throwing source comes back as data, not a rejection", async () => {
   });
 });
 
-// A `decorations` returning one bare chip instead of a list of them used to
-// vanish without a word, since only arrays reach the renderer.
+// Reject a bare decoration chip: the renderer expects an array.
 test("a decorations function returning a single chip is an error, not a silent drop", async () => {
   const spec = luaSpec(`{
     name = "v",
@@ -915,10 +910,7 @@ test("closures run against the space's own global environment", async () => {
 });
 
 test("a keyed dropdown masks by equality, calling the view once per row", async () => {
-  // `where` is evaluated once per row *per option*, so a view with many rows
-  // and many options pays rows x options Lua calls on every refresh. A
-  // dropdown whose predicate is really "does this row's key equal the option"
-  // says so with `key` and pays one call per row instead.
+  // key costs one Lua call per row; where costs one per row per option.
   const spec = luaSpec(`{
     name = "v",
     ${SOURCE},

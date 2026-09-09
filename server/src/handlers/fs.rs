@@ -50,7 +50,7 @@ const MAX_RECONCILE_ATTEMPTS: usize = 3;
 
 pub(crate) fn is_inline_safe(content_type: &str) -> bool {
     let lowered = content_type.trim().to_ascii_lowercase();
-    let ct = lowered.split(';').next().unwrap_or("").trim(); // drop ;charset=…
+    let ct = lowered.split(';').next().unwrap_or("").trim();
     if ct == "image/svg+xml" {
         return false;
     }
@@ -88,7 +88,6 @@ pub async fn handle_fs_get(
     Path(path): Path<String>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    // Metadata-only probe.
     if headers.get("X-Get-Meta").is_some() {
         let state_inner = state.clone();
         let path_inner = path.clone();
@@ -121,12 +120,8 @@ pub async fn handle_fs_get(
         };
     }
 
-    // Conditional request: `/.fs` serves mutable files with `Cache-Control:
-    // no-cache`, so the browser revalidates on every load. We emit a standard
-    // `Last-Modified` validator (see `set_file_meta_headers`) which the browser
-    // echoes back verbatim in `If-Modified-Since`; a string match means the file
-    // is unchanged and we can answer 304 without reading the (potentially large)
-    // body off disk — we only need a metadata-only `get_file_meta` probe here.
+    // Browsers echo Last-Modified in If-Modified-Since. A matching validator
+    // allows a 304 after a metadata probe, avoiding a potentially large disk read.
     let if_modified_since = headers
         .get(axum::http::header::IF_MODIFIED_SINCE)
         .and_then(|v| v.to_str().ok())
@@ -398,12 +393,8 @@ pub async fn handle_fs_delete(
             return Ok(Err(current));
         }
 
-        // Captured before the delete so the expected-write map is keyed by
-        // the revision that's about to vanish (constraint 6) and carries its
-        // real size/last-modified, letting the watcher emit a truthful
-        // `revision` for the delete event; a lookup failure here just means
-        // the delete event goes unattributed (or attributed without a
-        // revision), never blocks the delete itself.
+        // Capture the disappearing revision so the watcher can attribute the delete
+        // with its real metadata. A lookup failure must not prevent deletion.
         let deleted_hash = state_inner
             .fs_guard
             .hash_for(&*state_inner.space, &path_inner)
@@ -827,7 +818,6 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        // Full metadata-header contract the client reads off a GET.
         assert!(resp.headers().get("X-Created").is_some());
         assert!(resp.headers().get("X-Last-Modified").is_some());
         assert_eq!(resp.headers().get("X-Content-Length").unwrap(), "5");
@@ -847,7 +837,6 @@ mod tests {
             .unwrap()
             .to_string();
         assert!(!content_type.is_empty());
-        // On a normal GET the served Content-Type equals the real one.
         assert_eq!(content_type, x_content_type);
         let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
             .await
@@ -859,7 +848,6 @@ mod tests {
     async fn fs_get_supports_conditional_304() {
         let state = Arc::new(test_state());
         state.space.write_file("big.js", b"payload", None).unwrap();
-        // First request: 200 with a standard `Last-Modified` header.
         let r1 = crate::build_router(state.clone())
             .oneshot(
                 Request::builder()
@@ -879,8 +867,6 @@ mod tests {
             .to_string();
         assert!(!last_modified.is_empty());
 
-        // Re-request echoing that value back: 304 Not Modified, empty body, but
-        // the `Last-Modified` validator is still present.
         let r2 = crate::build_router(state.clone())
             .oneshot(
                 Request::builder()

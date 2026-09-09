@@ -66,7 +66,6 @@ export function resolveMarkdownLink(
  * Turns an absolute path into a relative path, relative to some base directory. USE WITH CAUTION, definitely buggy
  */
 export function absoluteToRelativePath(base: string, absolute: string): string {
-  // Remove leading /
   base = base.startsWith("/") ? base.slice(1) : base;
   absolute = absolute.startsWith("/") ? absolute.slice(1) : absolute;
 

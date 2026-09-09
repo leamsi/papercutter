@@ -71,13 +71,11 @@ export function DockMenu({
     const { offsetHeight: h, offsetWidth: w } = menu;
     const GAP = 4;
     const EDGE = 8;
-    // Below the button, or above it when there is no room below.
     const below = b.bottom + GAP;
     const top =
       below + h > globalThis.innerHeight - EDGE
         ? Math.max(EDGE, b.top - GAP - h)
         : below;
-    // Right-aligned to the button, kept inside the viewport either way.
     const left = Math.max(
       EDGE,
       Math.min(b.right - w, globalThis.innerWidth - w - EDGE),

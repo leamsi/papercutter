@@ -202,17 +202,9 @@ async function replaceLine(
 }
 
 /**
- * Replaces the whole line at zero-based `lineIndex` in one atomic CodeMirror
- * transaction, dispatched directly via `window.client.editorView` (exposed
- * unconditionally in boot.ts) instead of simulated keystrokes. Needed
- * wherever the test also races an out-of-band write against this edit:
- * a multi-keystroke `page.keyboard.type()` spans several real round trips,
- * and an external patch (from that other write syncing in) landing *between*
- * two of those keystrokes interleaves with the in-flight transaction instead
- * of merging cleanly against it -- a single dispatch can't be interrupted
- * like that. Leaves the cursor at doc start for the same reason
- * `replaceLine` does: the decorator hides its widget while the cursor sits
- * inside the hunk.
+ * Replace a line atomically so an external update cannot interleave between
+ * keystrokes. Leave the cursor at document start, outside the conflict widget.
+
  */
 async function replaceLineAtomic(
   page: Page,
@@ -496,14 +488,6 @@ test.describe("Two tabs sharing one service worker", () => {
     expect(listing.filter((f) => f.name.startsWith(PAGE_NAME))).toHaveLength(1);
   });
 
-  // The previously-fixme'd sibling of this test drove the shared engine
-  // into a fast-forward instead of a conflict, and the editor merge then
-  // spliced the two sides into "Line2 changed by Remchaned by Tteb1". The
-  // splice is fixed in external_merge.ts and pinned by unit tests there
-  // (which can set up an editor buffer diverged from its disk base
-  // directly); this test covers the sync-level behavior it was written
-  // for, and asserts tab1's buffer matches the marker document byte for
-  // byte so no interleaving can hide in the converged result.
   test("a sync conflict broadcasts the same notification to both tabs", async () => {
     const before = await readFromServer(PAGE_PATH, base2);
     const lines = before.split("\n");
@@ -513,15 +497,8 @@ test.describe("Two tabs sharing one service worker", () => {
     const remoteLines = [...lines];
     remoteLines[targetIndex] = "Line2 changed by Remote";
 
-    // Both tabs share one context, so this parks the single service worker
-    // they share: tab1's edit still reaches the local store and the dirty
-    // queue, but can't be pushed, and the remote write below can't be
-    // pulled. Sequencing the two writes without it doesn't produce a
-    // conflict at all -- the pull wins the race, the engine fast-forwards
-    // the local store onto the remote revision, and tab1's later push is a
-    // clean overwrite. Going offline is also the honest shape of this
-    // scenario: an edit made while disconnected, racing a change made
-    // elsewhere in the meantime.
+    // Offline mode prevents either write syncing before both sides diverge.
+    // Both tabs share the worker, so this pauses their single sync engine.
     await context.setOffline(true);
     await replaceLineAtomic(tab1, targetIndex, "Line2 changed by Tab1");
     await remoteWrite(remoteLines.join("\n"));
@@ -571,10 +548,7 @@ test.describe("Two tabs sharing one service worker", () => {
     expect(serverContent).toContain("Line2 changed by Tab1");
     expect(serverContent).toContain("Line2 changed by Remote");
 
-    // The regression itself: tab1's own buffer held its side of this very
-    // conflict when the marker document arrived. Its editor doc must be the
-    // marker document byte for byte -- pre-fix it was an interleaving of
-    // both sides ("Line2 changed by Remchaned by Tteb1").
+    // The editor must match the conflict document without interleaving either side.
     const tab1Doc = await tab1.evaluate(
       () => (window as any).client.editorView.state.sliceDoc() as string,
     );
@@ -697,9 +671,8 @@ test.describe("Autosave landing on top of a pulled remote revision", () => {
       await cm.save(true);
     });
 
-    // The invariant: whatever the converged document turns out to be -- a
-    // clean merge or one conflict hunk -- neither edit may be missing from
-    // it. Pre-fix the server ends up holding only "Line2 changed here".
+    // Every edit must survive in the converged document, either as a clean
+    // merge or inside a conflict hunk.
     await expect
       .poll(() => readFromServer(PAGE_PATH, base3), {
         timeout: 60_000,
@@ -989,16 +962,8 @@ test.describe("Laggy connection: repeated edits still converge without losing an
     await rmSpaceDir(spaceDir5);
   });
 
-  // This test used to reproduce silent data loss: under injected latency,
-  // A's own already-*saved* edits were sometimes wholesale overwritten by an
-  // incoming pull of B's content -- not merged, not conflicted, just gone.
-  // The pull sites in `client/spaces/sync.ts` decided "remote changed, local
-  // didn't" from state read early in the cycle and then wrote the remote
-  // bytes after a full round trip, without re-checking that local was still
-  // what the decision assumed. They now re-check immediately before writing.
-  //
-  // What it guarantees is convergence and survival, not a clean merge: see
-  // the note on conflict markers at the assertions below.
+  // Latency can leave a pull decision stale while local edits are saved.
+  // Assert convergence and survival of every edit; conflicts are allowed below.
   test("4 rounds of concurrent non-overlapping edits all survive and converge byte-identical", async () => {
     const rounds = 4;
     for (let i = 1; i <= rounds; i++) {
@@ -1029,14 +994,8 @@ test.describe("Laggy connection: repeated edits still converge without losing an
     ]);
     expect(a).toBe(b);
     expect(b).toBe(server);
-    // Deliberately not asserting the absence of conflict markers. Under
-    // injected latency a client can push with a base older than content it
-    // has already received, at which point the server legitimately sees both
-    // sides having changed the same region -- edits at opposite ends of a
-    // page are only non-overlapping from the typist's point of view, not
-    // from the merge's. Converging on a conflict hunk is an accepted outcome
-    // here; losing an edit is not, which is what the loop below checks (a
-    // hunk carries both sides, so every round's text survives either way).
+    // A stale merge base can make these edits overlap despite their positions.
+    // Conflict hunks are acceptable if they preserve every round's text.
     for (let i = 1; i <= rounds; i++) {
       expect(a).toContain(`Laggy-A-round-${i}`);
       expect(a).toContain(`Laggy-B-round-${i}`);

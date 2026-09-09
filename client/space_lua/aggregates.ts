@@ -112,7 +112,6 @@ function covarIterate(state: CovarState, x: any, y: any): CovarState {
   return state;
 }
 
-// Quantile interpolation methods
 type QuantileMethod =
   | "linear" // percentile_cont
   | "lower" // percentile_disc
@@ -126,7 +125,6 @@ interface QuantileState {
   method: QuantileMethod;
 }
 
-// Default method based on aggregate invocation name
 const quantileNameDefaults: Record<string, QuantileMethod> = {
   percentile_cont: "linear",
   percentile_disc: "lower",
@@ -159,7 +157,6 @@ function quantileFinish(state: QuantileState): number | null {
   }
 }
 
-// Shared spec — branching on `ctx.name` for the default method
 function makeQuantileSpec(name: string, description: string): AggregateSpec {
   return {
     name,
@@ -187,9 +184,7 @@ function makeQuantileSpec(name: string, description: string): AggregateSpec {
   };
 }
 
-// Built-in aggregate specs
 const builtinAggregates: Record<string, AggregateSpec> = {
-  // General purpose
   count: {
     name: "count",
     description:
@@ -299,7 +294,6 @@ const builtinAggregates: Record<string, AggregateSpec> = {
       return value;
     }),
   },
-  // Collection and format
   array_agg: {
     name: "array_agg",
     description: "Input values concatenated into an array",
@@ -365,7 +359,6 @@ const builtinAggregates: Record<string, AggregateSpec> = {
       return JSON.stringify(state);
     }),
   },
-  // Bitwise and boolean
   bit_and: {
     name: "bit_and",
     description: "Bitwise AND of all non-null input values",
@@ -447,7 +440,6 @@ const builtinAggregates: Record<string, AggregateSpec> = {
       return state.hasValue ? state.result : null;
     }),
   },
-  // Statistical
   stddev_pop: {
     name: "stddev_pop",
     description: "Population standard deviation of non-null inputs",
@@ -558,7 +550,6 @@ const builtinAggregates: Record<string, AggregateSpec> = {
       return state.bestCount > 0 ? state.best : null;
     }),
   },
-  // Quantile and percentile
   quantile: makeQuantileSpec(
     "quantile",
     "Quantile of ordered set of non-null inputs; arguments: value, quantile (0-1), interpolation ('lower', 'higher', 'nearest', 'midpoint' and default: 'linear')",
@@ -617,14 +608,12 @@ export function getAggregateSpec(
     const spec: any = config.get(`aggregates.${current}`, null);
     if (!spec) break;
 
-    // Check for alias redirect
     const alias = spec instanceof LuaTable ? spec.rawGet("alias") : spec.alias;
     if (typeof alias === "string") {
       current = alias;
       continue;
     }
 
-    // Full definition in config
     let candidate: AggregateSpec | null = null;
     if (spec instanceof LuaTable) {
       const init = spec.rawGet("initialize");
@@ -700,16 +689,13 @@ export async function executeAggregate(
     }
   }
 
-  // Initialize
   let state = await luaCall(spec.initialize, [ctx, ...extraArgs], noCtx, sf);
 
-  // Collect filtered items
   const filteredItems: LuaValue[] = [];
   const len = items.length;
   for (let i = 1; i <= len; i++) {
     const item = items.rawGet(i);
 
-    // Filter
     if (filterExpr) {
       const filterEnv = buildItemEnv(objectVariable, item, env, sf);
       const filterResult = await evalExprFn(filterExpr, filterEnv, sf);
@@ -747,7 +733,6 @@ export async function executeAggregate(
     });
   }
 
-  // Iterate
   for (const item of filteredItems) {
     const itemEnv = buildItemEnv(objectVariable, item, env, sf);
     let value: LuaValue;
@@ -773,7 +758,6 @@ export async function executeAggregate(
     );
   }
 
-  // Finish
   if (spec.finish) {
     state = await luaCall(spec.finish, [state, ctx, ...extraArgs], noCtx, sf);
   }

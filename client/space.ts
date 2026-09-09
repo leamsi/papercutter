@@ -42,7 +42,6 @@ export class Space {
   watchedFiles = new Set<string>();
   watchInterval?: ReturnType<typeof setInterval>;
 
-  // private initialPageListLoad = true;
   private saving = false;
 
   constructor(
@@ -144,8 +143,6 @@ export class Space {
             const headerText = renderToText(n).slice(level + 1);
             let endPos = pageText.length;
             if (headerText === desiredHeaderText) {
-              // Now we have to scan for the end point
-              // Let's go up one level and find either another header at this same level
               const parent = n.parent!;
               const nextHeader = findNodeMatching(
                 parent,
@@ -174,7 +171,6 @@ export class Space {
         }
         const sliceText = pageText.slice(n.from!, n.to!);
 
-        // Determine indent level
         const targetLineIndex =
           pageText.substring(0, n.from!).split("\n").length - 1;
         const lines = pageText.split("\n");
@@ -332,7 +328,6 @@ export function fileMetaToDocumentMeta(fileMeta: FileMeta): DocumentMeta {
       tag: "document",
       created: localDateString(new Date(fileMeta.created)),
       lastModified: localDateString(new Date(fileMeta.lastModified)),
-      // Name is always equal to the path for documents
       extension: getPathExtension(fileMeta.name as Path),
     } as DocumentMeta;
   } catch (e) {

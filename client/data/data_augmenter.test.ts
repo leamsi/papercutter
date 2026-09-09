@@ -26,9 +26,7 @@ test("Test data augmentation", async () => {
     },
   ]);
   const augm = new Augmenter(ds, ["aug"]);
-  // Augment only john
   await augm.setAugmentation("john", { augmented: true });
-  // Fetch them back
   const objs = [john, mary];
   await augm.augmentObjectArray(objs, "ref");
   expect(objs[0].augmented).toEqual(true);

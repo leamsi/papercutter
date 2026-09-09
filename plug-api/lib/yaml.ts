@@ -1,19 +1,16 @@
-// Define the patch structure
 export interface YamlPatch {
   op: "set-key" | "delete-key";
-  path: string; // Still assuming simple, top-level key names
+  path: string; // Top-level key names only
   value?: any; // Required for set-key, not used for delete-key
 }
 
-// Helper function specifically for serializing scalar types
 function serializeToYamlScalar(
   value: string | number | boolean | null,
 ): string {
   if (typeof value === "string") {
-    // Always quote empty strings and strings with special characters
     if (
       value === "" || // Empty string
-      value.match(/[:{#}[],&*!|>'"%@`]/) || // Special YAML characters (added % and ")
+      value.match(/[:{#}[],&*!|>'"%@`]/) || // Special YAML characters
       /^\d+(\.\d+)?([eE][+-]?\d+)?$/.test(value) || // Looks like a number
       value.includes(":") || // Contains colons
       ["true", "false", "null", "yes", "no", "on", "off"].includes(
@@ -22,7 +19,6 @@ function serializeToYamlScalar(
     ) {
       return JSON.stringify(value);
     }
-    // Simple strings without special chars/meaning don't need quotes
     return value;
   } else if (
     typeof value === "number" ||
@@ -31,12 +27,9 @@ function serializeToYamlScalar(
   ) {
     return String(value);
   }
-  // Default for unsupported scalar types (e.g., undefined)
   return "null";
 }
 
-// Updated helper function to serialize various JS types to YAML string representations
-// Added baseIndentation parameter for handling nested lists correctly (though we only use it for top-level lists here)
 function serializeToYamlValue(
   value: any,
   baseIndentation: string = "",
@@ -45,9 +38,7 @@ function serializeToYamlValue(
     if (value.length === 0) {
       return "[]"; // Use flow style for empty arrays for simplicity
     }
-    // Determine indentation for list items (base + 2 spaces)
     const itemIndentation = `${baseIndentation}  `;
-    // Format each item recursively, preceded by '- ' marker
     return (
       "\n" +
       value
@@ -57,11 +48,8 @@ function serializeToYamlValue(
         )
         .join("\n")
     );
-    // Note: serializeToYamlValue is used recursively here to handle nested arrays/objects if needed in future
-    // However, the current `applyMinimalSetKeyPatches` only handles top-level keys.
   } else if (typeof value === "object" && value !== null) {
-    // Basic object serialization (not requested, but good to consider)
-    // This is highly simplified and doesn't handle nesting well without more context
+    // Nested object serialization is limited.
     const itemIndentation = `${baseIndentation}  `;
     const entries = Object.entries(value);
     if (entries.length === 0) return "{}"; // Flow style empty objects
@@ -78,7 +66,6 @@ function serializeToYamlValue(
         .join("\n")
     );
   } else {
-    // Handle scalars using the dedicated function
     return serializeToYamlScalar(value);
   }
 }
@@ -88,14 +75,12 @@ export function applyPatches(yamlString: string, patches: YamlPatch[]): string {
 
   for (const patch of patches) {
     if (patch.op === "delete-key") {
-      // Handle delete operation
       const key = patch.path;
       const lines = currentYaml.split("\n");
       let keyLineIndex = -1;
       let startDeleteIndex = -1;
       let endDeleteIndex = -1;
 
-      // Find the key line
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const trimmedLine = line.trim();
@@ -121,16 +106,12 @@ export function applyPatches(yamlString: string, patches: YamlPatch[]): string {
             }
           }
 
-          // Determine the indentation of the key
           const keyIndent = lines[i].match(/^(\s*)/)?.[1] || "";
 
-          // Look forwards to find all content belonging to this key
-          // This includes list items and nested objects
           for (let j = i + 1; j < lines.length; j++) {
             const nextLine = lines[j];
             const trimmedNextLine = nextLine.trim();
 
-            // Empty line - continue looking
             if (trimmedNextLine === "") {
               continue;
             }
@@ -147,13 +128,10 @@ export function applyPatches(yamlString: string, patches: YamlPatch[]): string {
               }
             }
 
-            // Check indentation of next non-empty, non-comment line
             const nextIndent = nextLine.match(/^(\s*)/)?.[1] || "";
             if (nextIndent.length > keyIndent.length) {
-              // This line is indented more than the key, so it belongs to the key
               endDeleteIndex = j;
             } else {
-              // This line is at same or less indentation, so it's a new key
               break;
             }
           }
@@ -163,12 +141,9 @@ export function applyPatches(yamlString: string, patches: YamlPatch[]): string {
       }
 
       if (keyLineIndex !== -1) {
-        // Delete the lines from startDeleteIndex to endDeleteIndex (inclusive)
         const beforeDelete = lines.slice(0, startDeleteIndex);
         const afterDelete = lines.slice(endDeleteIndex + 1);
 
-        // Clean up excessive empty lines at the boundary
-        // Remove trailing empty lines from beforeDelete
         while (
           beforeDelete.length > 0 &&
           beforeDelete[beforeDelete.length - 1].trim() === ""
@@ -194,7 +169,6 @@ export function applyPatches(yamlString: string, patches: YamlPatch[]): string {
           currentYaml += "\n";
         }
       }
-      // If key not found, do nothing
       continue;
     }
 
@@ -202,25 +176,21 @@ export function applyPatches(yamlString: string, patches: YamlPatch[]): string {
 
     const key = patch.path;
 
-    // Split the YAML into lines for easier processing
     const lines = currentYaml.split("\n");
     let keyLineIndex = -1;
     let commentBlock = "";
     let trailingComments = "";
     let inlineComment = "";
 
-    // Find the key line and collect comments
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmedLine = line.trim();
       if (trimmedLine.startsWith(`${key}:`)) {
         keyLineIndex = i;
-        // Extract inline comment if present
         const commentMatch = line.match(/#.*$/);
         if (commentMatch) {
           inlineComment = commentMatch[0];
         }
-        // Look backwards for comments
         for (let j = i - 1; j >= 0; j--) {
           const prevLine = lines[j].trim();
           if (prevLine.startsWith("#")) {
@@ -229,7 +199,6 @@ export function applyPatches(yamlString: string, patches: YamlPatch[]): string {
             break;
           }
         }
-        // Look forwards for comments
         for (let j = i + 1; j < lines.length; j++) {
           const nextLine = lines[j].trim();
           if (nextLine.startsWith("#")) {
@@ -242,16 +211,12 @@ export function applyPatches(yamlString: string, patches: YamlPatch[]): string {
       }
     }
 
-    // Serialize the new value
     const serializedNewValue = serializeToYamlValue(patch.value);
 
-    // Create the replacement line
     let replacementLine: string;
     if (serializedNewValue.startsWith("\n")) {
-      // For lists/objects, the key line ends with just ':'
       replacementLine = `${key}:${inlineComment}${serializedNewValue}`;
     } else {
-      // For scalars, format as key: value
       replacementLine = `${key}: ${serializedNewValue}${
         inlineComment ? ` ${inlineComment}` : ""
       }`;
@@ -267,7 +232,6 @@ export function applyPatches(yamlString: string, patches: YamlPatch[]): string {
         keyLineIndex + 1 + trailingComments.split("\n").filter(Boolean).length,
       );
 
-      // Build the new content
       const newContent = [
         ...beforeKey,
         ...commentBlock.split("\n").filter(Boolean),
@@ -276,10 +240,8 @@ export function applyPatches(yamlString: string, patches: YamlPatch[]): string {
         ...afterKey,
       ];
 
-      // Join lines and ensure proper newlines
       currentYaml = `${newContent.join("\n").replace(/\n*$/, "\n")}\n`;
     } else {
-      // Key not found: Add the new key-value pair to the end
       const newLineBlock = replacementLine;
       if (currentYaml.trim() === "") {
         currentYaml = `${newLineBlock}\n`;
@@ -289,6 +251,5 @@ export function applyPatches(yamlString: string, patches: YamlPatch[]): string {
     }
   }
 
-  // Ensure the result ends with a newline
   return currentYaml.replace(/\n*$/, "\n");
 }

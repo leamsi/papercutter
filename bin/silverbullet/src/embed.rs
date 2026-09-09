@@ -40,10 +40,7 @@ impl<E: RustEmbed> Default for EmbeddedSpace<E> {
 }
 
 fn meta_for(path: &str, data_len: usize, last_modified: Option<u64>) -> FileMeta {
-    // `rust-embed` reports the mtime in whole *seconds*; `FileMeta` timestamps
-    // are *milliseconds* (matching the disk/HTTP impls and the client's sync
-    // hash), so scale up — otherwise these read as ~1970 and the client would
-    // treat the bundle/base_fs as perpetually stale.
+    // rust-embed reports seconds; FileMeta and the client sync hash use milliseconds.
     let ts = last_modified.unwrap_or(0) as i64 * 1000;
     FileMeta {
         name: path.to_string(),
@@ -100,7 +97,6 @@ mod tests {
     #[test]
     fn client_bundle_contains_index_html() {
         let space = EmbeddedSpace::<ClientAssets>::new();
-        // The SPA shell is always present in a built bundle.
         let (data, meta) = space.read_file(".client/index.html").unwrap();
         assert!(!data.is_empty());
         assert!(meta.content_type.contains("html"), "{}", meta.content_type);

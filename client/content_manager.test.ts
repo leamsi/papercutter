@@ -4,13 +4,8 @@ import type { PageMeta } from "@silverbulletmd/silverbullet/type/index";
 import { PermissionDeniedError } from "./spaces/http_space_primitives.ts";
 import type { Client } from "./client.ts";
 
-// content_manager.ts imports codemirror/editor_state.ts for createEditorState
-// and externalUpdate. That module (transitively, via lua_widget.ts ->
-// widget_sandbox_iframe.ts) calls document.createElement at module scope, so
-// it can't load under this project's Node-environment vitest config (no
-// jsdom/happy-dom, and adding one is out of scope). Replace it with a
-// minimal stand-in exposing the same two names -- content_manager.ts itself,
-// the actual subject of these tests, is imported for real, unmocked.
+// Mock the editor extension chain because it touches document at module
+// load; ContentManager itself runs against real EditorState transactions.
 vi.mock("./codemirror/editor_state.ts", async () => {
   const { Annotation, EditorState: RealEditorState } = await import(
     "@codemirror/state"
@@ -29,10 +24,7 @@ vi.mock("./codemirror/editor_state.ts", async () => {
 
 const { ContentManager } = await import("./content_manager.ts");
 
-// content_manager.ts's enriched-meta refresh (loadPage and, after this
-// change, reloadPageContent) reads/writes document.body directly for
-// frontmatter-derived page-decoration classes. No jsdom in this Node vitest
-// config (see the module mock above), so provide the minimal shape used.
+// Provide the DOM shape used by the enriched-meta decoration refresh.
 (globalThis as unknown as { document: { body: unknown } }).document = {
   body: {
     className: "",
@@ -172,7 +164,6 @@ describe("ContentManager.loadPage base tracking (regression)", () => {
     client.currentPathValue = "index.md";
     const cm = new ContentManager(client as unknown as Client);
 
-    // Fresh load establishes the base.
     await cm.loadPage({ path: "index.md" }, false);
     expect(client.editorView.state.sliceDoc()).toBe(
       "hello world\nsecond\nthird\n",
@@ -189,7 +180,6 @@ describe("ContentManager.loadPage base tracking (regression)", () => {
       "HELLO world\nsecond\nthird\n",
     );
 
-    // Disk changes externally while that edit is still unsaved.
     diskText = "hello world\nsecond\nthird\nExternal line\n";
     diskModified = "2026-01-01T00:00:05.000";
 
@@ -220,20 +210,15 @@ describe("ContentManager.reloadPageContent stale-navigation guard (regression)",
 
     const reloadPromise = cm.reloadPageContent();
 
-    // User navigates to a different page while the fetch above is still in
-    // flight.
     client.currentPathValue = "pageB.md";
     client.editorView.setState(EditorState.create({ doc: "page B content\n" }));
 
-    // The stale fetch for page A finally resolves, with page-A-derived
-    // external content.
     resolveReadPage({
       text: "page A content\nEXTERNAL EDIT\n",
       meta: pageMeta("2026-01-01T00:00:00.000"),
     });
     await reloadPromise;
 
-    // Page B's content must be untouched by page A's stale patch.
     expect(client.editorView.state.sliceDoc()).toBe("page B content\n");
   });
 
@@ -285,16 +270,12 @@ describe("ContentManager.applyExternalPatches monotonicity guard (regression)", 
     client.currentPathValue = "index.md";
     const cm = new ContentManager(client as unknown as Client);
 
-    // Seed the base (lastKnownDiskText/lastKnownDiskModified) via a fresh load.
     await cm.loadPage({ path: "index.md" }, false);
     expect(client.editorView.state.sliceDoc()).toBe("base\n");
 
-    // Two reloads for the same page, in flight concurrently (e.g. a direct
-    // reloadEditor racing an SSE-triggered reloadPageContent).
     const olderReload = cm.reloadPageContent();
     const newerReload = cm.reloadPageContent();
 
-    // The one reading the newer disk state resolves first.
     resolveNewer({
       text: "base\nAGENT V2\n",
       meta: pageMeta("2026-01-01T00:00:10.000"),
@@ -302,7 +283,6 @@ describe("ContentManager.applyExternalPatches monotonicity guard (regression)", 
     await newerReload;
     expect(client.editorView.state.sliceDoc()).toBe("base\nAGENT V2\n");
 
-    // The stale (older) read resolves after -- must not revert the editor.
     resolveOlder({
       text: "base\nAGENT V1\n",
       meta: pageMeta("2026-01-01T00:00:05.000"),
@@ -421,9 +401,6 @@ describe("ContentManager.reloadPageContent editor:pageReloaded notification", ()
     enrichedMeta = metaAfterEdit;
     await cm.reloadPageContent();
 
-    // Without navigating away and back, viewState.current.meta must already
-    // reflect the post-edit frontmatter, and the body decoration classes
-    // derived from it.
     expect(client.viewState.current?.meta).toEqual(metaAfterEdit);
     expect(
       (globalThis as unknown as { document: { body: { className: string } } })
@@ -571,8 +548,6 @@ describe("ContentManager conflict-marker documents (regression)", () => {
 
     await cm.loadPage({ path: "index.md" }, false);
 
-    // The user's own unsaved edit -- the same text the server embeds as one
-    // side of the conflict hunk below.
     client.editorView.dispatch({
       changes: {
         from: "Line1\nLine2 ".length,
@@ -637,7 +612,6 @@ describe("ContentManager save after a withheld external update", () => {
     rewriteLine2(client, "Line2 changed by Tab1");
     expect(client.editorView.state.sliceDoc()).toBe(LOCAL);
 
-    // The remote's rewrite of the same line reaches storage and is pulled in.
     const setDisk = (text: string, modified: string) => {
       diskText = text;
       diskModified = modified;
@@ -748,7 +722,6 @@ describe("ContentManager save after a withheld external update", () => {
     await flush();
     expect(client.declaredBases).toHaveLength(1);
 
-    // The user navigates away while the declare is still outstanding.
     client.currentPathValue = "other.md";
     client.editorView.setState(EditorState.create({ doc: "other page\n" }));
 
@@ -756,8 +729,6 @@ describe("ContentManager save after a withheld external update", () => {
     await saving;
     await flush();
 
-    // Neither under the old name (the buffer is gone) nor -- the actual
-    // hazard -- under the new one.
     expect(written).toEqual([]);
   });
 });

@@ -54,7 +54,6 @@ export async function loadConfig(
 ): Promise<Config> {
   const config = new Config();
 
-  // We start with a standard env
   const rootEnv = luaBuildStandardEnv();
 
   // This is a system only used for the boot sequence, will be replaced later
@@ -63,11 +62,9 @@ export async function loadConfig(
   bootSystem.registerSyscalls(
     [],
     systemSyscalls(lateBoundClient, readOnly),
-    // Collecting the config.* calls is basically what we're here for
     configSyscalls(config),
     // This offers calls like isMobile() which will be useful, and late binding for e.g. to make actionButtons run() work immediately on boot
     editorSyscalls(lateBoundClient),
-    // And these, because: why not
     markdownSyscalls(lateBoundClient),
     languageSyscalls(),
     jsonschemaSyscalls(),
@@ -75,11 +72,9 @@ export async function loadConfig(
 
   exposeSyscalls(rootEnv, bootSystem);
 
-  // Parse the code
   const chunk = parseBlock(luaCode, {});
   const sf = LuaStackFrame.createWithGlobalEnv(rootEnv, chunk.ctx);
 
-  // And eval
   const localEnv = new LuaEnv(rootEnv);
   for (const statement of chunk.statements) {
     sf.threadState.budget = makeLuaBudget({

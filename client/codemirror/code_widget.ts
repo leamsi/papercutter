@@ -20,10 +20,8 @@ export async function reloadAllWidgets() {
       continue;
     }
     widget.invalidatePrewarm();
-    // Create an empty widget DIV node
     const newEl = document.createElement("div");
     await widget.renderContent(newEl, undefined);
-    // Replace the old widget with the new one
     widget.dom.innerHTML = "";
     widget.dom.appendChild(newEl);
   }
@@ -32,7 +30,6 @@ export async function reloadAllWidgets() {
 function garbageCollectWidgets() {
   for (const widget of activeWidgets) {
     if (!widget.dom || !widget.dom.parentNode) {
-      // console.log("Garbage collecting widget", widget.bodyText);
       activeWidgets.delete(widget);
     }
   }

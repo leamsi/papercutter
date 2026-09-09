@@ -86,7 +86,6 @@ class TableParser implements LeafBlockParser {
 
   nextLine(cx: BlockContext, line: Line, leaf: LeafBlock) {
     if (this.rows == null) {
-      // Second line
       this.rows = false;
       let lineText;
       if (
@@ -114,7 +113,6 @@ class TableParser implements LeafBlockParser {
         }
       }
     } else if (this.rows) {
-      // Line after the second
       const content: Element[] = [];
       parseRow(cx, line.text, line.pos, content, cx.lineStart);
       this.rows.push(

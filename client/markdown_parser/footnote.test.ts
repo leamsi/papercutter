@@ -6,8 +6,6 @@ import {
 } from "@silverbulletmd/silverbullet/lib/tree";
 import { parseMarkdown } from "./parser.ts";
 
-// Footnote ref tests
-
 const footnoteRefSample = `Here is a footnote[^1] and another[^my-note].`;
 
 test("Test footnote ref parser", () => {
@@ -21,7 +19,6 @@ test("Test footnote ref parser", () => {
   const label2 = findNodeOfType(refs[1], "FootnoteRefLabel");
   expect(label2!.children![0].text).toEqual("my-note");
 
-  // Round-trip
   expect(renderToText(tree)).toEqual(footnoteRefSample);
 });
 
@@ -39,8 +36,6 @@ test("Footnote ref inside list item", () => {
     findNodeOfType(refs[0], "FootnoteRefLabel")!.children![0].text,
   ).toEqual("x");
 });
-
-// Footnote definition tests
 
 const footnoteDefSample = `[^1]: This is a footnote definition.`;
 
@@ -86,8 +81,6 @@ test("Document with refs and definitions round-trips", () => {
   expect(defs.length).toEqual(1);
 });
 
-// Footnote definition with markup
-
 test("Footnote definition with bold and italic", () => {
   const tree = parseMarkdown("[^1]: This is **bold** and _italic_ text.");
   const defs = collectNodesOfType(tree, "FootnoteDefinition");
@@ -100,8 +93,6 @@ test("Footnote definition with bold and italic", () => {
     "[^1]: This is **bold** and _italic_ text.",
   );
 });
-
-// Multi-line footnote definitions
 
 test("Multi-line footnote definition with 4-space indent", () => {
   const src = `[^1]: First line of the footnote.
@@ -179,8 +170,6 @@ test("2-space indent does not continue footnote", () => {
   expect(bodyText).not.toContain("Not a continuation");
 });
 
-// Inline footnote tests
-
 const inlineFootnoteSample = `This has an inline footnote^[some content here] in it.`;
 
 test("Test inline footnote parser", () => {
@@ -191,7 +180,6 @@ test("Test inline footnote parser", () => {
   const content = findNodeOfType(fns[0], "InlineFootnoteContent");
   expect(content!.children![0].text).toEqual("some content here");
 
-  // Round-trip
   expect(renderToText(tree)).toEqual(inlineFootnoteSample);
 });
 

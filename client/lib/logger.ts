@@ -22,7 +22,6 @@ export class Logger {
   ) {
     this.prefix = prefix;
 
-    // Store original console methods
     this.originalConsole = {
       log: console.log.bind(console),
       info: console.info.bind(console),
@@ -39,10 +38,8 @@ export class Logger {
       return (...args: any[]) => {
         const prefixedArgs = this.prefix ? [this.prefix, ...args] : args;
 
-        // Call original console method
         this.originalConsole[level](...prefixedArgs);
 
-        // Capture log if capturing is enabled
         this.captureLog(level, args);
       };
     };
@@ -75,7 +72,6 @@ export class Logger {
 
     this.logBuffer.push(entry);
 
-    // Maintain max capture size by removing oldest entries
     if (this.logBuffer.length > this.maxCaptureSize) {
       this.logBuffer.shift();
     }
@@ -87,7 +83,6 @@ export class Logger {
   async postToServer(logEndpoint: string, source: string) {
     const logs = this.logBuffer;
     if (logs.length > 0) {
-      // Flush the buffer
       const logCopy = [...this.logBuffer];
       this.logBuffer = [];
       try {
@@ -103,14 +98,12 @@ export class Logger {
         }
       } catch (e: any) {
         console.warn("Could not post logs to server", e.message);
-        // Put back the logs into the buffer
         this.logBuffer.unshift(...logCopy);
       }
     }
   }
 }
 
-// Global logger instance
 let globalLogger: Logger | undefined;
 
 export function initLogger(prefix: string = ""): Logger {

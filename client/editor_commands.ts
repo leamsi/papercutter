@@ -504,8 +504,6 @@ export function registerEditorCommands(
     run: async () => closeCompletion(view()),
   });
 
-  // Openers (modal UI — not in the typing hot path, but moving them out of
-  // the plug removes an unnecessary worker round-trip).
   hook.registerCommand({
     name: "Open Command Palette",
     key: "Ctrl-/",

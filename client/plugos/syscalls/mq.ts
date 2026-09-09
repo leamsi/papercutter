@@ -14,7 +14,6 @@ export function mqSyscalls(mq: DataStoreMQ): SysCallMapping {
     "mq.subscribe": {
       callback: (_ctx, def: MQListenerSpec) => {
         def.autoAck = def.autoAck !== false;
-        // console.log("Registering Lua event listener: ", def.name);
         client.config.insert(["mqSubscriptions", def.queue], def);
       },
       description: "Subscribes a Space Lua callback to a message queue.",

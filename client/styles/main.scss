@@ -6,11 +6,8 @@
 @use "top";
 @use "xray";
 @use "components";
-// After `components`: the shared `.sb-nav-*` rules live there, and the
-// navigator's own overrides of them (a hint chip's font size, a selected
-// row's colours) win on source order, not specificity. The navigator's
-// per-component partials follow it, for the same reason and in this order:
-// each may override the panel chrome above, none overrides its siblings.
+// Navigator overrides rely on source order after components; its partials
+// follow for the same reason.
 @use "navigator";
 @use "revision_preview";
 @use "dock_menu";
@@ -134,9 +131,7 @@ body {
     position: relative;
   }
 
-  // A dock becomes a drawer over the editor, spanning the screen: there is no
-  // edge between it and anything, so the seam a docked sidebar draws would
-  // just be a line down the middle of nothing.
+  // Drawers overlay the editor, so there is no sidebar seam.
   #sb-main .sb-nav-root-lhs,
   #sb-main .sb-nav-root-rhs {
     position: absolute;
@@ -147,9 +142,7 @@ body {
     flex: 1 1 100% !important;
   }
 
-  // The top bar reserves a column beside the page title for each open sidebar.
-  // A drawer overlays instead of taking width, so reserving any would just
-  // squeeze the title for nothing.
+  // Drawers reserve no title space because they overlay the editor.
   #sb-top .sb-nav-spacer {
     display: none;
   }
@@ -169,7 +162,6 @@ body {
   border: var(--modal-border-color) 1px solid;
   border-radius: 8px;
   overflow: hidden;
-  // Match the .sb-modal-box drop shadow so plug modals look consistent.
   box-shadow: rgba(0, 0, 0, 0.35) 0px 20px 20px;
 
   // Not `visibility: hidden`: the panel focuses its own filter input as it
@@ -188,17 +180,12 @@ body {
     }
   }
 
-  // The navigator's modal takes its vertical extent from its own inset and
-  // its width from here: the same 700px/90% centered column the
-  // `.sb-modal-box` dialogs use, rather than stretching to whatever the
-  // window is wide.
   &.sb-modal-centered {
     left: 0;
     right: 0;
     width: 700px;
     max-width: 90%;
     margin-inline: auto;
-    // Its border counts towards the 700, as it does for `.sb-modal-box`.
     box-sizing: border-box;
     // Height comes from the panel's own content, so the box shrinks with it;
     // `bottom` is deliberately unset, and the inline `max-height` beside it

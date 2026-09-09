@@ -1,7 +1,6 @@
 import { expect, test } from "vitest";
 import { EventEmitter } from "./event.ts";
 
-// Test event handler interfaces
 interface TestEvents {
   message: (content: string) => void | Promise<void>;
   count: (num: number) => void | Promise<void>;
@@ -11,10 +10,7 @@ interface TestEvents {
   error: () => void | Promise<void>;
 }
 
-// Concrete test implementation
-class TestEventEmitter extends EventEmitter<TestEvents> {
-  // Just a concrete implementation for testing
-}
+class TestEventEmitter extends EventEmitter<TestEvents> {}
 
 test("EventEmitter - basic on/emit functionality", async () => {
   const emitter = new TestEventEmitter();
@@ -108,7 +104,6 @@ test("EventEmitter - off removes specific handler object with multiple events", 
   let numberCount = 0;
   let remainingMessageCount = 0;
 
-  // Handler object with multiple events that we'll remove
   const handlersToRemove = {
     message: () => {
       messageCount++;
@@ -118,7 +113,6 @@ test("EventEmitter - off removes specific handler object with multiple events", 
     },
   };
 
-  // Another handler for message events that should remain
   const remainingHandlers = {
     message: () => {
       remainingMessageCount++;
@@ -128,17 +122,14 @@ test("EventEmitter - off removes specific handler object with multiple events", 
   emitter.on(handlersToRemove);
   emitter.on(remainingHandlers);
 
-  // Test that both handlers work initially
   await emitter.emit("message", "test1");
   await emitter.emit("count", 42);
   expect(messageCount).toEqual(1);
   expect(numberCount).toEqual(1);
   expect(remainingMessageCount).toEqual(1);
 
-  // Remove the first handler object
   emitter.off(handlersToRemove);
 
-  // Test that only the remaining message handler works
   await emitter.emit("message", "test2");
   await emitter.emit("count", 43);
   expect(messageCount).toEqual(1); // Should not have incremented
@@ -174,7 +165,6 @@ test("EventEmitter - off removes only the specified handler object", async () =>
   emitter.on(handlers1);
   emitter.on(handlers2);
 
-  // Test both handlers work initially
   await emitter.emit("message", "test1");
   await emitter.emit("count", 100);
   expect(handler1MessageCount).toEqual(1);
@@ -182,10 +172,8 @@ test("EventEmitter - off removes only the specified handler object", async () =>
   expect(handler2MessageCount).toEqual(1);
   expect(handler2CountValue).toEqual(100);
 
-  // Remove only handlers1
   emitter.off(handlers1);
 
-  // Test that only handlers2 continues to work
   await emitter.emit("message", "test2");
   await emitter.emit("count", 200);
   expect(handler1MessageCount).toEqual(1); // Should not have incremented
@@ -197,10 +185,8 @@ test("EventEmitter - off removes only the specified handler object", async () =>
 test("EventEmitter - no handlers for event", async () => {
   const emitter = new TestEventEmitter();
 
-  // Should not throw when emitting to non-existent handlers
   await emitter.emit("message", "test");
   await emitter.emit("count", 42);
 
-  // Test passes if no exception is thrown
   expect(true).toBeTruthy();
 });

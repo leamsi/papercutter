@@ -9,8 +9,7 @@ vi.mock("@silverbulletmd/silverbullet/syscall", () => ({
 }));
 vi.mock("../registry.ts", () => ({
   handle: (data: any) => handle(data),
-  // The real thing: this is pure result-shaping, and stubbing it would only
-  // let the engine's content path pass against a fiction.
+  // Use the real pure result-shaping code to validate the content path.
   normalizeContent: (result: any) =>
     result && typeof result.error === "string"
       ? { error: result.error }
@@ -202,7 +201,7 @@ test("parseIcon trims leading whitespace before scanning for a namespace colon",
 });
 
 test("parseIcon classifies a non-string as invalid, without throwing", () => {
-  // The pre-consolidation { svg = ... } table can still reach here at runtime, since a row.icon function's return value isn't checked until it runs.
+  // A row.icon function can return an invalid { svg } object at runtime.
   expect(parseIcon({ svg: "<svg></svg>" })).toEqual({ kind: "invalid" });
   expect(parseIcon(undefined)).toEqual({ kind: "invalid" });
   expect(parseIcon(42)).toEqual({ kind: "invalid" });
@@ -368,7 +367,7 @@ test("a built-in's meta is resolved once and never asked for again on later acti
 });
 
 test("a row.icon crossing the bridge as a table (not a string) draws nothing and never throws or warns", async () => {
-  // Belt-and-suspenders: a row.icon function's return value isn't known until it runs, so the pre-consolidation { svg = ... } table can still reach this bridge at runtime even past validateRowIcon.
+  // Validate row.icon results at runtime too; their shape is unknown at definition.
   const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   bridgeWithRowState(
     meta({ hasRowIcon: true }),
@@ -384,10 +383,8 @@ test("a row.icon crossing the bridge as a table (not a string) draws nothing and
 });
 
 test("a reload in flight never exposes a half-cleared view to a publish", async () => {
-  // `publish()` reads the live ViewState, and a debounced refresh can start
-  // while an older one is still awaiting — so any window where the entry holds
-  // new rows but no dropdown options renders as unfiltered "All Recipients"
-  // over every row. The state must swap atomically instead.
+  // Swap rows and dropdown options atomically: a concurrent publish must
+  // never expose new rows with missing masks.
   let releaseDropdown: (v: unknown) => void = () => {};
   let dropdownCalls = 0;
   const rows = [
@@ -425,7 +422,6 @@ test("a reload in flight never exposes a half-cleared view to a publish", async 
   await Promise.resolve();
   await Promise.resolve();
 
-  // Mid-flight: what a publish would render right now.
   expect(engine.activeState()?.dropdownOptions).toEqual([
     { label: "Pete", value: "p" },
   ]);
@@ -471,7 +467,6 @@ test("a refresh and a query carry ctx.dock too", async () => {
     .filter((p) => p.hook === "rows")
     .map((p) => p.args.ctx.dock);
   expect(docks).toEqual(["modal", "modal", "modal"]);
-  // ...and the query's own phrase survives the stamp.
   const last = handle.mock.calls
     .map(([payload]) => payload)
     .filter((p) => p.hook === "rows")

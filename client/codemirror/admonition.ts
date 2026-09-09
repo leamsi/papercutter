@@ -65,13 +65,10 @@ export function admonitionPlugin() {
         const { type, from, to } = node;
 
         if (type.name === "Blockquote") {
-          // Extract raw text from admonition block
           const rawText = state.sliceDoc(from, to);
 
-          // Split text into type, title and content using regex capture groups
           const extractedFields = extractAdmonitionFields(rawText);
 
-          // Bailout here if we don't have a proper Admonition formatted blockquote
           if (!extractedFields) {
             return;
           }
@@ -89,8 +86,6 @@ export function admonitionPlugin() {
             accum += line.length + 2;
           });
 
-          // `from` and `to` range info for switching out keyword text with correct
-          // icon further down.
           const iconRange = {
             from: from + 2,
             to:
@@ -102,15 +97,12 @@ export function admonitionPlugin() {
               1,
           };
 
-          // The first div is the title, attach title css class
           widgets.push(
             Decoration.line({
               class: "sb-admonition-title",
             }).range(fromOffsets[0]),
           );
 
-          // If cursor is not within the first line, replace the keyword text
-          // with the icon
           if (
             !isCursorInRange(state, [
               from,
@@ -125,8 +117,6 @@ export function admonitionPlugin() {
             );
           }
 
-          // Each line of the blockquote is spread across separate divs, attach
-          // relevant css classes and attribute here.
           fromOffsets.forEach((fromOffset) => {
             widgets.push(
               Decoration.line({

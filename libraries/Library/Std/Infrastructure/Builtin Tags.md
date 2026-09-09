@@ -20,7 +20,6 @@ local rangeType = {
   maxItems = 2,
 }
 
--- page
 tag.define {
   name = "page",
   schema = {
@@ -103,7 +102,6 @@ tag.define {
   },
 }
 
--- aspiring-page
 tag.define {
   name = "aspiring-page",
   schema = {
@@ -119,7 +117,6 @@ tag.define {
   },
 }
 
--- document
 tag.define {
   name = "document",
   schema = {
@@ -151,7 +148,6 @@ tag.define {
   },
 }
 
--- item
 tag.define {
   name = "item",
   schema = {
@@ -179,7 +175,6 @@ tag.define {
   },
 }
 
--- tag
 tag.define {
   name = "tag",
   schema = {
@@ -202,7 +197,6 @@ tag.define {
   },
 }
 
--- link
 tag.define {
   name = "link",
   schema = {
@@ -234,7 +228,6 @@ tag.define {
   },
 }
 
--- relation
 tag.define {
   name = "relation",
   schema = {
@@ -267,7 +260,6 @@ tag.define {
   },
 }
 
--- header
 tag.define {
   name = "header",
   schema = {
@@ -291,7 +283,6 @@ tag.define {
   },
 }
 
--- paragraph
 tag.define {
   name = "paragraph",
   schema = {
@@ -315,7 +306,6 @@ tag.define {
   },
 }
 
--- table
 tag.define {
   name = "table",
   schema = {
@@ -331,7 +321,6 @@ tag.define {
   },
 }
 
--- anchor
 tag.define {
   name = "anchor",
   schema = {
@@ -348,7 +337,6 @@ tag.define {
   },
 }
 
--- task
 tag.define {
   name = "task",
   schema = {

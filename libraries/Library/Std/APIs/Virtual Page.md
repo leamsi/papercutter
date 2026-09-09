@@ -44,7 +44,6 @@ event.listen {
     for _, def in pairs(config.get("virtualPages", {})) do
       local match = pageName:match(def.pattern)
       if match != nil then
-        -- we got an actual match
         return {
           text = def.run(match),
           perm = "ro"

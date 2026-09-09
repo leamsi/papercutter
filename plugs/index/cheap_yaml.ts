@@ -14,10 +14,8 @@ export function determineTags(yamlText: string): string[] {
     const yamlKv = yamlKvRegex.exec(line);
     if (yamlKv) {
       const [key, value] = yamlKv.slice(1);
-      // Looking for a 'tags' key
       if (key === "tags") {
         inTagsSection = true;
-        // 'template' there? Yay!
         if (value) {
           tags.push(...value.split(/,\s*|\s+/).map((t) => t.replace(/^#/, "")));
         }

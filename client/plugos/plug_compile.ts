@@ -24,7 +24,6 @@ const workerRuntimePlugin: esbuild.Plugin = {
   name: "worker-runtime",
   setup(build) {
     if (typeof __EMBEDDED_WORKER_RUNTIME_JS__ !== "undefined") {
-      // Bundled CLI: serve pre-bundled JS from the embedded constant
       build.onResolve({ filter: /^worker-runtime$/ }, () => ({
         path: "worker-runtime",
         namespace: "worker-runtime",
@@ -34,7 +33,6 @@ const workerRuntimePlugin: esbuild.Plugin = {
         loader: "js",
       }));
     } else {
-      // From source: point directly at the .ts file, esbuild handles it
       build.onResolve({ filter: /^worker-runtime$/ }, () => ({
         path: path.join(import.meta.dirname, "worker_runtime.ts"),
       }));
@@ -70,14 +68,12 @@ export async function compileManifest(
     delete manifest.build;
   }
 
-  // Assets
   const assetsBundle = await bundleAssets(
     path.resolve(rootPath),
     (manifest.assets as string[]) || [],
   );
   manifest.assets = assetsBundle.toJSON();
 
-  // Normalize the edge case of a plug with no functions
   if (!manifest.functions) {
     manifest.functions = {};
   }
@@ -92,13 +88,11 @@ ${Object.entries(manifest.functions)
       return "";
     }
     let [filePath, jsFunctionName] = def.path.split(":");
-    // Resolve path
     filePath = path.join(rootPath, filePath);
 
-    return `import {${jsFunctionName} as ${funcName}} from "${
-      // Replacing \ with / for Windows
-      path.resolve(filePath).replaceAll("\\", "\\\\")
-    }";\n`;
+    return `import {${jsFunctionName} as ${funcName}} from "${path
+      .resolve(filePath)
+      .replaceAll("\\", "\\\\")}";\n`;
   })
   .join("")}
 
@@ -121,8 +115,6 @@ export const plug = {manifest, functionMapping};
 
 setupMessageListener(functionMapping, manifest, self.postMessage);
 `;
-
-  // console.log("Code:", jsFile);
 
   const tempDir = await mkdtemp(path.join(tmpdir(), "plug-compile-"));
   const inFile = path.join(tempDir, "input.js");
@@ -152,7 +144,6 @@ setupMessageListener(functionMapping, manifest, self.postMessage);
   jsCode = patchBundledJS(jsCode);
   await writeFile(outFile, jsCode, "utf-8");
 
-  // Clean up temp directory
   await rm(tempDir, { recursive: true, force: true });
 
   console.log(`Plug ${manifest.name} written to ${outFile}.`);
@@ -175,7 +166,6 @@ export async function compileManifests(
     building = true;
     await mkdir(dist, { recursive: true });
     const startTime = Date.now();
-    // Build all plugs in parallel
     await Promise.all(
       manifestFiles.map(async (plugManifestPath) => {
         const manifestPath = plugManifestPath as string;

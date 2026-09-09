@@ -17,7 +17,6 @@ function runEnter(input: string): string | false {
     extensions: [markdown()],
   });
 
-  // Force synchronous parse of the full document
   ensureSyntaxTree(state, state.doc.length);
 
   let newState: EditorState | null = null;
@@ -35,8 +34,6 @@ function runEnter(input: string): string | false {
 
   return newDoc.slice(0, newCursor) + CURSOR + newDoc.slice(newCursor);
 }
-
-// --- Bullet lists ---
 
 describe("Enter in bullet lists", () => {
   test("colon at end creates indented child", () => {
@@ -64,8 +61,6 @@ describe("Enter in bullet lists", () => {
   });
 });
 
-// --- Ordered lists ---
-
 describe("Enter in ordered lists", () => {
   test("colon at end creates indented 1.", () => {
     expect(runEnter("1. overview:|^|")).toBe("1. overview:\n   1. |^|");
@@ -86,8 +81,6 @@ describe("Enter in ordered lists", () => {
   });
 });
 
-// --- Nested lists ---
-
 describe("Enter in nested lists", () => {
   test("nested bullet with colon indents deeper", () => {
     expect(runEnter("- parent:\n  - child:|^|")).toBe(
@@ -105,8 +98,6 @@ describe("Enter in nested lists", () => {
     expect(runEnter("- parent\n  - |^|")).toBe("- parent\n- |^|");
   });
 });
-
-// --- Task lists ---
 
 describe("Enter in task lists", () => {
   test("task with colon creates indented child task", () => {
@@ -136,8 +127,6 @@ describe("Enter in task lists", () => {
   });
 });
 
-// --- Colon not at end of line ---
-
 describe("colon not at end of line", () => {
   test("colon in key: value does not indent", () => {
     expect(runEnter("- key: value|^|")).toBe("- key: value\n- |^|");
@@ -154,15 +143,11 @@ describe("colon not at end of line", () => {
   });
 });
 
-// --- Non-tight lists (no extra blank lines) ---
-
 describe("non-tight lists", () => {
   test("no blank line inserted before new item", () => {
     expect(runEnter("- a\n\n- b|^|")).toBe("- a\n\n- b\n- |^|");
   });
 });
-
-// --- Blockquotes ---
 
 describe("blockquote behavior unchanged", () => {
   test("continues blockquote", () => {
@@ -173,8 +158,6 @@ describe("blockquote behavior unchanged", () => {
     expect(runEnter("> - items:|^|")).toBe("> - items:\n>   - |^|");
   });
 });
-
-// --- Non-list context ---
 
 describe("non-list context falls through", () => {
   test("plain paragraph returns false", () => {

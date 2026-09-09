@@ -46,7 +46,6 @@ export type CodeWidgetContent = {
   url?: string;
 };
 
-// Document editors stuff
 export type DocumentEditorCallback = () => Promise<DocumentEditorContent>;
 export type DocumentEditorContent = {
   html: string;
@@ -139,7 +138,6 @@ export type SlashCompletions = {
   options: SlashCompletionOption[];
 };
 
-// Code widget stuff
 export type CodeWidgetCallback = (
   bodyText: string,
   pageName: string,

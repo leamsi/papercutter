@@ -49,7 +49,6 @@ class ArrayWidget extends WidgetType {
       div.style.minHeight = `${cachedHeight}px`;
     }
 
-    // Async kick-off of content renderer
     this.renderContent(div).catch(console.error);
     this.dom = div;
     return div;
@@ -81,11 +80,8 @@ class ArrayWidget extends WidgetType {
         inPage: false,
       });
 
-      // Throw away the wrapper, as it only causes trouble and we are rewrapping
-      // anyways
       const html = widget.toDOM().querySelector<HTMLDivElement>(":scope > div");
       if (!html) {
-        // This should never really happen, just in case
         console.log("There was an error rendering one of the panel widgets");
         continue;
       }
@@ -114,8 +110,6 @@ class ArrayWidget extends WidgetType {
   }
 
   override eq(other: WidgetType): boolean {
-    // This class isn't really used for stuff that's updated. If that's
-    // needed in the future, one could e.g. add a `bodyText` property again
     return other instanceof ArrayWidget && other.cacheKey === this.cacheKey;
   }
 }
@@ -193,7 +187,6 @@ class NavPageSlotWidget extends WidgetType {
 export function postScriptPrefacePlugin(editor: Client) {
   return decoratorStateField((state: EditorState) => {
     if (!editor.clientSystem.scriptsLoaded) {
-      // console.info("System not yet ready, not rendering panel widgets.");
       return Decoration.none;
     }
     const widgets: any[] = [];

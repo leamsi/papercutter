@@ -40,9 +40,8 @@ export const tagPicker: BuiltinView<TagRow> = {
   },
   onSelect: async (obj, ctx) => {
     if (ctx.from) {
-      // Reached by typing `#` into a picker: hand the slot back with the tag
-      // applied, which is what a leading `#` used to do in place. `false`
-      // keeps this panel from closing the view it just opened into itself.
+      // Return the slot with the tag applied. Returning false prevents closing
+      // the view that this selection opens.
       await open(ctx.from, { phrase: `#${obj.name} ` });
       return false;
     }

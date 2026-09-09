@@ -18,12 +18,8 @@ import type { PageMeta } from "@silverbulletmd/silverbullet/type/index";
 import type { Client } from "../client.ts";
 import { isCursorInRange, LinkWidget } from "./util.ts";
 
-// Building a `path -> PageMeta` lookup requires calling `parseToRef` (two
-// regexes) on every page in the space. Doing that per rendered wiki link, on
-// every editor update, is O(links * pages) and makes typing on link-heavy
-// pages in large spaces painfully slow. Memoize the map and only rebuild it
-// when the `allPages` array identity changes (i.e. when the page list is
-// actually replaced).
+// Cache by page-list identity to avoid parsing every page path for every
+// rendered link on each editor update (O(links * pages)).
 let pageByPathCache: { pages: PageMeta[]; map: Map<string, PageMeta> } | null =
   null;
 
@@ -105,7 +101,6 @@ export function processWikiLink(options: WikiLinkProcessorOptions): any[] {
   const renderingSyntax = client.ui.viewState.uiOptions.markdownSyntaxRendering;
 
   if (isCursorInRange(state, [from, to]) || renderingSyntax) {
-    // Only attach a CSS class, then get out
     if (linkStatus !== "default") {
       widgets.push(
         Decoration.mark({
@@ -140,7 +135,6 @@ export function processWikiLink(options: WikiLinkProcessorOptions): any[] {
 
   let linkText = alias || stringRef;
 
-  // The `&& ref` is only there to make typescript happy
   if ((linkStatus === "default" || linkStatus === "ambiguous") && ref) {
     const meta = pageByPath(client.ui.viewState.allPages).get(
       resolution?.path ?? ref.path,
@@ -148,9 +142,7 @@ export function processWikiLink(options: WikiLinkProcessorOptions): any[] {
 
     const renderedRef = structuredClone(ref);
 
-    // We don't want to render the meta
     renderedRef.meta = false;
-    // We also don't want to rendered the prefix of the path
     renderedRef.path = options.shortWikiLinks
       ? fileName(renderedRef.path)
       : renderedRef.path;

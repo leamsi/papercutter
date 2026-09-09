@@ -45,11 +45,9 @@ test("Config - object-based and dot-notation setting", () => {
 test("Config - edge cases", () => {
   const config = new Config();
 
-  // Deep nesting from scratch
   config.set("a.b.c", "value");
   expect(config.get("a.b.c", null)).toEqual("value");
 
-  // Overwriting a primitive with an object
   config.set("x", "primitive");
   config.set("x.y", "nested");
   expect(config.get("x.y", null)).toEqual("nested");
@@ -70,31 +68,25 @@ test("Config - schema validation", () => {
 
   config.define("user", userSchema);
 
-  // Valid data
   config.set("user", { name: "John", age: 30, email: "john@example.com" });
   config.set("user.name", "John");
 
-  // Missing required field
   expect(() => config.set("user", { name: "John" })).toThrow(
     "Validation error for user",
   );
 
-  // Wrong type
   expect(() => config.set("user", { name: "John", age: "thirty" })).toThrow(
     "Validation error for user",
   );
 
-  // Wrong type via path
   expect(() => config.set(["user", "name"], 22)).toThrow(
     "Validation error for user",
   );
 
-  // Invalid format (email without @)
   expect(() =>
     config.set("user", { name: "John", age: 30, email: "not-an-email" }),
   ).toThrow("Validation error for user");
 
-  // Value below minimum
   expect(() => config.set("user", { name: "John", age: -1 })).toThrow(
     "Validation error for user",
   );
@@ -141,16 +133,13 @@ test("Config - define() rejects invalid schemas", () => {
 test("Config - schema defaults", () => {
   const config = new Config();
 
-  // Default applied when no value exists
   config.define("feature.enabled", { type: "boolean", default: true });
   expect(config.get("feature.enabled", null)).toEqual(true);
 
-  // Existing value is not overwritten by default
   const config2 = new Config({ feature: { enabled: false } });
   config2.define("feature.enabled", { type: "boolean", default: true });
   expect(config2.get("feature.enabled", null)).toEqual(false);
 
-  // Nested defaults from object properties
   const config3 = new Config();
   config3.define("widgets", {
     type: "object",
@@ -167,7 +156,6 @@ test("Config - schema defaults", () => {
   expect(config3.get("widgets.toc.enabled", null)).toEqual(true);
   expect(config3.get("widgets.toc.minHeaders", null)).toEqual(3);
 
-  // Partial override: only unset leaves get defaults
   const config4 = new Config({ widgets: { toc: { minHeaders: 5 } } });
   config4.define("widgets", {
     type: "object",
@@ -184,12 +172,10 @@ test("Config - schema defaults", () => {
   expect(config4.get("widgets.toc.enabled", null)).toEqual(true);
   expect(config4.get("widgets.toc.minHeaders", null)).toEqual(5);
 
-  // No default key means no value is set
   const config5 = new Config();
   config5.define("optional", { type: "string" });
   expect(config5.has("optional")).toBeFalsy();
 
-  // Object/array defaults are deep-cloned so mutations don't leak
   const config6 = new Config();
   const defaultList = ["a", "b"];
   config6.define("items", {
@@ -225,7 +211,6 @@ test("Config - partial object set preserves nested defaults", () => {
     },
   });
 
-  // Partial object set should not wipe out nested defaults
   config.set("smartQuotes", { enabled: true });
   expect(config.get("smartQuotes.double.left", null)).toEqual("“");
   expect(config.get("smartQuotes.double.right", null)).toEqual("”");
@@ -233,7 +218,6 @@ test("Config - partial object set preserves nested defaults", () => {
   expect(config.get("smartQuotes.single.right", null)).toEqual("’");
   expect(config.get("smartQuotes.enabled", null)).toEqual(true);
 
-  // User-specified values are preserved; missing siblings get defaults
   config.set("smartQuotes", { double: { left: "<<" } });
   expect(config.get("smartQuotes.double.left", null)).toEqual("<<");
   expect(config.get("smartQuotes.double.right", null)).toEqual("”");
@@ -244,7 +228,6 @@ test("Config - partial object set preserves nested defaults", () => {
 test("Config - custom format validation", () => {
   const config = new Config();
 
-  // page-ref format
   config.define("link", {
     type: "object",
     properties: { ref: { type: "string", format: "page-ref" } },

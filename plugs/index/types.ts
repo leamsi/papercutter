@@ -1,5 +1,3 @@
-// Shared types for the index plug
-
 export type AnchorHit = {
   page: string;
   hostTag: string;

@@ -62,10 +62,8 @@ function makeConfig(
 }
 
 beforeEach(() => {
-  // `resetAllMocks`, not `clearAllMocks`: a few tests below install a
-  // never-resolving `mockImplementation` on `datastore.del`/`.get` to probe
-  // an interleaving window, and that implementation must not leak into the
-  // next test (it would hang it forever awaiting a promise nothing resolves).
+  // Reset mock implementations too: unresolved datastore promises must not
+  // leak into subsequent tests.
   vi.resetAllMocks();
   mobile.isNarrowScreen.mockReturnValue(false);
   slots.focusedSlot.mockReturnValue(undefined);
@@ -165,9 +163,7 @@ test("open on an already-focused sidebar slot toggles it closed instead of re-op
 });
 
 test("a focus=false open never takes the toggle-closed branch, and carries its opts into the activation", async () => {
-  // Falsifiability: without the focus guard, a mention click that re-opens
-  // an already-focused Mention Inbox to preset its dropdown would close it
-  // instead.
+  // A dropdown preset must not toggle an already-focused view closed.
   const { config, getMeta } = makeConfig();
   getMeta.mockReturnValue({ dock: "lhs" });
   const lc = createPanelLifecycle(config);
@@ -193,9 +189,7 @@ test("a focus=false open never takes the toggle-closed branch, and carries its o
 });
 
 test("restoreDocks' passive restore never takes the toggle-closed branch, even if the slot reports focused", async () => {
-  // Falsifiability: without the `!passive` guard, a boot restore landing on
-  // a slot the editor reports as focused would hide the panel it's meant to
-  // bring back instead of showing it.
+  // Passive boot restores must show a focused slot rather than toggling it.
   const { config, getMeta } = makeConfig({ sidebarSlots: ["lhs"] } as any);
   datastore.get.mockResolvedValue("a");
   getMeta.mockReturnValue({ dock: "lhs" });
@@ -222,16 +216,12 @@ test("a newer open() supersedes the previous occupant of the same slot after the
 
   await lc.open("b");
   expect(onSuperseded).toHaveBeenCalledWith("a");
-  // Pins the ordering the navigator round explicitly preserved: supersede
-  // fires only after the success-path show has gone out, not before it (a
-  // plain trailing call after `pendingActivation.set` would fire too early).
+  // Supersede must run after the success-path show.
   expect(callOrder).toEqual(["show", "superseded"]);
 });
 
 test("a throw mid-activation still supersedes the previous occupant (finally, not a trailing call)", async () => {
-  // Falsifiability: replacing the `finally` with a plain call after the show
-  // would leave `onSuperseded` uncalled here, since `datastore.get` rejects
-  // before that line is ever reached.
+  // Supersede must also run if the datastore read rejects.
   const { config, getMeta, onSuperseded } = makeConfig();
   getMeta.mockReturnValue({ dock: "lhs" });
   const lc = createPanelLifecycle(config);
@@ -262,9 +252,7 @@ test("hide fires onSlotClosedWithoutSuccessor only when the expected token match
   const staleToken = lc.current("modal")!.token;
   await lc.open("b"); // b now occupies "modal" with a newer token
 
-  // Falsifiability: without the token check, this stale close (naming a's
-  // now-superseded token) would settle *b* -- the pick the user hasn't
-  // acted on yet -- with nil.
+  // A stale activation token must not settle the current pick.
   await lc.hide("modal", staleToken);
   expect(onSlotClosedWithoutSuccessor).not.toHaveBeenCalled();
   expect(slots.hideSlot).not.toHaveBeenCalled();
@@ -404,8 +392,7 @@ test("a resize tick that lands after a real close is dropped", async () => {
 });
 
 test("a resize whose commit is interleaved by a close never re-shows the panel", async () => {
-  // Falsifiability: without the post-commit re-check, this would re-show (and
-  // so reopen) a dock the user closed mid-drag.
+  // A width commit must not reopen a dock closed mid-drag.
   const { config, getMeta } = makeConfig();
   getMeta.mockReturnValue({ dock: "lhs" });
   const lc = createPanelLifecycle(config);
@@ -495,10 +482,7 @@ test("restoreDocks: a view re-docked via moveDock still restores -- resolveDock 
 });
 
 test("restoreDocks: a currently-unresolvable saved name is skipped, not deleted", async () => {
-  // Falsifiability: treating "not yet resolvable" the same as "gone" would
-  // silently forget a dock on a cold boot before the space finishes
-  // indexing, exactly the regression the navigator round's comment warns
-  // about.
+  // An unresolved view may still be indexing; keep its persisted dock.
   const { config, getMeta } = makeConfig({ sidebarSlots: ["lhs"] } as any);
   datastore.get.mockResolvedValue("not-yet-indexed");
   getMeta.mockReturnValue(undefined);
@@ -535,7 +519,6 @@ test("closing a displacing view restores the displaced one (one-deep)", async ()
   await lc.open("b"); // displaces a
   slots.showSlot.mockClear();
   await lc.hide("rhs");
-  // a came back, passively
   expect(slots.showSlot).toHaveBeenCalledWith(
     "rhs",
     expect.anything(),
@@ -635,8 +618,7 @@ test("closing a sidebar records the view as closed", async () => {
 });
 
 test("closing after a route hop records both views as closed", async () => {
-  // Falsifiability: recording only the hopped-to view leaves the slot's
-  // resident-of-record on `open = true`, and boot reopens what was closed.
+  // Close both the hopped-to view and the resident so neither reopens at boot.
   const { config, getMeta } = makeConfig();
   getMeta.mockReturnValue({ dock: "lhs" });
   const store = new Map<string, unknown>();

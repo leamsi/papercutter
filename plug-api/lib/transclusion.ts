@@ -89,7 +89,6 @@ export function parseTransclusion(text: string): Transclusion | null {
     ({ stringRef: url, alias } = match.groups);
     linktype = "wikilink";
   } else {
-    // We found no match
     return null;
   }
 

@@ -21,17 +21,14 @@ description: A sample package
   const result = applyPatches(initialYaml, patches);
 
   expect(result).toBeDefined();
-  // Basic scalar updates
   expect(result.includes("version: 1.1.0")).toEqual(true);
   expect(result.includes("description: Updated description")).toEqual(true);
   expect(result.includes("name: my-package")).toEqual(true);
 
-  // Special values and characters
   expect(result.includes('empty: ""')).toEqual(true);
   expect(result.includes('special: "value:with:colons"')).toEqual(true);
   expect(result.includes("null: null")).toEqual(true);
 
-  // Empty collections
   expect(result.includes("emptyList: []")).toEqual(true);
   expect(result.includes("emptyObject: {}")).toEqual(true);
 });
@@ -64,7 +61,6 @@ tags:
   const result = applyPatches(initialYaml, patches);
 
   expect(result).toBeDefined();
-  // Array values
   expect(result.includes("tags:")).toEqual(true);
   expect(result.includes("- deno")).toEqual(true);
   expect(result.includes("- typescript")).toEqual(true);
@@ -73,7 +69,6 @@ tags:
   expect(result.includes("- std")).toEqual(true);
   expect(result.includes("- testing")).toEqual(true);
 
-  // Nested object values
   expect(result.includes("config:")).toEqual(true);
   expect(result.includes("  port: 3000")).toEqual(true);
   expect(result.includes("  host: localhost")).toEqual(true);
@@ -102,7 +97,6 @@ license: MIT      # License type
 
   const result = applyPatches(initialYaml, patches);
 
-  // Verify all comments are preserved
   expect(result.includes("# Main package configuration")).toEqual(true);
   expect(result.includes("# The package name")).toEqual(true);
   expect(result.includes("# Current version")).toEqual(true);
@@ -110,31 +104,26 @@ license: MIT      # License type
   expect(result.includes("# Package maintainer")).toEqual(true);
   expect(result.includes("# License type")).toEqual(true);
 
-  // Verify content is correct and in order
   expect(result.includes("version: 2.0.0")).toEqual(true);
   expect(result.includes("description: An updated package")).toEqual(true);
   expect(result.includes("newProp: new value")).toEqual(true);
 
-  // Verify trailing newlines are preserved
   expect(result.endsWith("\n")).toEqual(true);
   const lines = result.split("\n");
   expect(lines[lines.length - 1]).toEqual("");
 });
 
 test("YAML patching - edge cases", () => {
-  // Test empty input
   const emptyResult = applyPatches("", [
     { op: "set-key", path: "name", value: "new-package" },
   ]);
   expect(emptyResult.trim()).toEqual("name: new-package");
 
-  // Test single line with trailing newline
   const singleLineResult = applyPatches("key: value\n", [
     { op: "set-key", path: "key", value: "new value" },
   ]);
   expect(singleLineResult).toEqual("key: new value\n");
 
-  // Test multiple trailing newlines
   const multiNewlineResult = applyPatches("key: value\n\n\n", [
     { op: "set-key", path: "key", value: "new value" },
   ]);
@@ -158,11 +147,9 @@ license: MIT
   const result = applyPatches(initialYaml, patches);
 
   expect(result).toBeDefined();
-  // Verify deleted keys are gone
   expect(result.includes("version:")).toEqual(false);
   expect(result.includes("author:")).toEqual(false);
 
-  // Verify remaining keys are still present
   expect(result.includes("name: my-package")).toEqual(true);
   expect(result.includes("description: A sample package")).toEqual(true);
   expect(result.includes("license: MIT")).toEqual(true);
@@ -185,12 +172,10 @@ author: John Doe  # Main author
 
   const result = applyPatches(initialYaml, patches);
 
-  // Verify the key and its comments are removed
   expect(result.includes("version:")).toEqual(false);
   expect(result.includes("# Version number")).toEqual(false);
   expect(result.includes("# Current version")).toEqual(false);
 
-  // Verify other content remains
   expect(result.includes("# Package configuration")).toEqual(true);
   expect(result.includes("name: my-package")).toEqual(true);
   expect(result.includes("# Description")).toEqual(true);
@@ -216,13 +201,11 @@ author: John Doe
 
   const result = applyPatches(initialYaml, patches);
 
-  // Verify the key and its list values are removed
   expect(result.includes("tags:")).toEqual(false);
   expect(result.includes("- node")).toEqual(false);
   expect(result.includes("- typescript")).toEqual(false);
   expect(result.includes("- yaml")).toEqual(false);
 
-  // Verify other content remains
   expect(result.includes("name: my-package")).toEqual(true);
   expect(result.includes("dependencies:")).toEqual(true);
   expect(result.includes("- std")).toEqual(true);
@@ -246,14 +229,12 @@ author: John Doe
 
   const result = applyPatches(initialYaml, patches);
 
-  // Verify the key and its nested content are removed
   expect(result.includes("config:")).toEqual(false);
   expect(result.includes("port: 3000")).toEqual(false);
   expect(result.includes("host: localhost")).toEqual(false);
   expect(result.includes("debug: true")).toEqual(false);
   expect(result.includes("timeout: 5000")).toEqual(false);
 
-  // Verify other content remains
   expect(result.includes("name: my-package")).toEqual(true);
   expect(result.includes("author: John Doe")).toEqual(true);
 });
@@ -268,7 +249,6 @@ version: 1.0.0
 
   const result = applyPatches(initialYaml, patches);
 
-  // Verify nothing changes when deleting a non-existent key
   expect(result.includes("name: my-package")).toEqual(true);
   expect(result.includes("version: 1.0.0")).toEqual(true);
   expect(result).toEqual(initialYaml);
@@ -292,15 +272,12 @@ license: MIT
 
   const result = applyPatches(initialYaml, patches);
 
-  // Verify deletions
   expect(result.includes("author:")).toEqual(false);
   expect(result.includes("description:")).toEqual(false);
 
-  // Verify updates and additions
   expect(result.includes("version: 2.0.0")).toEqual(true);
   expect(result.includes("maintainer: Jane Smith")).toEqual(true);
 
-  // Verify unchanged content
   expect(result.includes("name: my-package")).toEqual(true);
   expect(result.includes("license: MIT")).toEqual(true);
 });
@@ -318,7 +295,6 @@ version: 1.0.0
 
   const result = applyPatches(initialYaml, patches);
 
-  // Result should be effectively empty (just newlines)
   expect(result.trim()).toEqual("");
 });
 
@@ -337,13 +313,11 @@ license: MIT
 
   const result = applyPatches(initialYaml, patches);
 
-  // Verify structure is maintained
   expect(result.includes("# Header comment")).toEqual(true);
   expect(result.includes("name: my-package")).toEqual(true);
   expect(result.includes("description: A sample package")).toEqual(true);
   expect(result.includes("# Footer comment")).toEqual(true);
   expect(result.includes("license: MIT")).toEqual(true);
 
-  // Verify deleted key is gone
   expect(result.includes("version:")).toEqual(false);
 });

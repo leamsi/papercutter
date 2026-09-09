@@ -1,4 +1,3 @@
-// client/lib/inline_safe.test.ts
 import { expect, test } from "vitest";
 import { isInlineSafeContentType } from "./inline_safe.ts";
 

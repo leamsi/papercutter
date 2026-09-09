@@ -30,25 +30,21 @@ test("readRef checks", async () => {
   await sleep(1);
   await space.writePage("test", testPage);
 
-  // Reference to page
   expect(await space.readRef(parseToRef("test")!)).toEqual({
     text: testPage,
     offset: 0,
   });
 
-  // Pointer to a paragraph
   expect(await space.readRef(parseToRef("test@0")!)).toEqual({
     text: "Some paragraph",
     offset: 0,
   });
 
-  // With a linecolumn ref
   expect(await space.readRef(parseToRef("test@l1c1")!)).toEqual({
     text: "Some paragraph",
     offset: 0,
   });
 
-  // Reference to a header
   expect(await space.readRef(parseToRef("test#Header 1")!)).toEqual({
     text: "# Header 1\nSome text\n\n",
     offset: testPage.indexOf("# Header 1"),
@@ -58,21 +54,18 @@ test("readRef checks", async () => {
     offset: testPage.indexOf("# Header 2"),
   });
 
-  // Reference to an item should get item and children
   const itemPos = testPage.indexOf("* Item 1");
   expect(await space.readRef(parseToRef(`test@${itemPos}`)!)).toEqual({
     text: "* Item 1\n  * Sub item",
     offset: itemPos,
   });
 
-  // Reference to a task should get item and children
   const taskPos = testPage.indexOf("* [ ] Task 1");
   expect(await space.readRef(parseToRef(`test@${taskPos}`)!)).toEqual({
     text: "* [ ] Task 1\n  * Sub item 2\n    * Sub-sub item",
     offset: taskPos,
   });
 
-  // Check left shift in case of jumping into nested item
   const subItemPos = testPage.indexOf("* Sub item 2");
   expect(await space.readRef(parseToRef(`test@${subItemPos}`)!)).toEqual({
     text: "* Sub item 2\n  * Sub-sub item",
@@ -80,7 +73,6 @@ test("readRef checks", async () => {
   });
 });
 
-// Helper to create a pageMeta for tests
 const makeMeta = (name: string): PageMeta => ({
   ref: name,
   tag: "page",
@@ -162,7 +154,6 @@ describe("readRef anchor variant", () => {
       (name, page) => resolveAnchor(name, page),
     );
     await sleep(1);
-    // Define $pete on two different pages so the resolver returns duplicate
     await space.writePage("PageA", "First $pete anchor.");
     await space.writePage("PageB", "Second $pete anchor.");
     await indexPage("First $pete anchor.", "PageA");

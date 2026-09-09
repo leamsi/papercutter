@@ -388,7 +388,7 @@ mod tests {
         assert_eq!(b.access(), SpaceAccess::None);
         assert!(b.members.is_empty());
         assert!(!b.read_only);
-        assert!(!b.shell.enabled); // shell is off unless explicitly enabled
+        assert!(!b.shell.enabled);
         assert_eq!(b.index_page, "index");
         assert_eq!(b.folder, ""); // empty = resolved elsewhere
     }
@@ -425,7 +425,6 @@ mod tests {
     fn round_trip_preserves_unknown_fields_and_orders_by_name() {
         let c = MultiConfig::from_json(sample_json()).unwrap();
         let out = c.to_json_string().unwrap();
-        // Alpha sorts before Beta even though the input had Beta first.
         let ia = out.find("\"id-a\"").unwrap();
         let ib = out.find("\"id-b\"").unwrap();
         assert!(ia < ib, "name-sorted: {out}");
@@ -433,7 +432,6 @@ mod tests {
             out.contains("futureField"),
             "unknown field preserved: {out}"
         );
-        // And it re-parses identically.
         let again = MultiConfig::from_json(&out).unwrap();
         assert_eq!(again.spaces["id-a"].name, "Alpha");
     }
@@ -509,10 +507,7 @@ mod tests {
         assert_eq!(s.members["sam"].role, MemberRole::Read);
         let out = c.to_json_string().unwrap();
         assert!(out.contains("members"), "{out}");
-        // A regression that ever made `role` default-on-write (or skipped it
-        // entirely) would silently promote every `read` member to a writer
-        // on the next save — this is the one test that loads a legacy file,
-        // normalizes, and re-serializes it to catch that.
+        // Read-only member roles must survive configuration normalization and saving.
         assert!(!out.contains("\"public\""), "{out}");
         assert!(out.contains("\"role\": \"read\""), "{out}");
     }
@@ -718,7 +713,6 @@ mod tests {
         assert_eq!(quiet, std::time::Duration::from_secs(120));
         assert_eq!(max, std::time::Duration::from_secs(120));
 
-        // And never below the absolute floor.
         let (_, max) = CommitTiming {
             quiet_secs: 5,
             max_interval_secs: 1,

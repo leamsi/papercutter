@@ -28,7 +28,6 @@ def greet(name):
     await gotoSilverBulletPage(page, sbServer, "CodeTest");
     const editor = page.locator("#sb-editor .cm-content");
 
-    // Verify the code block content is rendered
     await expect(editor).toContainText("const greeting");
 
     // Wait for syntax highlighting to appear — CodeMirror applies
@@ -37,17 +36,14 @@ def greet(name):
     // this may take a moment.
     const codeBlock = page.locator("#sb-editor .cm-editor");
 
-    // "const" should be highlighted as a keyword
     await expect(
       codeBlock.locator(".sb-keyword", { hasText: "const" }),
     ).toBeVisible({ timeout: 15_000 });
 
-    // "greeting" should be highlighted as a variable name (appears multiple times)
     await expect(
       codeBlock.locator(".sb-variableName", { hasText: "greeting" }).first(),
     ).toBeVisible({ timeout: 5_000 });
 
-    // The string literal should be highlighted
     await expect(
       codeBlock.locator(".sb-string", { hasText: '"hello world"' }),
     ).toBeVisible({ timeout: 5_000 });
@@ -64,12 +60,10 @@ def greet(name):
 
     const codeBlock = page.locator("#sb-editor .cm-editor");
 
-    // "def" should be highlighted as a keyword
     await expect(
       codeBlock.locator(".sb-keyword", { hasText: "def" }),
     ).toBeVisible({ timeout: 15_000 });
 
-    // "return" should be highlighted as a keyword
     await expect(
       codeBlock.locator(".sb-keyword", { hasText: "return" }),
     ).toBeVisible({ timeout: 5_000 });

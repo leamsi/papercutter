@@ -66,9 +66,7 @@ function share.sharePage(name)
     if not remoteText then
       error("Could not read " .. m.uri)
     end
-    -- Two-way sync mode
     local newRemoteHash = share.contentHash(remoteText)
-    -- Sync cases
     if oldHash == newLocalHash and oldHash == newRemoteHash then
       print("Both sides up to date: nothing to do")
       return false
@@ -113,7 +111,6 @@ function share.sharePage(name)
     end
   end
 
-  -- Update frontmatter
   m.hash = newHash
   m.mode = mode
   local updatedText = share.setFrontmatter(m, text)

@@ -37,11 +37,8 @@ const cdataEndRe = /\]\]>/;
 // Type 6 & 7: block-level elements — terminate on empty line
 const emptyLineRe = /^[ \t]*$/;
 
-// Matches an opening tag: <tagName ...>  (not self-closing)
 const openTagRe = /^<([a-zA-Z][\w-]*)((?:\s+[^>]*?)?)>/;
-// Matches a self-closing tag: <tagName ... />
 const selfCloseTagRe = /^<([a-zA-Z][\w-]*)((?:\s+[^>]*?)?)\s*\/>/;
-// Matches a closing tag: </tagName>
 const closeTagRe = /^<\/([a-zA-Z][\w-]*)>/;
 
 /**
@@ -56,9 +53,7 @@ function parseRawHtmlBlock(
   nodeType: string,
 ): true {
   const from = cx.lineStart + line.pos;
-  while (!endPattern.test(line.text) && cx.nextLine()) {
-    // keep consuming lines
-  }
+  while (!endPattern.test(line.text) && cx.nextLine()) {}
   cx.nextLine();
   const to = cx.prevLineEnd();
   cx.addElement(cx.elt(nodeType, from, to));
@@ -109,21 +104,18 @@ function parseStructuredHtmlBlock(cx: BlockContext, line: Line): true {
   const startPos = cx.lineStart + line.pos;
   const lineText = line.text.slice(line.pos);
 
-  // Collect the full block text across lines
   let fullText = lineText;
   while (cx.nextLine()) {
     if (emptyLineRe.test(line.text)) break;
     fullText += `\n${line.text}`;
   }
 
-  // Tokenise into tags and text segments, build child elements
   const children: ReturnType<typeof cx.elt>[] = [];
   let pos = 0;
   const absBase = startPos;
 
   while (pos < fullText.length) {
     if (fullText[pos] === "<") {
-      // Try self-closing tag first
       let m = selfCloseTagRe.exec(fullText.slice(pos));
       if (m) {
         children.push(
@@ -137,7 +129,6 @@ function parseStructuredHtmlBlock(cx: BlockContext, line: Line): true {
         continue;
       }
 
-      // Try closing tag
       m = closeTagRe.exec(fullText.slice(pos));
       if (m) {
         children.push(
@@ -147,7 +138,6 @@ function parseStructuredHtmlBlock(cx: BlockContext, line: Line): true {
         continue;
       }
 
-      // Try opening tag
       m = openTagRe.exec(fullText.slice(pos));
       if (m) {
         children.push(
@@ -157,22 +147,18 @@ function parseStructuredHtmlBlock(cx: BlockContext, line: Line): true {
         continue;
       }
 
-      // Unrecognised tag-like content: advance past '<'
       pos++;
       continue;
     }
 
-    // Text segment: collect until the next '<' or end
     const textStart = pos;
     while (pos < fullText.length && fullText[pos] !== "<") {
       pos++;
     }
 
     const textContent = fullText.slice(textStart, pos);
-    // Skip pure-whitespace segments
     if (/^\s*$/.test(textContent)) continue;
 
-    // Parse as inline markdown
     const inlineElements = cx.parser.parseInline(
       textContent,
       absBase + textStart,
@@ -207,12 +193,10 @@ const htmlBlockParser: BlockParser = {
 
     const lineText = line.text.slice(line.pos);
 
-    // Type 1: <script>, <pre>, <style>
     if (scriptPreStyleRe.test(lineText)) {
       return parseRawHtmlBlock(cx, line, scriptPreStyleEndRe, "HTMLBlock");
     }
 
-    // Type 2: <!-- comment -->
     if (commentStartRe.test(lineText)) {
       if (markerCommentRe.test(lineText)) {
         return parseRawHtmlBlock(cx, line, commentEndRe, "CommentMarkerBlock");
@@ -220,7 +204,6 @@ const htmlBlockParser: BlockParser = {
       return parseCommentBlock(cx, line);
     }
 
-    // Type 3: <?processing instruction?>
     if (processingStartRe.test(lineText)) {
       return parseRawHtmlBlock(
         cx,
@@ -230,22 +213,18 @@ const htmlBlockParser: BlockParser = {
       );
     }
 
-    // Type 4: <!DOCTYPE ...>
     if (declarationStartRe.test(lineText)) {
       return parseRawHtmlBlock(cx, line, declarationEndRe, "HTMLBlock");
     }
 
-    // Type 5: <![CDATA[ ... ]]>
     if (cdataStartRe.test(lineText)) {
       return parseRawHtmlBlock(cx, line, cdataEndRe, "HTMLBlock");
     }
 
-    // Type 6: block-level elements
     if (blockTagRe.test(lineText)) {
       return parseStructuredHtmlBlock(cx, line);
     }
 
-    // Not an HTML block we handle
     return false;
   },
   before: "HTMLBlock",

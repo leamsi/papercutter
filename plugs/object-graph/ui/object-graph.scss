@@ -263,9 +263,6 @@ html, body { height: 100%; background: var(--ui-surface-background-color); color
   flex-shrink: 0;
 }
 
-// Toolbar buttons + checkboxes now use the shared `.sb-button` / `.sb-checkbox`
-// components; only the toggle-label layout and close-button positioning remain
-// graph-specific.
 .gv-header-toggle {
   display: inline-flex;
   align-items: center;

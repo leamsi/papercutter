@@ -286,8 +286,6 @@ pub async fn handle_file_revisions(
             Err(e) => revisions_error(e),
         };
     }
-    // No `rev`, but a diff asked for: the change that has not been committed
-    // yet, HEAD versus what is on disk.
     if q.format.as_deref() == Some("diff") {
         let result = run_blocking(move || read::working_diff(history.store(), &path)).await;
         return match result {
@@ -542,7 +540,6 @@ mod tests {
         let body = String::from_utf8(bytes.to_vec()).unwrap();
         assert!(body.contains("+v3"), "{body}");
 
-        // Nothing outstanding: a 404, not an empty 200.
         std::fs::write(dir.path().join("note.md"), b"v2").unwrap();
         let resp = crate::build_router(state)
             .oneshot(
@@ -654,7 +651,6 @@ mod tests {
         let (_, log) = get_json(crate::build_router(state.clone()), "/.revisions/").await;
         assert_eq!(log["commits"].as_array().unwrap().len(), 3);
 
-        // Nothing outstanding the second time around.
         let (status, json) = post_json(crate::build_router(state), "/.revisions/").await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(json["committed"], false);

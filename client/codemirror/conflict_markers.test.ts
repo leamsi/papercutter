@@ -436,9 +436,8 @@ describe("computeFenceMask", () => {
     expect(mask[4]).toBe(false); // after the fence closes
   });
 
-  // The boundary CommonMark itself draws: 4+ leading spaces is an indented
-  // code block, a different mechanism this pass doesn't track at all (see
-  // the "known limitation" note in the task report) — not a fence opener.
+  // Four leading spaces open an indented code block, not a fence. This scan
+  // does not track indented code blocks.
   test("4+ leading spaces does not open a fence", () => {
     const text = ["    ```", "not inside a fence"].join("\n");
     const mask = computeFenceMask(docOf(text));
@@ -558,10 +557,8 @@ describe("resolveHunk", () => {
   });
 });
 
-// Regression coverage for a bug that only showed up once the decoration
-// extension actually built an EditorState: `findConflictHunks` alone can't
-// catch a CodeMirror-side RangeError from `hideBlockSource`, since that's
-// only triggered when a real EditorState assembles the decoration set.
+// Build EditorState to exercise decoration assembly; findConflictHunks
+// alone cannot detect RangeErrors from hideBlockSource.
 describe("conflictMarkers extension (smoke)", () => {
   const stubClient = {} as unknown as Client;
 

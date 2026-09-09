@@ -11,7 +11,6 @@ export function throttle(
       }, limit);
     }
   };
-  // Immediately execute any pending call and cancel the timer
   throttled.flush = () => {
     if (timer) {
       clearTimeout(timer);
@@ -91,7 +90,7 @@ export class PromiseQueue {
       reject(error);
     }
 
-    void this.process(); // Continue processing the next promise in the queue
+    void this.process();
   }
 }
 
@@ -108,17 +107,13 @@ export async function batchRequests<I, O>(
   batchSize: number,
 ): Promise<O[]> {
   const results: O[] = [];
-  // Split values into batches of batchSize
   const batches: I[][] = [];
   for (let i = 0; i < values.length; i += batchSize) {
     batches.push(values.slice(i, i + batchSize));
   }
-  // Run fn on them in parallel
   const batchResults = await Promise.all(batches.map(fn));
-  // Flatten the results
   for (const batchResult of batchResults) {
     if (Array.isArray(batchResult)) {
-      // If fn returns an array, collect them
       results.push(...batchResult);
     }
   }

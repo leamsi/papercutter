@@ -95,7 +95,7 @@ async fn wait_for_shutdown(mut shutdown: Option<tokio::sync::watch::Receiver<()>
 }
 
 /// A named `sync` event, delivered only to `addEventListener("sync")` --
-/// `onmessage` (old clients included) never sees it, so this is additive.
+/// `onmessage` listeners do not receive named sync events.
 /// Stripped of `Error`'s message: this endpoint needs only `AccessLevel::Read`,
 /// so on a public space the raw git stderr would reach any visitor.
 fn sync_event(state: &crate::revisions::SyncState) -> Event {
@@ -118,10 +118,7 @@ pub(crate) async fn handle_events(
                 Ok(ev) => Some(Ok::<Event, Infallible>(
                     Event::default().data(serde_json::to_string(&ev).expect("FsEvent serializes")),
                 )),
-                // Lagged: this consumer overflowed the broadcast buffer and lost
-                // events; hand it a resync instead of losing them silently. Built
-                // through the same `FsEvent::resync()` constructor the watcher's
-                // own flood-control path uses, so the two can't diverge.
+                // Lost events require a full resync, as with watcher flood control.
                 Err(BroadcastStreamRecvError::Lagged(_)) => Some(Ok(Event::default().data(
                     serde_json::to_string(&crate::watcher::FsEvent::resync())
                         .expect("FsEvent serializes"),
@@ -158,11 +155,8 @@ pub(crate) async fn handle_events(
             None => Box::pin(tokio_stream::empty()),
         };
     let stream = fs_stream.merge(sync_stream);
-    // Gecko and WebKit leave EventSource at CONNECTING until the first body
-    // byte arrives, so without this comment `onopen` waits for the first real
-    // event (or the 30s ping) -- and until it fires the client cannot tell a
-    // dropped connection from an unsupported endpoint, and skips its reconnect
-    // catch-up.
+    // Gecko and WebKit wait for a body byte before EventSource.onopen;
+    // send a comment now so reconnect catch-up does not wait for a real event.
     let stream =
         tokio_stream::once(Ok::<Event, Infallible>(Event::default().comment("open"))).chain(stream);
     let stream = EndOnShutdown {
@@ -344,12 +338,8 @@ mod tests {
         assert!(!text.contains("git.internal.test"), "frame was: {text}");
     }
 
-    /// The scenario Task 11 exists for: Space History isn't open and the
-    /// conflicted page isn't open, so a fresh connection (a page load, or a
-    /// reconnect after a drop) is the only way this client can learn about
-    /// an *already* unresolved conflict -- there is no future transition to
-    /// wait for, since the engine transitioned into it before this client
-    /// ever subscribed.
+    /// Clients connecting during a conflict need the terminal state immediately,
+    /// even when no new transition occurs after they subscribe.
     #[tokio::test]
     async fn a_client_connecting_mid_conflict_learns_immediately() {
         use tokio_stream::StreamExt as _;
@@ -405,9 +395,8 @@ mod tests {
         engine.set_sync_state_for_test(crate::revisions::SyncState::Conflicted {
             paths: vec!["a.md".into()],
         });
-        // Simulates a tick in flight: `sync_state` (what a naive read would
-        // use) now says `Syncing`, but `last_broadcast_sync_state` (what the
-        // fix reads) still says `Conflicted`.
+        // A tick is in flight: sync_state is Syncing while the last terminal
+        // state remains Conflicted.
         engine.set_sync_state_silent_for_test(crate::revisions::SyncState::Syncing);
         state.revisions = Some(engine);
         let app = build_router(Arc::new(state));
@@ -542,7 +531,6 @@ mod tests {
         state.fs_events = Some(tx);
         let state = Arc::new(state);
 
-        // No credentials at all: 401.
         let resp = build_router(state.clone())
             .oneshot(Request::get("/.events").body(Body::empty()).unwrap())
             .await
@@ -564,14 +552,7 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
-    /// The bug this guards against: before the shutdown signal was wired in,
-    /// an open `/.events` connection was an HTTP response that never
-    /// completed, so `axum::serve(...).with_graceful_shutdown` would hang
-    /// forever waiting for it to finish. Here the broadcast sender is kept
-    /// alive (so, absent a fix, the stream has no other reason to end) and no
-    /// fs events are ever sent; only firing the shutdown watch channel should
-    /// let the body collection complete. `tokio::time::timeout` makes a
-    /// regression fail the test instead of hanging it.
+    /// Shutdown must close a quiet SSE stream even while its event senders remain alive.
     #[tokio::test]
     async fn shutdown_signal_ends_an_open_stream() {
         let mut state = test_state();

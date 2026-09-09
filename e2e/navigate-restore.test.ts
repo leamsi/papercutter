@@ -40,22 +40,9 @@ async function selectionLine(
 }
 
 /**
- * Arms a one-shot latch on the client's own page-load event.
- *
- * `#sb-current-page` is NOT the anchor for "the remembered position has been
- * restored": `loadPage` dispatches its `page-loaded` view action (which is
- * what flips the title) several awaits *before* it calls
- * `navigateWithinPage()`, which is what applies the remembered
- * scroll/selection (`client/content_manager.ts`). Reading the selection as
- * soon as the title flips can therefore land in that window and see the fresh
- * document's cursor at line 1.
- *
- * `editor:pageLoaded` / `editor:pageReloaded` are dispatched at the *end* of
- * `loadPage`, after `navigateWithinPage()` has run, so awaiting one of them is
- * the real anchor. Navigations the test drives through an awaited client call
- * (`client.open`, `client.navigate`, the `editor.open` syscall) already resolve
- * past the restore; a browser Back, a wiki-link click and a picker Enter do
- * not -- those are the ones that need this latch.
+ * Wait for editor:pageLoaded/editor:pageReloaded, emitted after position restore.
+ * The title changes earlier and cannot prove restoration finished. Browser Back,
+ * link clicks and picker selections need this latch; awaited client navigation does not.
  */
 async function armPageLoaded(
   page: import("@playwright/test").Page,

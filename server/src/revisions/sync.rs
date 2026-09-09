@@ -700,10 +700,8 @@ pub(crate) mod tests {
             "a\n<<<<<<< HEAD\nmine\n=======\ntheirs\n>>>>>>> origin/main\nb\n"
         ));
         assert!(!has_conflict_markers("just some prose\n"));
-        // A partial or out-of-order set is not a conflict.
         assert!(!has_conflict_markers("<<<<<<< HEAD\nmine\n"));
         assert!(!has_conflict_markers(">>>>>>> x\n=======\n<<<<<<< y\n"));
-        // Trailing whitespace on the separator line must not hide a real conflict.
         assert!(has_conflict_markers(
             "<<<<<<< HEAD\nmine\n======= \ntheirs\n>>>>>>> origin/main\n"
         ));
@@ -724,13 +722,11 @@ pub(crate) mod tests {
             TickOutcome::Conflicted(_)
         ));
 
-        // Still conflicted: nothing has been resolved yet.
         assert_eq!(
             try_complete_merge(work.path()).unwrap(),
             MergeCompletion::Pending
         );
 
-        // The user picks a side in the editor, which rewrites the file.
         std::fs::write(work.path().join("note.md"), "mine and theirs\n").unwrap();
 
         assert_eq!(
@@ -740,7 +736,6 @@ pub(crate) mod tests {
         assert!(!crate::revisions::store::merge_in_progress(work.path()));
         assert!(unmerged_paths(work.path()).is_empty());
 
-        // And the next tick can now push the merge.
         assert_eq!(tick(work.path(), &[], false).unwrap(), TickOutcome::Pushed);
     }
 

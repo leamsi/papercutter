@@ -1182,7 +1182,7 @@ test("create: tree mode pins the create row below the tree", async ({
 test("create: tree mode, Enter creates when the phrase pruned the tree away", async ({
   sbPage,
 }) => {
-  // With no tree rows left, selection used to fall back to index 0, which resolved to no node and no create row -- Enter did nothing. No End press here: the create row must already be the selection.
+  // Do not press End: with no results, the create row must already be selected.
   const frame = await openNavigatorView(sbPage, "Navigator: Create Tree Small");
   await expect(frame.locator("[data-path='Alpha']")).toBeVisible();
   const input = frame.locator("input.sb-nav-input");
@@ -2047,12 +2047,8 @@ test.describe("actions", () => {
 test("activation: an activation still in flight can't clobber the one that took the slot from it", async ({
   sbPage,
 }) => {
-  // The first view's rows are held up, so its activation is still mid-flight
-  // when the second takes the slot; when they finally land, its tail runs
-  // against a panel that belongs to the newer view. It must not put its own
-  // view, its phrase reset or its focus on top of it. (The out-of-order
-  // *arrival* this used to guard against is structural now: an activation is
-  // the slot's state, so there is no dispatch left to overtake.)
+  // Delay the first activation until the second owns the slot. Its late
+  // completion must not overwrite the newer view, phrase or focus.
   const HOLD_MS = 1500;
   await sbPage.evaluate((holdMs) => {
     const engines = (globalThis as any).__navigatorEngines;
@@ -2505,7 +2501,7 @@ test.describe("segments", () => {
   test("empty refreshOn and filter.fields tables mean 'none', not 'broken'", async ({
     sbPage,
   }) => {
-    // refreshOn = {} used to reach the panel as an object and fail the open outright ("object is not iterable"); filter = { fields = {} } used to survive as a truthy field map and rank every row 0.
+    // Empty Lua tables must be normalized for refreshOn and filter.fields.
     const frame = await openNavigatorView(sbPage, "Navigator: Empty Tables");
     await expect(frame.locator(".sb-nav-row")).toHaveCount(4);
 
@@ -2566,7 +2562,7 @@ test.describe("segments", () => {
     await expect(frame.locator(".sb-nav-row").first()).toBeVisible();
     await dragSidebar(sbPage, frame, 400);
 
-    // A name wider than the dock used to run past the pane and stop mid-glyph, its own ellipsis rendered off-screen where nothing could see it.
+    // The name and its ellipsis must fit inside the dock.
     const overrun = await frame.locator(".sb-nav-body").evaluate((body) => {
       const limit = body.getBoundingClientRect().right;
       return [...body.querySelectorAll(".sb-nav-primary")].filter(
@@ -3484,12 +3480,8 @@ test.describe("built-in views", () => {
     ).toBeVisible();
   });
 
-  // closed -> open+focus and unfocused -> refocus are pre-existing behavior;
-  // focused -> hide is new (see show's toggle branch in navigator.ts).
-  // Cmd-o is Safari-the-app's own reserved "Open File..." accelerator, claimed
-  // at the OS/app level before any web page sees the keydown -- no
-  // capture-phase listener can win that race, hence the secondary binding this
-  // also exercises.
+  // The focused view toggles closed; an unfocused view receives focus.
+  // Safari reserves Cmd-o at the app level, so also exercise the secondary binding.
   test("Cmd-o and Cmd-Shift-o each toggle the tree dock (closed -> open+focus, unfocused -> refocus, focused -> hide), and interchangeably", async ({
     sbPage,
   }) => {
@@ -3497,8 +3489,7 @@ test.describe("built-in views", () => {
     const frame = sidebarFrame(sbPage);
     await expect(frame.locator("[data-path='Projects']")).toBeVisible();
     await expectNavInputFocused(sbPage, ".sb-nav-root-lhs");
-    // A modal is what the old (now-removed) Cmd-o binding opened, so this
-    // proves that binding is really gone, not just superseded visually.
+    // The chord must open only the sidebar, without a competing modal.
     await expect(sbPage.locator(".sb-modal")).toBeHidden();
 
     await sbPage.locator("#sb-editor .cm-content").click();
@@ -3752,7 +3743,7 @@ test.describe("boot restore", () => {
     sbPage,
     sbServer,
   }) => {
-    // Opens as a modal by default now (no persisted dock preference yet);
+    // Opens as a modal by default (no persisted dock preference yet);
     // pin it to a sidebar first, same as any other multi-dock view.
     await runCommand(sbPage, "Navigate: Table of Contents");
     const modal = sbPage.locator(".sb-nav-root-modal");
@@ -4554,10 +4545,8 @@ test.describe("builtins with no Space Lua navigator definitions present", () => 
     });
 
     await sbPage.locator("#sb-editor .cm-content").click();
-    // Opens as a modal by default (no persisted dock preference yet); no
-    // Space Lua config here comes from the user's own space, only the std
-    // library's own view.define -- proof the built-in-name collision
-    // guard in registry.ts no longer blocks std.toc now it isn't a builtin.
+    // The bundled Widgets.md definition must register std.toc without
+    // user configuration or a built-in-name collision.
     await runCommandViaPalette(sbPage, "Navigate: Table of Contents");
     const outline = sbPage.locator(".sb-nav-root-modal");
     await expect(outline.locator(".sb-nav-title")).toHaveText(

@@ -5,10 +5,8 @@ export function diffAndPrepareChanges(
   oldString: string,
   newString: string,
 ): ChangeSpec[] {
-  // Use the fast-diff library to compute the changes
   const diffs = diff(oldString, newString);
 
-  // Convert the diffs to CodeMirror transactions
   let startIndex = 0;
   const changes: ChangeSpec[] = [];
   for (const part of diffs) {

@@ -50,7 +50,6 @@ export function deepEqual(a: any, b: any): boolean {
  * @param d the date to convert
  */
 export function cleanStringDate(d: Date): string {
-  // If no significant time, return a date string only
   if (
     d.getUTCHours() === 0 &&
     d.getUTCMinutes() === 0 &&
@@ -85,7 +84,6 @@ export function cleanupJSON(a: any): any {
   if (Array.isArray(a)) {
     return a.map(cleanupJSON);
   }
-  // If a is a date, convert to a string
   if (a instanceof Date) {
     return cleanStringDate(a);
   }
@@ -106,17 +104,14 @@ export function cleanupJSON(a: any): any {
 }
 
 export function deepClone<T>(obj: T, ignoreKeys: string[] = []): T {
-  // Handle null, undefined, or primitive types (string, number, boolean, symbol, bigint)
   if (obj === null || typeof obj !== "object") {
     return obj;
   }
 
-  // Handle Date
   if (obj instanceof Date) {
     return new Date(obj.getTime()) as any;
   }
 
-  // Handle Array
   if (Array.isArray(obj)) {
     const arrClone: any[] = [];
     for (let i = 0; i < obj.length; i++) {
@@ -125,7 +120,6 @@ export function deepClone<T>(obj: T, ignoreKeys: string[] = []): T {
     return arrClone as any;
   }
 
-  // Handle Object
   if (obj instanceof Object) {
     const objClone: { [key: string]: any } = {};
     for (const key in obj) {

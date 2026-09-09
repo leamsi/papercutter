@@ -317,9 +317,6 @@ export function findConflictHunks(doc: Text): ConflictHunk[] {
       n++;
       continue;
     }
-    // A git-form start inside a fence is ignored (treated as not a start at
-    // all); an SB-form start never is — see the module doc on
-    // `computeFenceMask`/`scanForLine` for why.
     if (start.kind === "git" && fenceMask[n]) {
       n++;
       continue;

@@ -1,9 +1,7 @@
 import { expect, test } from "vitest";
 import { navigatorSyscalls } from "./navigator.ts";
 
-// Round 2 (c): `view.*` is the canonical Lua-facing namespace; `navigator.*`
-// is a permanent alias -- same callback, not a reimplementation, so the two
-// can never drift apart.
+// view.* is canonical; navigator.* aliases the same callbacks.
 test("navigatorSyscalls registers every view.* entry a second time under navigator.*, with the identical callback", () => {
   const syscalls = navigatorSyscalls();
 

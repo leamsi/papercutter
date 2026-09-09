@@ -161,7 +161,6 @@ export async function expressionToPortableMarkdown(
     }
     return { ok: false, reason: "html-only widget (no markdown rendering)" };
   }
-  // Scalars, tables, arrays, plain strings → clean GFM markdown.
   const markdown = await renderResultToCleanMarkdown(
     rawResult,
     classifyResult(rawResult),

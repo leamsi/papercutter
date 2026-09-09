@@ -31,7 +31,6 @@ export class Plug<HookT> {
     const plug = new Plug(system, sandboxFactory);
     plug.path = path;
 
-    // Retrieve the manifest, which may either come from a cache or be loaded from the worker
     plug.manifest = await system.options.manifestCache!.getManifest(
       plug,
       path,
@@ -62,14 +61,12 @@ export class Plug<HookT> {
 
   // Invoke a function
   async invoke(name: string, args: any[]): Promise<any> {
-    // Before we access the manifest
     const funDef = this.manifest!.functions[name];
     if (!funDef) {
       throw new Error(`Function ${name} not found in manifest`);
     }
     const sandbox = this.sandbox!;
     if (funDef.redirect) {
-      // Function redirect, look up
       let plug: Plug<HookT> | undefined = this;
       if (funDef.redirect.indexOf(".") !== -1) {
         const [plugName, functionName] = funDef.redirect.split(".");

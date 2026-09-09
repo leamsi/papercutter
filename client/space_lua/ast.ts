@@ -38,7 +38,6 @@ export type LuaComment = {
   ctx: ASTCtx;
 };
 
-// STATEMENTS
 export type LuaReturnStatement = {
   type: "Return";
   expressions: LuaExpression[];
@@ -177,7 +176,6 @@ export type LuaFunctionCallStatement = {
   call: LuaFunctionCallExpression;
 } & ASTContext;
 
-// EXPRESSIONS
 export type LuaExpression =
   | LuaNilLiteral
   | LuaBooleanLiteral
@@ -294,21 +292,18 @@ export type LuaFunctionDefinition = {
   body: LuaFunctionBody;
 } & ASTContext;
 
-// Aggregate with per-row filter
 export type LuaFilteredCallExpression = {
   type: "FilteredCall";
   call: LuaFunctionCallExpression;
   filter: LuaExpression;
 } & ASTContext;
 
-// Aggregate call with intra-aggregate order by
 export type LuaAggregateCallExpression = {
   type: "AggregateCall";
   call: LuaFunctionCallExpression;
   orderBy: LuaOrderBy[];
 } & ASTContext;
 
-// Query stuff
 export type LuaQueryExpression = {
   type: "Query";
   clauses: LuaQueryClause[];

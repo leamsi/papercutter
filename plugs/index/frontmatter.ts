@@ -59,7 +59,6 @@ export function extractFrontMatter(
       for (const child of t.children!) {
         if (child.text) {
           if (child.text.startsWith("\n") && child.text !== "\n") {
-            // Multi line paragraph, cut it off here
             break;
           }
           if (child.text.trim()) {
@@ -82,7 +81,6 @@ export function extractFrontMatter(
             child.children![0].text = "";
           }
         } else if (child.type) {
-          // Found something else than tags, so... nope!
           onlyTags = false;
           break;
         }
@@ -91,20 +89,17 @@ export function extractFrontMatter(
         tags.push(...collectedTags);
       }
     }
-    // Find FrontMatter and parse it
     if (t.type === "FrontMatter") {
       const yamlNode = t.children![1].children![0];
       const yamlText = renderToText(yamlNode);
       frontmatter.range = [t.from!, t.to!];
       try {
         const parsedData: any = cleanupJSON(YAML.load(yamlText));
-        // console.log("Parsed front matter", parsedData);
         const newData = { ...parsedData };
         frontmatter = {
           ...frontmatter,
           ...stripPositionAttributes(parsedData),
         };
-        // Make sure we have a tags array
         if (!frontmatter.tags) {
           frontmatter.tags = [];
         }
@@ -130,16 +125,13 @@ export function extractFrontMatter(
             yamlNode.text = YAML.dump(newData);
           }
         }
-        // If nothing is left, let's just delete this whole block
         if (
           Object.keys(newData).length === 0 ||
           options.removeFrontMatterSection
         ) {
           return null;
         }
-      } catch {
-        // console.warn("Could not parse frontmatter", e.message);
-      }
+      } catch {}
     }
     if (t.type === "Attribute") {
       if (findParentMatching(t, (n) => n.type === "ListItem")) {
@@ -166,9 +158,7 @@ export function extractFrontMatter(
     frontmatter.tags = [
       ...new Set([
         ...tags.map((t) => {
-          // Always treat tags as strings
           const tagAsString = String(t);
-          // Strip # from tags
           return tagAsString.replace(/^#/, "");
         }),
       ]),

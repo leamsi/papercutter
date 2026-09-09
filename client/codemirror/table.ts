@@ -41,8 +41,6 @@ class TableViewWidget extends WidgetType {
     const dom = document.createElement("span");
     dom.classList.add("sb-table-widget");
     dom.addEventListener("click", (e) => {
-      // Pulling data-pos to put the cursor in the right place, falling back
-      // to the start of the table.
       const dataAttributes = (e.target as any).dataset;
       const fallbackPos = this.client.editorView.posAtDOM(dom, 0);
       this.client.editorView.dispatch({
@@ -72,7 +70,6 @@ class TableViewWidget extends WidgetType {
         resolveTransclusion,
       });
       setTimeout(() => {
-        // Give it a tick to render
         attachWidgetEventHandlers(dom, this.client, this.tableBodyText);
 
         this.client.widgetCache.setCachedWidgetMeta(

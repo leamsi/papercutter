@@ -23,7 +23,6 @@ export class KVPrimitivesManifestCache<T> implements ManifestCache<T> {
   ): Promise<Manifest<T>> {
     const [cached] = await this.kv.batchGet([[this.manifestPrefix, cacheKey]]);
     if (cached && cached.hash === cacheHash) {
-      // console.log("Using KV cached manifest for", plug.name);
       return cached.manifest;
     }
     await plug.sandbox.init();

@@ -88,7 +88,6 @@ export class SpaceLuaEnvironment {
         const scriptStart = performance.now();
         try {
           const ast = parseBlock(script.script, { ref: script.ref });
-          // We create a local scope for each script
           const scriptEnv = new LuaEnv(this.env);
           const budget = makeLuaBudget({
             busyLimitMs: BUSY_LIMIT_DEFAULT_MS,

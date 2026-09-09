@@ -129,7 +129,6 @@ function preprocess(t: ParseTree) {
   addParentPointers(t);
   traverseTree(t, (node) => {
     if (!node.type) {
-      // Remove redundant newlines in table
       if (node.text?.startsWith("\n")) {
         const prevNodeIdx = node.parent!.children!.indexOf(node) - 1;
         const prevNodeType = node.parent!.children![prevNodeIdx]?.type;
@@ -231,10 +230,8 @@ function render(t: ParseTree, options: MarkdownRenderOptions = {}): Tag | null {
         ),
       };
     }
-    // Code blocks
     case "FencedCode":
     case "CodeBlock": {
-      // Clear out top-level indent blocks
       const lang = findNodeOfType(t, "CodeInfo");
       t.children = t.children!.filter((c) => c.type);
       return {
@@ -259,7 +256,6 @@ function render(t: ParseTree, options: MarkdownRenderOptions = {}): Tag | null {
         name: "br",
         body: "",
       };
-    // Basic styling
     case "Emphasis":
       return {
         name: "em",
@@ -376,7 +372,6 @@ function render(t: ParseTree, options: MarkdownRenderOptions = {}): Tag | null {
       }
     }
 
-    // Custom stuff
     case "WikiLink": {
       const link = findNodeOfType(t, "WikiLinkPage")!.children![0].text!;
       let linkText =
@@ -527,7 +522,6 @@ function render(t: ParseTree, options: MarkdownRenderOptions = {}): Tag | null {
       };
     }
 
-    // Tables
     case "Table":
       return {
         name: "table",
@@ -732,7 +726,6 @@ function render(t: ParseTree, options: MarkdownRenderOptions = {}): Tag | null {
     case "HTMLTag":
       return renderToText(t);
 
-    // Text
     case undefined:
       return t.text!;
     default:
@@ -741,7 +734,6 @@ function render(t: ParseTree, options: MarkdownRenderOptions = {}): Tag | null {
         console.error("Not handling", JSON.stringify(t, null, 2));
         throw new Error(`Unknown markdown node type ${t.type}`);
       } else {
-        // Falling back to rendering verbatim
         removeParentPointers(t);
         console.warn("Not handling", JSON.stringify(t, null, 2));
         return renderToText(t);
@@ -764,14 +756,12 @@ function renderHtmlBlock(
   children: ParseTree[],
   options: MarkdownRenderOptions,
 ): Tag {
-  // Stack entry: tag info + accumulated child tags
   const stack: {
     name: string;
     attrs: Record<string, string> | undefined;
     body: Tag[];
   }[] = [];
 
-  // Root container collects top-level elements
   const root: Tag[] = [];
 
   function currentBody(): Tag[] {
@@ -793,7 +783,6 @@ function renderHtmlBlock(
             body: [],
           });
         } else {
-          // Unparseable open tag — render as text
           currentBody().push(text);
         }
         break;
@@ -807,7 +796,6 @@ function renderHtmlBlock(
             body: top.body,
           });
         }
-        // If stack is empty, silently drop unmatched close tag
         break;
       }
       case "HTMLSelfClosingTag": {
@@ -828,7 +816,6 @@ function renderHtmlBlock(
         break;
       }
       default: {
-        // Inline content — render via the normal markdown renderer
         const rendered = posPreservingRender(child, options);
         if (rendered !== null) {
           currentBody().push(rendered);
@@ -838,7 +825,6 @@ function renderHtmlBlock(
     }
   }
 
-  // Flush any unclosed tags (shouldn't happen with well-formed HTML)
   while (stack.length > 0) {
     const top = stack.pop()!;
     currentBody().push({
@@ -890,7 +876,6 @@ function groupInlineHtml(
           continue;
         }
         if (parsed && !parsed.isClosing) {
-          // Find matching closing tag
           let depth = 1;
           let j = i + 1;
           for (; j < children.length; j++) {
@@ -930,7 +915,6 @@ function groupInlineHtml(
           }
         }
       }
-      // Unmatched tag — render as literal text
       result.push(renderFn(child, options));
       i++;
       continue;

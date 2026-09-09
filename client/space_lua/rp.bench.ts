@@ -1,22 +1,8 @@
 import { bench } from "vitest";
 import { readFile } from "node:fs/promises";
-// Benchmark suite for Space Lua RP (Result-or-Promise) optimizations
-// that exercises hot synchronous paths (binary ops, loops, function
-// calls, argument lists, table get/set, concatenation).
-//
-// # NOTES
-//
-// * Parsing cost is excluded from measured time by compiling each
-//   snippet once.
-//
-// * Each bench creates a fresh Lua environment to isolate state.
-//
-// * Minimal global environment (`_GLOBAL`) is installed with included:
-//
-//   * `string.format` (simple `%s` formatter) and
-//   * `type`.
-//
-// * To add benches that need more stdlib, extend makeEnv() accordingly.
+// Measure synchronous Result-or-Promise paths with parsing excluded.
+// Each benchmark gets a fresh environment with string.format and type;
+// extend makeEnv for snippets needing more standard-library functions.
 
 import { evalStatement } from "./eval.ts";
 import {
@@ -70,8 +56,6 @@ async function run(ast: any, withBudget = false) {
     throw new Error(`Lua execution error: ${(e && (e as any).message) || e}`);
   }
 }
-
-// Snippets
 
 const luaWhileSync = `
   local i = 0
@@ -177,7 +161,6 @@ const luaTableDotMissRead = `
   end
 `;
 
-// The truthiness_test.lua uses the `string.format`.
 const truthinessPath = new URL("./truthiness_test.lua", import.meta.url)
   .pathname;
 const truthinessCode = await readFile(truthinessPath, "utf-8");

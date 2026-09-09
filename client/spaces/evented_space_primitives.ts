@@ -37,7 +37,6 @@ export class EventedSpacePrimitives implements SpacePrimitives {
 
   private enabled = false;
 
-  // Snapshot state management
   private spaceSnapshot: Record<string, number> = {};
   private snapshotChanged = false;
 
@@ -99,7 +98,6 @@ export class EventedSpacePrimitives implements SpacePrimitives {
     if (!this.enabled) {
       return Promise.resolve([]);
     }
-    // console.log("Evented space, dispatching", name, args);
     return this.eventHook.dispatchEvent(name, ...args);
   }
 
@@ -127,23 +125,17 @@ export class EventedSpacePrimitives implements SpacePrimitives {
   }
 
   private async fetchFileListAndDispatch(): Promise<FileMeta[]> {
-    // console.log("Fetching file list");
-    // Fetching mutex
     this.operationCount++;
     try {
-      // Fetch the list
       const newFileList = await this.wrapped.fetchFileList();
 
-      // Now we have the list, let's compare it to the snapshot and trigger events appropriately
       const deletedFiles = new Set<string>(Object.keys(this.spaceSnapshot));
       const changedFiles: ChangedFile[] = [];
       for (const meta of newFileList) {
         const oldHash = this.spaceSnapshot[meta.name];
         const newHash = meta.lastModified;
-        // Update in snapshot
         this.updateInSnapshot(meta.name, newHash);
 
-        // Check what happened to the file.
         if (oldHash === undefined || oldHash !== newHash) {
           console.log(
             "Detected file change during listing",
@@ -154,7 +146,6 @@ export class EventedSpacePrimitives implements SpacePrimitives {
           await this.dispatchEvent("file:changed", meta.name, oldHash, newHash);
           changedFiles.push({ name: meta.name, isNew: oldHash === undefined });
         }
-        // Page found, not deleted
         deletedFiles.delete(meta.name);
       }
 
@@ -206,7 +197,6 @@ export class EventedSpacePrimitives implements SpacePrimitives {
     }
     this.operationCount++;
     try {
-      // Fetch file
       const data = await this.wrapped.readFile(path);
       if (this.operationCount === 1) {
         await this.triggerEventsAndCache(path, data.meta.lastModified);
@@ -257,9 +247,7 @@ export class EventedSpacePrimitives implements SpacePrimitives {
    */
   async triggerEventsAndCache(name: string, newHash: number, ownWrite = false) {
     const oldHash = this.spaceSnapshot[name];
-    // if (oldHash && newHash && oldHash !== newHash) {
     if (oldHash !== newHash) {
-      // Page changed since last cached metadata, trigger event
       await this.dispatchEvent(
         "file:changed",
         name,

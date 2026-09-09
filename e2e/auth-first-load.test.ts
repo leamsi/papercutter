@@ -5,12 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getFreePort, waitForServer } from "./fixtures";
 
-// Regression test: on the FIRST-ever visit to an authenticated space (empty
-// localStorage, no session), the boot fetches all 401 and the client redirects
-// to the login page. The redirect used to abort the sibling in-flight boot
-// fetches, which were then misclassified as "offline" and surfaced a spurious
-// "Could not process config and no cached copy" alert right before the login
-// page appeared.
+// An unauthenticated first visit redirects after boot fetches return 401.
+// Aborted sibling requests must not produce offline-cache alerts.
 
 let proc: ChildProcess;
 let spaceDir: string;

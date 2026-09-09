@@ -16,7 +16,6 @@ export function luaLoad(code: LuaValue, sf: LuaStackFrame): LuaValue {
     const block = parseBlock(s, sf.astCtx || {});
     const globalEnvMaybe = sf.threadLocal.get("_GLOBAL");
 
-    // Be vocal when no _GLOBAL is set
     if (!globalEnvMaybe) {
       console.warn("load() called without _GLOBAL in thread-local environment");
       return new LuaMultiRes([null, "Global environment not set"]);

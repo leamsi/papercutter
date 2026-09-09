@@ -1,11 +1,8 @@
 /**
  * `block: "nearest"` scrolling, confined to one container.
  *
- * `Element.scrollIntoView` walks every scrollable ancestor -- and inside a
- * same-origin panel iframe that walk crosses the frame boundary and scrolls
- * the *host* document's ancestors too, which is how revealing a deep row
- * ended up shifting the editor and growing a stray scrollbar. Doing the math
- * against a single container can't propagate.
+ * scrollIntoView can cross a same-origin iframe boundary and scroll the host
+ * editor. Restricting the calculation to one container prevents that.
  */
 export function revealInContainer(el: Element, container: Element) {
   const c = container.getBoundingClientRect();

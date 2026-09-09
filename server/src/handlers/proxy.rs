@@ -44,7 +44,6 @@ pub async fn handle_proxy(
 
     let target = proxy_target_url(&path, raw_query.as_deref());
 
-    // Collect the X-Proxy-Header-* request headers (prefix stripped).
     let mut fwd_headers: Vec<(String, String)> = Vec::new();
     let mut has_ua = false;
     for (k, v) in &headers {
@@ -97,7 +96,6 @@ pub async fn handle_proxy(
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("application/octet-stream")
                 .to_string();
-            // Capture response headers before consuming the body.
             let resp_headers: Vec<(String, String)> = resp
                 .headers()
                 .iter()
@@ -115,7 +113,6 @@ pub async fn handle_proxy(
             for (k, v) in resp_headers {
                 builder = builder.header(format!("x-proxy-header-{k}"), v);
             }
-            // Stream the response body straight through rather than buffering it.
             builder
                 .body(Body::from_stream(resp.bytes_stream()))
                 .unwrap()
@@ -139,7 +136,6 @@ mod tests {
 
     #[test]
     fn localhost_uses_http_others_https() {
-        // The localhost regex matrix.
         for host in [
             "localhost:8080/api",
             "127.0.0.1:8080/api",
@@ -157,7 +153,6 @@ mod tests {
                 "{host} should use https"
             );
         }
-        // Query string preserved.
         assert_eq!(
             proxy_target_url("127.0.0.1/y", Some("a=1")),
             "http://127.0.0.1/y?a=1"
@@ -186,7 +181,6 @@ mod tests {
 
     #[tokio::test]
     async fn empty_path_is_400() {
-        // `/.proxy/` with no URL.
         let resp = crate::build_router(state_read_only(false))
             .oneshot(
                 Request::builder()
@@ -228,7 +222,6 @@ mod tests {
             axum::serve(listener, upstream).await.unwrap();
         });
 
-        // Proxy to it, forwarding `X-Test` via the `X-Proxy-Header-` prefix.
         let resp = crate::build_router(state_read_only(false))
             .oneshot(
                 Request::builder()
@@ -241,9 +234,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(resp.status(), StatusCode::OK);
-        // The upstream's real status surfaces in x-proxy-status-code.
         assert_eq!(resp.headers().get("x-proxy-status-code").unwrap(), "200");
-        // Upstream response headers are re-emitted with the x-proxy-header- prefix.
         assert!(
             resp.headers()
                 .iter()
@@ -251,7 +242,6 @@ mod tests {
             "missing rewritten upstream header in {:?}",
             resp.headers()
         );
-        // The forwarded X-Test header (prefix stripped) reached the upstream.
         let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
             .await
             .unwrap();

@@ -186,8 +186,6 @@ function normalizeIndent(content: string, state: EditorState): string {
   return space + content.slice(blank);
 }
 
-// --- Custom Enter command ---
-
 export const customEnterCommand: StateCommand = ({ state, dispatch }) => {
   const tree = syntaxTree(state),
     { doc } = state;
@@ -262,14 +260,12 @@ export const customEnterCommand: StateCommand = ({ state, dispatch }) => {
       }
     }
 
-    // Normal continuation
     const innerChanges: { from: number; to: number; insert: string }[] = [];
     if (inner.node.name === "OrderedList") {
       renumberList(inner.item!, doc, innerChanges);
     }
     const continued = inner.item && inner.item.from < line.from;
 
-    // Strip trailing whitespace from current line
     let from = pos;
     while (
       from > line.from &&
@@ -278,7 +274,6 @@ export const customEnterCommand: StateCommand = ({ state, dispatch }) => {
       from--;
     }
 
-    // Check if line content ends with ":" (only in list context)
     const lineContentEnd = from - line.from;
     const endsWithColon =
       inner.item &&
@@ -287,22 +282,18 @@ export const customEnterCommand: StateCommand = ({ state, dispatch }) => {
 
     let insert = "";
     if (endsWithColon) {
-      // Generate blanks for outer context levels only
       for (let i = 0, e = context.length - 1; i < e; i++) {
         insert += context[i].blank(
           countColumn(line.text, 4, context[i + 1].from) - insert.length,
         );
       }
-      // Indented child marker for innermost level
       if (inner.node.name === "BulletList") {
         // Use basic bullet width (2) as indent to avoid inflating for task checkboxes
         insert += `${inner.spaceBefore}  ${inner.type}${inner.spaceAfter}`;
       } else {
-        // Ordered: full marker width as indent (no checkbox issue), then "1" + delimiter
         insert += `${inner.blank(null)}1${inner.type}${inner.spaceAfter}`;
       }
     } else {
-      // Default: continue at same level
       if (
         !continued ||
         /^[\s\d.)\-+*>]*/.exec(line.text)![0].length >= inner.to
@@ -322,7 +313,6 @@ export const customEnterCommand: StateCommand = ({ state, dispatch }) => {
     }
 
     insert = normalizeIndent(insert, state);
-    // Note: no blank line insertion for non-tight lists (removed)
     innerChanges.push({
       from,
       to: pos,

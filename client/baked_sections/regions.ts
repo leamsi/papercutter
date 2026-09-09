@@ -1,5 +1,3 @@
-// Pure helpers for the "Baked Sections" feature
-//
 // A baked section is an `<!--#lua EXPR -->` ... `<!--/lua-->` block: the EXPR is
 // the source Lua expression and the text between the markers is its baked
 // (rendered) markdown body.

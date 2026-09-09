@@ -88,7 +88,6 @@ describe("externalPresenceField", () => {
       changes: { from: 6, insert: "External\n" },
       annotations: externalSource.of("external"),
     });
-    // User types at the very start, shifting everything by 3
     const tr2 = tr1.state.update({ changes: { from: 0, insert: "Hi " } });
     const hunks = tr2.state.field(externalPresenceField).hunks;
     expect(hunks[0].from).toBe(9);
@@ -190,14 +189,12 @@ describe("externalUndoField", () => {
       annotations: externalSource.of("external"),
     }).state;
 
-    // A local edit's own undo -- same userEvent, unrelated changes.
     const tr = state.update({
       changes: { from: 0, to: 5, insert: "" },
       userEvent: "undo",
     });
 
     expect(tr.state.field(externalUndoField).correction).toBeUndefined();
-    // The tracked external edit is untouched by an undo that isn't reverting it.
     expect(tr.state.field(externalUndoField).pendingUndo).toHaveLength(1);
   });
 
@@ -211,7 +208,6 @@ describe("externalUndoField", () => {
     state = state.update({ changes: inverse, userEvent: "undo" }).state;
     expect(state.field(externalUndoField).pendingRedo).toHaveLength(1);
 
-    // The user now types something new instead of redoing.
     state = state.update({ changes: { from: 0, insert: "x" } }).state;
     expect(state.field(externalUndoField).pendingRedo).toHaveLength(0);
   });

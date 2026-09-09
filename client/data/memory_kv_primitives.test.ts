@@ -22,7 +22,6 @@ test("MemoryKvPrimitives loads from non-existent file without error", async () =
   const store = new MemoryKvPrimitives(tempPath, { throttleMs: 0 });
   await store.init();
 
-  // Should create an empty store
   const result = await store.batchGet([["test"]]);
   expect(result).toEqual([undefined]);
 });
@@ -38,7 +37,6 @@ test("MemoryKvPrimitives passes all KvPrimitives tests", async () => {
 test("MemoryKvPrimitives persists and loads data", async () => {
   const tempPath = tempFilePath();
 
-  // Create and populate first instance
   const store1 = new MemoryKvPrimitives(tempPath, { throttleMs: 0 });
   await store1.init();
   await store1.batchSet([
@@ -46,14 +44,11 @@ test("MemoryKvPrimitives persists and loads data", async () => {
     { key: ["test", "key2"], value: "value2" },
   ]);
 
-  // Force persistence
   await store1.close();
 
-  // Create second instance that loads from the same file
   const store2 = new MemoryKvPrimitives(tempPath, { throttleMs: 0 });
   await store2.init();
 
-  // Check if data was loaded correctly
   const results = await store2.batchGet([
     ["test", "key1"],
     ["test", "key2"],
@@ -64,16 +59,13 @@ test("MemoryKvPrimitives persists and loads data", async () => {
 test("MemoryKvPrimitives mutations trigger persistence", async () => {
   const tempPath = tempFilePath();
 
-  // Create and populate first instance
   const store1 = new MemoryKvPrimitives(tempPath, { throttleMs: 0 });
   await store1.init();
   await store1.batchSet([{ key: ["test", "key"], value: "value" }]);
 
-  // Create second instance without closing the first one
   const store2 = new MemoryKvPrimitives(tempPath, { throttleMs: 0 });
   await store2.init();
 
-  // Check if data was persisted
   const results = await store2.batchGet([["test", "key"]]);
   expect(results).toEqual(["value"]);
 });
@@ -81,7 +73,6 @@ test("MemoryKvPrimitives mutations trigger persistence", async () => {
 test("MemoryKvPrimitives persists delete operations", async () => {
   const tempPath = tempFilePath();
 
-  // Create and populate store
   const store1 = new MemoryKvPrimitives(tempPath, { throttleMs: 0 });
   await store1.init();
   await store1.batchSet([
@@ -89,14 +80,11 @@ test("MemoryKvPrimitives persists delete operations", async () => {
     { key: ["test", "key2"], value: "value2" },
   ]);
 
-  // Delete one key
   await store1.batchDelete([["test", "key1"]]);
 
-  // Create second instance
   const store2 = new MemoryKvPrimitives(tempPath, { throttleMs: 0 });
   await store2.init();
 
-  // Check if delete was persisted
   const results = await store2.batchGet([
     ["test", "key1"],
     ["test", "key2"],
@@ -107,18 +95,15 @@ test("MemoryKvPrimitives persists delete operations", async () => {
 test("MemoryKvPrimitives.fromFile creates and initializes store", async () => {
   const tempPath = tempFilePath();
 
-  // Create JSON file with initial data
   const initialData = {
     "test\0key": "value",
   };
   await writeFile(tempPath, JSON.stringify(initialData), "utf-8");
 
-  // Use factory method with throttling disabled
   const store = await MemoryKvPrimitives.fromFile(tempPath, {
     throttleMs: 0,
   });
 
-  // Check if data was loaded
   const result = await store.batchGet([["test", "key"]]);
   expect(result).toEqual(["value"]);
 });
@@ -126,7 +111,6 @@ test("MemoryKvPrimitives.fromFile creates and initializes store", async () => {
 test("MemoryKvPrimitives query works with persisted data", async () => {
   const tempPath = tempFilePath();
 
-  // Create and populate store
   const store1 = new MemoryKvPrimitives(tempPath, { throttleMs: 0 });
   await store1.init();
   await store1.batchSet([
@@ -135,15 +119,12 @@ test("MemoryKvPrimitives query works with persisted data", async () => {
     { key: ["other", "key"], value: "value3" },
   ]);
 
-  // Force persistence
   await store1.close();
 
-  // Create second instance
   const store2 = await MemoryKvPrimitives.fromFile(tempPath, {
     throttleMs: 0,
   });
 
-  // Test query with prefix
   const results: KV[] = [];
   for await (const item of store2.query({ prefix: ["test"] })) {
     results.push(item);

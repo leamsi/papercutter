@@ -48,8 +48,7 @@ export async function pageComplete(completeEvent: CompleteEvent) {
   };
   // Try to match [[wikilink]]
   let isWikilink = true;
-  // This negative lookbehind is to prevent matching query[[. This requires negative lookbehind, which generally supported now (it seems), in versions of iOS Safari 13.1 and later
-  // https://caniuse.com/js-regexp-lookbehind
+  // Negative lookbehind excludes query[[.
   let match = /(?<!query)\[\[([^\]@$#:{}]*)$/.exec(completeEvent.linePrefix);
   if (!match) {
     // Try to match [markdown link]()

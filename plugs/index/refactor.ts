@@ -137,7 +137,6 @@ export async function renameDocumentCommand(cmdDef: any) {
 export async function batchRenameFiles(fileList: [string, string][]) {
   await editor.save();
 
-  // Skip unchanged names
   fileList = fileList.filter(([oldName, newName]) => {
     if (oldName.trim() === newName.trim()) {
       console.log(`${oldName}'s name unchanged, skipping`);
@@ -172,7 +171,6 @@ export async function batchRenameFiles(fileList: [string, string][]) {
       }
     }
 
-    // All new names are available, proceeding with rename
     for (const [oldName, newName] of fileList) {
       console.log("Renaming", oldName, "to", newName);
       try {
@@ -214,7 +212,6 @@ async function existsWithExactCasing(path: string): Promise<boolean> {
 async function renamePage(oldName: string, newName: string) {
   let text = await space.readPage(oldName);
 
-  // Update relative links and documents on this page
   const oldFolder = folderName(oldName);
   const newFolder = folderName(newName);
   const documentsToMove = new Set<string>();
@@ -271,10 +268,8 @@ async function renamePage(oldName: string, newName: string) {
     }
   }
 
-  // Write the new page
   await space.writePage(newName, text);
 
-  // Move documents along with page
   const batchRenameDocuments: [string, string][] = [];
   for (const document of documentsToMove) {
     const newAttName =
@@ -301,10 +296,8 @@ async function renamePage(oldName: string, newName: string) {
     await space.deletePage(oldName);
   }
 
-  // Update backlinks to this page
   const updatedRefences = await updateBacklinks(oldName, newName);
 
-  // Navigate to new page if currently viewing old page
   if ((await editor.getCurrentPage()) === oldName) {
     // Wait for index queue to be processed so that widgets are updated with up-to-date information
     await mq.awaitEmptyQueue("indexQueue");
@@ -323,7 +316,6 @@ async function renamePage(oldName: string, newName: string) {
 
 // Rename a document and update any backlinks
 async function renameDocument(oldPath: string, newPath: string) {
-  // Move the file
   const oldFile = await space.readDocument(oldPath);
   await space.writeDocument(newPath, oldFile);
 
@@ -340,7 +332,6 @@ async function renameDocument(oldPath: string, newPath: string) {
     await space.deleteDocument(oldPath);
   }
 
-  // Update any backlinks
   const updatedRefences = await updateBacklinks(oldPath, newPath);
   let message = `Renamed ${oldPath} to ${newPath}`;
   if (updatedRefences > 0) {
@@ -437,7 +428,6 @@ export async function extractToPageCommand() {
   try {
     // This throws an error if the page does not exist, which we expect to be the case
     await space.getPageMeta(newName);
-    // So when we get to this point, we error out
     throw new Error(
       `Page ${newName} already exists, cannot rename to existing page.`,
     );
@@ -493,7 +483,6 @@ export async function updateBacklinks(
   wikiNameOverride?: string,
   wikiLinksOnly = false,
 ): Promise<number> {
-  // This is the bit where we update all the links
   const backRelations = await getTextualBackRelations(oldName);
   const newWikiName =
     wikiNameOverride ?? (await wikiLinkTextFor(newName, oldName));

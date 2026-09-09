@@ -14,9 +14,8 @@ test.describe("Rich text paste", () => {
     await expect(editor).toHaveText("");
     await editor.click();
 
-    // Simulate pasting rich text (HTML) via a synthetic ClipboardEvent.
-    // This is the very first paste after page load, which used to fail
-    // when turndown was loaded via dynamic import().
+    // Exercise the first paste after page load, before any prior use can
+    // initialize the HTML-to-Markdown converter.
     const html = "<b>Hello</b> <em>world</em>";
     const plain = "Hello world";
     await sbPage.evaluate(

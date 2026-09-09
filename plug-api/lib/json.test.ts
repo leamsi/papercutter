@@ -19,7 +19,6 @@ test("JSON utils", () => {
 });
 
 test("JSON utils - deepObjectMerge", () => {
-  // Tests for deepClone
   const obj1 = { a: 1, b: { c: 2, d: [3, 4] }, e: new Date("2023-08-21") };
   const clone1 = deepClone(obj1);
   expect(clone1).toEqual(obj1);

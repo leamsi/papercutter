@@ -37,10 +37,7 @@ local function inboxRows()
     end
     if not hidden then
       local snippet = stripMarker(m.snippet) or ("@" .. (m.alias or ""))
-      -- Two mentions in one paragraph share a snippet, but a tree path is a
-      -- row's identity -- equal paths collapse onto one node, losing rows.
-      -- The range offset keeps each mention's path unique; `snippet` is what
-      -- the row displays.
+      -- Mentions can share a snippet; their range offsets keep tree paths unique.
       table.insert(rows, {
         name = m.page .. SEP .. snippet .. "\30" .. m.range[1],
         snippet = snippet,

@@ -118,7 +118,6 @@ mod tests {
             "silverbullet_headless_a".into(),
             "secret".into(),
         );
-        // No token, but inner allows → authorized.
         assert!(a.is_authorized(&ctx(None, &h)));
     }
 
@@ -149,9 +148,7 @@ mod tests {
         assert!(a.is_authorized(&ctx(None, &h)));
     }
 
-    /// The regression this whole task exists to prevent: the trusted headless
-    /// cookie has no username, but it must still grant `Write` rather than
-    /// falling back to a policy that would grade "no identity" as anonymous.
+    /// A trusted headless cookie grants Write despite carrying no username.
     #[test]
     fn matching_cookie_token_grants_trusted_write() {
         let mut h = HeaderMap::new();
@@ -168,8 +165,7 @@ mod tests {
         assert_eq!(outcome.grant, Some(crate::auth::AccessLevel::Write));
     }
 
-    /// The whole point of the per-space name: space B's cookie, riding along
-    /// because a root-bound space set `Path=/`, must not authorize space A.
+    /// A root-bound space's cookie must not authorize another space.
     #[test]
     fn rejects_another_spaces_cookie() {
         let mut h = HeaderMap::new();

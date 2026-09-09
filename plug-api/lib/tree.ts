@@ -114,7 +114,6 @@ export function replaceNodesMatching(
           tree.children[i] = subst;
           i++;
         } else {
-          // null = delete
           tree.children.splice(i, 1);
           // don't increment i — next child shifted into this position
         }
@@ -140,7 +139,6 @@ export async function replaceNodesMatchingAsync(
           tree.children[i] = subst;
           i++;
         } else {
-          // null = delete
           tree.children.splice(i, 1);
         }
       } else {
@@ -281,11 +279,9 @@ export function nodeAtPos(tree: ParseTree, pos: number): ParseTree | null {
   for (const child of tree.children) {
     const n = nodeAtPos(child, pos);
     if (n && n.text !== undefined) {
-      // Got a text node, let's return its parent
       return tree;
     }
     if (n) {
-      // Got it
       return n;
     }
   }
@@ -321,7 +317,6 @@ export function normalizeTableRow(
   // Fix leading-pipe mismatch: row has leading delimiter but header doesn't
   if (headerHasLeadingDelim === false) {
     if (row.children.length > 0 && row.children[0].type === "TableDelimiter") {
-      // Insert empty cell after the leading delimiter
       row.children.splice(1, 0, { type: "TableCell", children: [] });
     }
   }

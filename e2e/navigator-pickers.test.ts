@@ -120,7 +120,6 @@ test("Cmd-k opens the page picker, on its Pages segment", async ({
     "aria-checked",
     "true",
   );
-  // Segments no longer carry a row count in their label.
   for (const label of ["Meta", "Documents", "All"]) {
     await expect(navSegment(frame, label)).toBeVisible();
   }
@@ -726,9 +725,8 @@ test("the modal is as tall as its content, capped like the old result list", asy
   });
   await expect.poll(height).toBeLessThan(full - 100);
 
-  // The host's box height used to land mid-row here because the cross-
-  // document ResizeObserver (editor_ui.tsx's centered-modal effect) isn't a
-  // reliably prompt notification, even though the row itself paints fine.
+  // Cross-document ResizeObserver delivery can lag the row paint;
+  // measure after the host applies its height.
   await expect
     .poll(async () => {
       const row = (await frame.locator(".sb-nav-row").first().boundingBox())!;
@@ -808,10 +806,7 @@ test.describe("narrow viewport", () => {
     expect(widths.hasDescription).toBe(true);
   });
 
-  // The pre-fix CSS used a weighted `flex-shrink` on the name, which still
-  // gave it a small, nonzero share of any deficit -- rarely visible on a long
-  // name, but enough to clip a couple of characters off a short one at this
-  // width; `.sb-nav-description`'s `flex-basis: 0` is what fixes that.
+  // Even short names must retain their full width when descriptions shrink.
   test("a short name never clips, however long the competing description is", async ({
     sbPage,
   }) => {
@@ -872,9 +867,7 @@ test.describe("narrow viewport", () => {
     sbPage,
   }) => {
     const frame = await openPicker(sbPage, `${mod}+k`, "Page");
-    // Long enough that the name overflows the row at the app's own metrics,
-    // with room to spare -- the shorter prefix this used to type lands within
-    // a pixel of the available width.
+    // Use a name that comfortably exceeds the available width.
     await navInput(sbPage).fill(
       "Catalog/Quarterly Planning Retrospective Notes And",
     );
@@ -1119,9 +1112,8 @@ test("a Lua view redefined by a space-lua edit shows its new definition on next 
 });
 
 /**
- * Runs "Navigate: Table of Contents" (the single command both the sidebar
- * and the picker used to have separately -- see `Widgets.md`'s `std.toc`)
- * and waits for it to answer in `panel`. It opens as a modal by default;
+ * Runs "Navigate: Table of Contents" and waits for it in `panel`.
+ * It opens as a modal by default;
  * asking for the rhs panel pins it there first via the dock menu, same as a
  * user would.
  */
@@ -1331,11 +1323,8 @@ test("std.toc answers on a page loaded directly, once the std library's Space Lu
   sbServer,
   page,
 }) => {
-  // Unlike a TS builtin, std.toc is now itself a `view.define` call in
-  // the std library's own Widgets.md (Widgets.md's "Navigator view" block),
-  // so it only exists once that script has run -- `gotoSilverBulletPage`'s
-  // readiness wait (sbRuntime.ready, which settles after widgets are ready)
-  // already covers that. This is the regression guard that keeps it so.
+  // std.toc is defined by Widgets.md; the readiness wait must include
+  // loading that script before the view is opened.
   await gotoSilverBulletPage(page, sbServer, "Outline Page");
 
   const modal = await openOutline(page, NAV_MODAL_ROOT);

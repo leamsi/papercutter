@@ -89,10 +89,8 @@ test("matchHtmlTagPairs - nested same-name tags", () => {
   );
   const { pairs } = matchHtmlTagPairs(tags);
   expect(pairs).toHaveLength(2);
-  // Inner pair matched first
   expect(pairs[0].open.from).toBe(5);
   expect(pairs[0].close.from).toBe(12);
-  // Outer pair
   expect(pairs[1].open.from).toBe(0);
   expect(pairs[1].close.from).toBe(18);
 });
@@ -117,7 +115,6 @@ test("matchHtmlTagPairs - unmatched tags", () => {
 });
 
 test("matchHtmlTagPairs - interleaved tags", () => {
-  // <b><i></b></i> — b matches b, i left unmatched
   const tags = makeTags(
     { text: "<b>", from: 0, to: 3 },
     { text: "<i>", from: 3, to: 6 },
@@ -125,7 +122,6 @@ test("matchHtmlTagPairs - interleaved tags", () => {
     { text: "</i>", from: 14, to: 18 },
   );
   const { pairs } = matchHtmlTagPairs(tags);
-  // Both pairs match (b with b, i with i) even though interleaved
   expect(pairs).toHaveLength(2);
   expect(pairs[0].open.tagName).toBe("b");
   expect(pairs[1].open.tagName).toBe("i");

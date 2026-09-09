@@ -12,7 +12,6 @@ import { extractSpaceLuaFromPageText } from "../boot_config.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Core Lua tests (bare stdlib env)
 const testFiles = readdirSync(__dirname, { recursive: true })
   .filter((f): f is string => typeof f === "string" && f.endsWith("_test.lua"))
   .sort();
@@ -23,7 +22,6 @@ for (const file of testFiles) {
   });
 }
 
-// Library API Lua tests (stdlib + jsonschema + library code pre-loaded)
 const libraryApisDir = resolve(__dirname, "../../libraries/Library/Std/APIs");
 const libraryTestFiles = readdirSync(libraryApisDir, { recursive: true })
   .filter((f): f is string => typeof f === "string" && f.endsWith("_test.lua"))
@@ -40,16 +38,10 @@ for (const file of libraryTestFiles) {
   if (companionMatch) {
     libraryMdPath = resolve(libraryApisDir, companionMatch[1]);
   } else {
-    // Derive the companion library .md name from the test file name, e.g.
-    // "widget_sandbox_test.lua" → "Widget.md".
-    // NOTE: only the first snake_case segment is used, so this scheme cannot
-    // reach multi-word library pages (e.g. "Task State.md", "DOM.md"). Such a
-    // test should declare its companion path explicitly via the header comment
-    // above rather than relying on this derivation.
+    // Derive the companion page from the first snake_case segment. Multi-word
+    // page names require the explicit companion header above.
     const libraryName = file
       .replace(/_test\.lua$/, "")
-      // Convert snake_case segment to PascalCase for the .md filename, keeping
-      // only the first segment so "widget_sandbox" → "Widget"
       .split("_")[0]
       .replace(/^./, (c) => c.toUpperCase());
     libraryMdPath = resolve(libraryApisDir, `${libraryName}.md`);
@@ -106,21 +98,14 @@ async function runLuaTest(
   const chunk = parseBlock(luaFile, {});
   const env = new LuaEnv(luaBuildStandardEnv());
 
-  // If a companion .md library file is provided, extract its space-lua block(s)
-  // and run them in the env first, after injecting any required syscall stubs.
   if (opts.preloadMdPath) {
-    // Provide a minimal jsonschema table so widget.new validation works
     const jsonschemaTbl = new LuaTable();
     await jsonschemaTbl.set("validateObject", (schema: any, obj: any) =>
       validateObject(schema, obj),
     );
     env.set("jsonschema", jsonschemaTbl);
 
-    // Provide a minimal in-memory `config` table (normally syscall-backed) so
-    // library APIs that wrap config.get/config.set (e.g. command.define,
-    // codeWidget.define) work in the bare test env. Values are stored as their
-    // raw Lua values (no JS conversion) so e.g. function fields survive a
-    // set/get round trip.
+    // Keep config values in Lua form so library function fields survive set/get.
     const configStore = new Map<string, unknown>();
     const pathToKey = (path: unknown): string => {
       if (path instanceof LuaTable) {
@@ -130,7 +115,6 @@ async function runLuaTest(
         }
         return parts.join("\0");
       }
-      // string path: support dot notation like the real config API
       return String(path).split(".").join("\0");
     };
     const configTbl = new LuaTable();

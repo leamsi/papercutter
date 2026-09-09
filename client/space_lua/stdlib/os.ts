@@ -147,7 +147,6 @@ function buildSpecMap(d: Date, utc: boolean): Record<string, () => string> {
   const dow = () => wd(d, utc);
 
   return {
-    // Date
     Y: () => yr(d, utc).toString(),
     y: () => pad2(yr(d, utc) % 100),
     C: () => pad2(Math.floor(yr(d, utc) / 100)),
@@ -156,14 +155,12 @@ function buildSpecMap(d: Date, utc: boolean): Record<string, () => string> {
     e: () => da(d, utc).toString().padStart(2, " "),
     j: () => pad3(dayOfYear(d, utc)),
 
-    // Time
     H: () => pad2(h()),
     I: () => pad2(h12()),
     M: () => pad2(mi(d, utc)),
     S: () => pad2(sc(d, utc)),
     p: () => (h() >= 12 ? "PM" : "AM"),
 
-    // Weekday
     A: () =>
       d.toLocaleString("en-US", {
         weekday: "long",
@@ -177,7 +174,6 @@ function buildSpecMap(d: Date, utc: boolean): Record<string, () => string> {
     w: () => dow().toString(),
     u: () => (dow() === 0 ? 7 : dow()).toString(),
 
-    // Month name
     b: () =>
       d.toLocaleString("en-US", {
         month: "short",
@@ -194,14 +190,12 @@ function buildSpecMap(d: Date, utc: boolean): Record<string, () => string> {
         ...(utc ? { timeZone: "UTC" } : {}),
       }),
 
-    // Week number
     U: () => pad2(weekNumber(d, utc, 0, false)),
     W: () => pad2(weekNumber(d, utc, 1, false)),
     V: () => pad2(weekNumber(d, utc, 1, true)),
     G: () => isoWeekYear(d, utc).toString(),
     g: () => pad2(isoWeekYear(d, utc) % 100),
 
-    // Composite specifiers
     c: () =>
       d.toLocaleString("en-US", {
         ...(utc ? { timeZone: "UTC" } : {}),
@@ -225,14 +219,11 @@ function buildSpecMap(d: Date, utc: boolean): Record<string, () => string> {
         h() >= 12 ? "PM" : "AM"
       }`,
 
-    // Epoch
     s: () => Math.floor(d.getTime() / 1000).toString(),
 
-    // Whitespace
     n: () => "\n",
     t: () => "\t",
 
-    // Timezone
     Z: () => {
       if (utc) return "UTC";
       const match = d.toTimeString().match(/\((.*)\)/);
@@ -246,7 +237,6 @@ function buildSpecMap(d: Date, utc: boolean): Record<string, () => string> {
       return `${sign}${pad2(Math.floor(abs / 60))}${pad2(abs % 60)}`;
     },
 
-    // Literal
     "%": () => "%",
   };
 }

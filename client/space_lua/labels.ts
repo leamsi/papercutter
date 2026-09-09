@@ -35,7 +35,6 @@ class LabelResolveError extends Error {
   }
 }
 
-// Cache
 const functionMetaByRoot = new WeakMap<LuaBlock, FunctionMeta>();
 const functionMetaByAnyBlock = new WeakMap<LuaBlock, FunctionMeta>();
 
@@ -107,11 +106,9 @@ function resolveFunction(root: LuaBlock): FunctionMeta {
     roleByBlock,
   );
 
-  // Validate gotos
   for (const g of vctx.gotos) {
     const target = g.node.name;
 
-    // Search current block for the label, then ancestors
     let searchBlock: LuaBlock | undefined = g.block;
     let labelIndex: number | undefined;
     let labelDefBlock: LuaBlock | undefined;
@@ -151,7 +148,6 @@ function resolveFunction(root: LuaBlock): FunctionMeta {
       );
     }
 
-    // Local scope forward jump check
     let entersLocalScope = false;
     let entersCloseScope = false;
 

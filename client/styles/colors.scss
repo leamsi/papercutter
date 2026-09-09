@@ -48,10 +48,8 @@
     background-color: var(--panel-background-color);
   }
 
-  // Not `--panel-border-color`: that is white in the light theme (the plug
-  // panels sit on their own surface and want no visible seam), which left a
-  // docked sidebar running straight into the editor with nothing between
-  // them.
+  // --panel-border-color is white in the light theme and cannot separate a dock
+  // from the editor.
   .sb-nav-root-lhs {
     border-right: 1px solid var(--ui-surface-border-color);
   }
@@ -263,8 +261,7 @@
   opacity: 0.6;
 }
 
-// Anchor styling — mark and text colored independently so themes can
-// diverge them later. Default: both get the link color.
+// Color anchor markers and names independently for themes.
 .sb-named-anchor {
   color: var(--editor-link-color);
 }

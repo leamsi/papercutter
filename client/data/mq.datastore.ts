@@ -42,7 +42,6 @@ export class QueueWorker {
         if (this.stopping) {
           break;
         }
-        // Poll for messages
         const messages = await this.mq.poll(
           this.queue,
           this.options.batchSize || 1,
@@ -80,14 +79,11 @@ export class QueueWorker {
           }
           try {
             await race([
-              // Wait to be woken up explicitly
               new Promise<void>((resolve, reject) => {
                 this.stopReject = reject;
                 this.mq.queueWorker(this.queue, resolve, reject);
               }),
-              // Or a poll interval timeout
               sleep(this.options.pollInterval || 1000).then(() => {
-                // Remove self from waiters
                 this.mq.removeQueuedWorker(this.queue, this.stopReject!);
               }),
             ]);
@@ -129,7 +125,6 @@ export class DataStoreMQ {
     public eventHook: EventHook,
   ) {}
 
-  /// Worker management
   public queueWorker(
     queue: string,
     resolve: () => void,
@@ -140,7 +135,6 @@ export class DataStoreMQ {
       waiters = [];
       this.queueWaiters.set(queue, waiters);
     }
-    // console.log("[mq]", "Queuing a worker for queue", queue);
     waiters.push({ resolve, reject });
   }
 
@@ -151,11 +145,9 @@ export class DataStoreMQ {
   wakeupWorker(queue: string) {
     const waiters = this.queueWaiters.get(queue);
     if (waiters && waiters.length > 0) {
-      // console.log("[mq]", "Waking up a worker for queue", queue);
       const { resolve } = waiters.shift()!;
       resolve();
       if (waiters.length === 0) {
-        // Clean up empty arrays
         this.queueWaiters.delete(queue);
       }
     }
@@ -169,7 +161,6 @@ export class DataStoreMQ {
         waiters.splice(index, 1);
       }
       if (waiters.length === 0) {
-        // Let's not keep empty arrays around
         this.queueWaiters.delete(queue);
       }
     }
@@ -222,7 +213,6 @@ export class DataStoreMQ {
       return [];
     }
 
-    // Put them in the processing queue
     await this.ds.batchSet(
       messages.map((m) => ({
         key: [...processingPrefix, queue, m.id],
@@ -232,12 +222,10 @@ export class DataStoreMQ {
         },
       })),
     );
-    // Delete them from the queued queue
     await this.ds.batchDelete(
       messages.map((m) => [...queuedPrefix, queue, m.id]),
     );
 
-    // Return them
     return messages;
   }
 
@@ -253,7 +241,6 @@ export class DataStoreMQ {
     callback: (messages: MQMessage[]) => Promise<void> | void,
   ): QueueWorker {
     const worker = new QueueWorker(this, queue, options, callback);
-    // Start the worker asynchronously
     void worker.run();
     return worker;
   }

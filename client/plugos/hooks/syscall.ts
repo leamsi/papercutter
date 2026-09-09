@@ -13,7 +13,6 @@ export class SyscallHook implements Hook<SyscallHookT> {
   }
 
   registerSyscalls(system: System<SyscallHookT>) {
-    // Register syscalls from all loaded plugs
     for (const plug of system.loadedPlugs.values()) {
       const syscalls: SysCallMapping = {};
 
@@ -30,7 +29,6 @@ export class SyscallHook implements Hook<SyscallHookT> {
             ? syscallDefinition
             : syscallDefinition.name;
 
-        // Add the syscall to our mapping
         const callback = (ctx: SyscallContext, ...args: any[]) =>
           system.syscall(ctx, "system.invokeFunction", [
             `${plug.manifest!.name}.${name}`,
@@ -46,7 +44,6 @@ export class SyscallHook implements Hook<SyscallHookT> {
           };
         }
 
-        // Register the syscalls with no required permissions
         system.registerSyscalls([], syscalls);
       }
     }
@@ -68,7 +65,6 @@ export class SyscallHook implements Hook<SyscallHookT> {
         continue;
       }
 
-      // Validate syscall name format (should be namespaced)
       if (!syscallName.includes(".")) {
         errors.push(
           `Function ${name} has invalid syscall name "${syscallName}" - must be in format "namespace.name"`,

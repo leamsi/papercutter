@@ -106,16 +106,11 @@ export function usePanelEvents({
     function applyReveal(name: string, active?: ActiveView) {
       const current = active ?? viewRef.current;
       if (!current) return;
-      // Stamped with the *view's* name (not the revealed page) so
-      // `activate`'s tail can compare it against its own `view: name` -- the
-      // two use the same identifier space, the revealed page doesn't.
+      // Use the view name so activate can compare it with its own identifier.
       revealedFor.current = current.name;
       revealedPage.current = name;
-      // A fresh activation's remembered-expansion fetch (`createActivate`) is
-      // a sibling async round trip with no fixed order against this one --
-      // both now merge into `expanded` (see that fetch's own comment) rather
-      // than one replacing the other, so this reveal's ancestors survive
-      // regardless of which lands first.
+      // Merge with remembered expansion: it loads concurrently, and either order
+      // must preserve the revealed ancestors.
       setExpanded((prev) =>
         withExpanded(
           prev,
@@ -134,21 +129,14 @@ export function usePanelEvents({
       });
     }
 
-    // Immediate ready-signal path: a reopen of the view this panel already
-    // displays shows content that's already settled (nothing new is
-    // rendering), so there is nothing to wait for -- unlike a fresh load,
-    // which still goes through NavRoot's paint-timed
-    // `useLayoutEffect([view, bootError])`. Shared `readySignaledToken`
-    // de-dupe: whichever path reaches a given token first is the one that
-    // counts.
+    // Reopening settled content has no paint effect to signal readiness. Signal
+    // directly, sharing the token guard with NavRoot’s paint-time path.
     function signalReady(token: number) {
       if (readySignaledToken.current === token) return;
       readySignaledToken.current = token;
       markSlotReady(slot, token);
     }
 
-    // Guard: events arriving before any view is active are ignored -- there's
-    // nothing to refresh yet, and no debounce timer worth arming.
     const triggerRefresh = () => {
       if (!engine.activeName) return;
       clearTimeout(refreshTimer.current);

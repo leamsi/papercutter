@@ -76,11 +76,7 @@ export function ResizeHandle({ slot, onResize }: ResizeHandleProps) {
       startX: e.clientX,
       startWidth: dock?.getBoundingClientRect().width ?? MIN_SIDEBAR_WIDTH,
     };
-    // Pointer capture (rather than a plain global mousemove listener) keeps
-    // delivering move/up events to this element even once the cursor leaves
-    // its own bounds -- which it does almost immediately, since the handle
-    // sits flush with the dock's edge and growing the dock means dragging
-    // away from where the pointer went down.
+    // Capture keeps delivering events after the drag leaves the narrow handle.
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     e.preventDefault();
   }

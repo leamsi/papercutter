@@ -19,13 +19,10 @@ test("Custom inline syntax - basic", () => {
   const tree = parse(lang, "Hello $E=mc^2$ world");
   const nodes = collectNodesOfType(tree, "LatexInline");
   expect(nodes.length).toEqual(1);
-  // Body between markers
   const body = findNodeOfType(nodes[0], "LatexInlineBody");
   expect(body!.children![0].text).toEqual("E=mc^2");
-  // Markers are present
   const marks = collectNodesOfType(nodes[0], "LatexInlineMark");
   expect(marks.length).toEqual(2);
-  // Round-trip
   expect(renderToText(tree)).toEqual("Hello $E=mc^2$ world");
 });
 
@@ -190,6 +187,5 @@ test("Custom inline syntax - $ with lookahead doesn't clash with ${expr}", () =>
 test("No custom extensions returns default language", () => {
   const lang1 = buildExtendedMarkdownLanguage();
   const lang2 = buildExtendedMarkdownLanguage({});
-  // Both should return the same static instance
   expect(lang1).toBe(lang2);
 });

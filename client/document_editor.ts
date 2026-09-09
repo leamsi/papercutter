@@ -192,15 +192,12 @@ export class DocumentEditor {
         "Providing a `script` property with your document editor is deprecated. Inline the script into your HTML instead.",
       );
 
-      // Load the legacy script
       const script = doc.createElement("script");
       script.type = "text/javascript";
       script.text = (content as any).script;
       doc.body.appendChild(script);
 
-      // Because now an html and body tag will be auto created, it can happen
-      // that the content is not properly stretching those elements and the
-      // content will stay small, let's try to mitgate this
+      // Ensure the automatically created html/body fill the iframe.
       const style = doc.createElement("style");
       style.textContent =
         "html, body { width: 100%; height: 100%; margin: 0; }";

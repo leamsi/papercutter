@@ -203,7 +203,6 @@ export function spaceReadSyscalls(client: Client): SysCallMapping {
       deprecated: "Use space.getDocumentMeta instead.",
       signatures: ["space.getAttachmentMeta(name)"],
     },
-    // FS
     "space.listFiles": {
       callback: (): Promise<FileMeta[]> =>
         client.space.spacePrimitives.fetchFileList(),
@@ -269,7 +268,6 @@ export function spaceReadSyscalls(client: Client): SysCallMapping {
         }
         try {
           await client.space.spacePrimitives.getFileMeta(name);
-          // If this returned the file exists
           return true;
         } catch {
           // Assumption: any error means the file does not exist
@@ -279,7 +277,6 @@ export function spaceReadSyscalls(client: Client): SysCallMapping {
       description: "Checks whether an arbitrary file exists in the space.",
       signatures: ["space.fileExists(name)"],
     },
-    // History
     "space.listRevisions": {
       callback: (_ctx, path: string, before?: string): Promise<FileRevisions> =>
         fetchRevisionsJson(

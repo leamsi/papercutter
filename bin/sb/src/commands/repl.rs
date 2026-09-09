@@ -10,10 +10,6 @@ use rustyline::DefaultEditor;
 use crate::conn::SpaceConnection;
 use crate::output::{self, OutputMode};
 
-// ---------------------------------------------------------------------------
-// is_incomplete
-// ---------------------------------------------------------------------------
-
 /// Heuristic: returns `true` if `code` has unclosed Lua blocks/brackets.
 ///
 /// Whitespace-split tokens that EXACTLY equal
@@ -26,7 +22,6 @@ use crate::output::{self, OutputMode};
 pub fn is_incomplete(code: &str) -> bool {
     let mut depth: i32 = 0;
 
-    // Pass 1: whole-word token scan (split on whitespace)
     for word in code.split_whitespace() {
         match word {
             "do" | "function" | "if" | "repeat" => depth += 1,
@@ -35,7 +30,6 @@ pub fn is_incomplete(code: &str) -> bool {
         }
     }
 
-    // Pass 2: character scan for brackets
     for ch in code.chars() {
         match ch {
             '(' | '[' | '{' => depth += 1,
@@ -46,10 +40,6 @@ pub fn is_incomplete(code: &str) -> bool {
 
     depth > 0
 }
-
-// ---------------------------------------------------------------------------
-// run
-// ---------------------------------------------------------------------------
 
 /// Start an interactive Lua REPL on the given [`SpaceConnection`].
 ///
@@ -81,7 +71,6 @@ pub fn run(mut conn: SpaceConnection) -> Result<(), String> {
                 break;
             }
             Err(ReadlineError::Eof) => {
-                // Ctrl-D: exit
                 break;
             }
             Err(e) => {
@@ -120,13 +109,11 @@ pub fn run(mut conn: SpaceConnection) -> Result<(), String> {
                         }
                         continue;
                     }
-                    // Append RAW line (not trimmed) + newline.
                     script_buffer.push_str(&line);
                     script_buffer.push('\n');
                     continue;
                 }
 
-                // .timeout <n> meta-command
                 if let Some(rest) = trimmed.strip_prefix(".timeout ") {
                     let val: Result<i64, _> = rest.split_whitespace().next().unwrap_or("").parse();
                     match val {
@@ -141,7 +128,6 @@ pub fn run(mut conn: SpaceConnection) -> Result<(), String> {
                     continue;
                 }
 
-                // Accumulate into multi-line buffer
                 if multi_line_buffer.is_empty() {
                     multi_line_buffer = line.clone();
                 } else {
@@ -154,7 +140,6 @@ pub fn run(mut conn: SpaceConnection) -> Result<(), String> {
                     continue;
                 }
 
-                // Complete expression — evaluate it
                 let code = std::mem::take(&mut multi_line_buffer);
                 prompt = "lua> ".into();
 

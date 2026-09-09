@@ -73,9 +73,8 @@ describe("pageComplete meta-page caret prefix", () => {
 });
 
 describe("footnoteComplete does not collide with [[^ wikilinks (#1966)", () => {
-  // Regression: footnoteComplete used to match `[^...` inside `[[^...`,
-  // returning a `from` position that disagreed with pageComplete's, causing
-  // the merged completion to be dropped client-side and a console error.
+  // Footnote completion must not match inside meta-page links: mismatched
+  // from positions cause the client to discard merged completions.
 
   test("[[^ returns null", async () => {
     expect(await footnoteComplete(makeCompleteEvent("[[^"))).toBeNull();

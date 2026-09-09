@@ -41,7 +41,6 @@ export class PathPageNavigator {
    * push a new state)
    */
   async navigate(ref: Ref, replaceState = false, restore = false) {
-    // We are already navigating, let's wait
     if (this.navigationPromise) {
       await this.navigationPromise.promise;
     }
@@ -91,8 +90,6 @@ export class PathPageNavigator {
     const error = await this.navigationPromise.promise;
 
     if (error !== null) {
-      // The navigation failed, let's revert everything we've done (This could
-      // e.g. be a document editor which doesn't exist)
       if (error !== "Opened externally") {
         this.client.ui.flashNotification(
           `Failed to navigate: ${error}`,
@@ -103,8 +100,6 @@ export class PathPageNavigator {
       if (!replaceState) {
         history.go(-1);
       } else {
-        // This can e.g. happen on the first navigate. We obviously can't fall back to the same path, so fallback to the indexpage
-
         const newRef: Ref =
           currentState.path === ref.path
             ? this.indexRef
@@ -122,7 +117,6 @@ export class PathPageNavigator {
           }),
         );
 
-        // This is should never fail, because we already navigated here before.
         await this.navigationPromise.promise;
       }
     }

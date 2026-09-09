@@ -1,6 +1,5 @@
-// Regression guard: the loading→ready widget transition fires
-// `rebuildEditorState` *after* the editor is interactive, and used to
-// reset the selection to position 0.
+// The loading-to-ready widget rebuild runs after the editor becomes
+// interactive and must preserve the selection.
 
 import { expect, gotoSilverBulletPage, test } from "./fixtures.ts";
 

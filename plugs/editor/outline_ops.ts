@@ -82,7 +82,6 @@ export function detectContext(
     node = found;
   }
 
-  // Check if we're in a list item
   // If nodeAtPos landed on a BulletList/OrderedList itself (i.e. on separator
   // whitespace between items), don't walk up — cursor isn't on any item.
   const listItem =
@@ -99,7 +98,6 @@ export function detectContext(
     }
   }
 
-  // Check if we're in a heading
   const heading = node.type?.startsWith("ATXHeading")
     ? node
     : findParentMatching(
@@ -127,7 +125,6 @@ export function detectContext(
     }
   }
 
-  // Check if we're in a table row or header
   const tableRow =
     node.type === "TableRow" || node.type === "TableHeader"
       ? node
@@ -142,7 +139,6 @@ export function detectContext(
     return { type: "tableRow", row: tableRow, rowIndex, isHeader, table };
   }
 
-  // Check if we're in a paragraph at the Document level
   const para =
     node.type === "Paragraph"
       ? node
@@ -153,7 +149,6 @@ export function detectContext(
     return { type: "paragraph", blockIndex, doc };
   }
 
-  // No context we can do something with
   return null;
 }
 
@@ -519,7 +514,6 @@ function moveHeading(
   const { level, sectionStart, sectionEnd, doc } = ctx;
   const children = doc.children!;
 
-  // Find adjacent section at the same level
   const searchFrom = direction === "up" ? sectionStart - 1 : sectionEnd;
   const searchTo = direction === "up" ? -1 : children.length;
   const step = direction === "up" ? -1 : 1;
@@ -542,7 +536,6 @@ function moveHeading(
     return null;
   }
 
-  // Find end of adjacent section
   let adjSectionEnd: number;
   if (direction === "up") {
     adjSectionEnd = sectionStart;
@@ -560,7 +553,6 @@ function moveHeading(
     }
   }
 
-  // Normalize to [first, second] order
   const [firstStart, firstEnd, secondStart, secondEnd] =
     direction === "up"
       ? [adjSectionStart, adjSectionEnd, sectionStart, sectionEnd]
@@ -651,7 +643,6 @@ function moveTableRow(
   const { row, table } = ctx;
   const children = table.children!;
 
-  // Collect indices of TableRow children (not TableHeader or TableDelimiter)
   const rowIndices: number[] = [];
   for (let i = 0; i < children.length; i++) {
     if (children[i].type === "TableRow") {
@@ -698,7 +689,6 @@ function moveParagraph(
   const children = doc.children!;
   const currNode = children[blockIndex];
 
-  // Find adjacent typed sibling
   let adjIdx = blockIndex + (direction === "up" ? -1 : 1);
   const step = direction === "up" ? -1 : 1;
   while (adjIdx >= 0 && adjIdx < children.length && !children[adjIdx].type) {

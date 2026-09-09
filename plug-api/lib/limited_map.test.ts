@@ -10,12 +10,9 @@ test("limited map", async () => {
   expect(mp.get("a")).toEqual("a");
   expect(mp.get("b")).toEqual("b");
   expect(mp.get("c")).toEqual("c");
-  // Drops the first key
   mp.set("d", "d");
-  // console.log(mp.toJSON());
   expect(mp.get("a")).toEqual(undefined);
   await sleep(10);
-  // "b" should have been dropped
   expect(mp.get("b")).toEqual(undefined);
   expect(mp.get("c")).toEqual("c");
 

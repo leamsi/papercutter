@@ -94,7 +94,6 @@ export function createEditorState(
   client.undoHistoryCompartment = new Compartment();
   const undoHistory = client.undoHistoryCompartment.of([history()]);
 
-  // Build the markdown language with any custom syntax extensions
   client.markdownLanguageCompartment = new Compartment();
   const markdownLanguageExtension = client.markdownLanguageCompartment.of(
     buildMarkdownLanguageExtension(client),
@@ -102,7 +101,6 @@ export function createEditorState(
 
   const vimMode = client.ui.viewState.uiOptions.vimMode;
 
-  // If vim mode is requested, load it async and reconfigure the compartment
   if (vimMode) {
     void enableVimMode(client);
   }
@@ -136,7 +134,6 @@ export function createEditorState(
       // bindings wont trigger if they have the same keys.
       commandKeyBindings,
 
-      // Vim mode compartment — starts empty, loaded async if needed
       client.vimCompartment.of([]),
       readOnlyExtensions,
 
@@ -316,7 +313,6 @@ export function createEditorState(
       }),
       ViewPlugin.fromClass(
         class {
-          // Track file changed during an IME composition session
           private composingDirty = false;
 
           update(update: ViewUpdate): void {
@@ -333,16 +329,13 @@ export function createEditorState(
               }
             }
             if (update.docChanged) {
-              // Skip saving if the change came from outside the editor (e.g. storage reload)
               if (
                 update.transactions.some((t) => t.annotation(externalUpdate))
               ) {
                 return;
               }
 
-              // Defer save and event dispatch during IME composition
               if (update.view.composing) {
-                // Mark dirty so we flush when composition ends
                 this.composingDirty = true;
                 client.ui.viewDispatch({ type: "page-changed" });
                 return;
@@ -362,7 +355,6 @@ export function createEditorState(
               client.save().catch((e) => console.error("Error saving", e));
               this.composingDirty = false;
             } else if (this.composingDirty && !update.view.composing) {
-              // Flush now because composition ended without file changes
               this.composingDirty = false;
               client.contentManager.debouncedUpdateEvent();
               client.save().catch((e) => console.error("Error saving", e));
@@ -404,7 +396,6 @@ export function createCommandKeyBindings(client: Client): Extension {
   const vimMode = client.ui.viewState.uiOptions.vimMode;
   const readOnly = client.isReadOnlyMode();
 
-  // Then add bindings for plug commands
   for (const def of client.clientSystem.commandHook
     .buildAllCommands()
     .values()) {
@@ -435,7 +426,6 @@ export function createCommandKeyBindings(client: Client): Extension {
             client.reportError(e, "key");
           })
           .then((returnValue: any) => {
-            // Always be focusing the editor after running a command UNLESS it returns false
             if (returnValue !== false) {
               client.focus();
             }
@@ -443,8 +433,6 @@ export function createCommandKeyBindings(client: Client): Extension {
 
         return true;
       };
-      // Only create a generic key handler (non-mac specific) when
-      // EITHER we're not on a mac, or we're on a mac AND not specific mac key binding is set
       if (def.key && (!isMacLike || (isMacLike && !def.mac))) {
         if (Array.isArray(def.key)) {
           for (const key of def.key) {
@@ -454,7 +442,6 @@ export function createCommandKeyBindings(client: Client): Extension {
           commandKeyBindings.push({ key: def.key, run });
         }
       }
-      // Only set mac key handlers if we're on a mac, because... you know, logic
       if (def.mac && isMacLike) {
         if (Array.isArray(def.mac)) {
           for (const key of def.mac) {

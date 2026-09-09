@@ -22,14 +22,12 @@ test.describe("First load on empty space", () => {
       "Welcome to the wondrous world of SilverBullet",
     );
 
-    // Move to end of document, then type on a new line
     await editor.click();
     await sbPage.keyboard.press("End");
     await sbPage.keyboard.press("Enter");
     await sbPage.keyboard.type("Hello from Playwright");
     await expect(editor).toContainText("Hello from Playwright");
 
-    // Verify the edit was saved to the server
     const content = await waitForSaveAndReadFromServer(
       sbPage,
       sbServer,

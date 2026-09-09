@@ -114,7 +114,6 @@ fn start_server(space_dir: &std::path::Path) -> Option<(Child, String)> {
         .expect("spawn silverbullet server");
     let base = format!("http://127.0.0.1:{port}");
 
-    // Wait for the listener.
     let client = reqwest::blocking::Client::new();
     for _ in 0..100 {
         if client
@@ -127,7 +126,6 @@ fn start_server(space_dir: &std::path::Path) -> Option<(Child, String)> {
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
-    // Failed to come up — tear down and treat as a hard failure.
     let mut child = child;
     let _ = child.kill();
     panic!("server did not become ready");

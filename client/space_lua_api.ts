@@ -13,7 +13,6 @@ import { resolveASTReference } from "./space_lua.ts";
 export function buildLuaEnv(system: System<any>) {
   const env = new LuaEnv(luaBuildStandardEnv());
 
-  // Expose all syscalls to Lua
   exposeSyscalls(env, system);
 
   return env;
@@ -24,7 +23,6 @@ export function buildLuaEnv(system: System<any>) {
  * If a syscall is prefixed with `lua:` it exposes the syscall as a native Lua function, skipping the argument conversion0
  */
 export function exposeSyscalls(env: LuaEnv, system: System<any>) {
-  // Expose all syscalls to Lua
   const nativeFs = new LuaStackFrame(env, null);
   for (const [syscallName, syscall] of system.registeredSyscalls) {
     const isLuaNativeSyscall = syscallName.startsWith("lua:");
@@ -88,7 +86,6 @@ export async function buildThreadLocalEnv(
 export async function handleLuaError(e: LuaRuntimeError, system: System<any>) {
   console.error("Lua eval exception", e.message, e.sf?.astCtx);
   if (e.sf?.astCtx?.ref) {
-    // We got an error and actually know where it came from, let's navigate there to help debugging
     await system.localSyscall("editor.flashNotification", [
       `Lua error: ${e.message}`,
       "error",

@@ -102,7 +102,6 @@ const ipairsFunction = new LuaBuiltinFunction({
 
 const pairsFunction = new LuaBuiltinFunction({
   callback: (sf, t: LuaTable | any[] | Record<string, any>) => {
-    // Respect `__pairs` metamethod for Lua tables
     if (isLuaTable(t)) {
       const mt = (t as any).metatable as LuaTable | null | undefined;
       if (mt) {
@@ -311,18 +310,9 @@ async function pcallBoundary(
 
 const pcallFunction = new LuaBuiltinFunction({
   callback: async (sf, fn: ILuaFunction, ...args) => {
-    // To-be-closed variables must be closed when unwinding to the
-    // protected call boundary. Space Lua uses a per-thread close
-    // stack, so we snapshot its length and close anything pushed
-    // after that.
-    //
-    // The protected call boundary must be established *before*
-    // evaluating the function and its arguments.  Otherwise, any
-    // `<close>` locals created while evaluating `pcall`'s arguments
-    // will be wrongly treated as "inside" the protected call, and
-    // `pcall` may end up closing them (or affecting close ordering).
-    //
-    // `threadState` is read-only on the stack frame; do not reassign!
+    // Snapshot the close stack before evaluating the function and arguments,
+    // so argument-owned <close> locals stay outside the protected boundary.
+    // Do not reassign the frame’s read-only threadState.
     const res = await pcallBoundary(sf, fn, args);
     if (res.ok) {
       return new LuaMultiRes([true, ...res.values]);
@@ -352,7 +342,6 @@ const xpcallFunction = new LuaBuiltinFunction({
     errorHandler: ILuaFunction,
     ...args
   ) => {
-    // Same semantic as `pcall` (see comments there)
     const res = await pcallBoundary(sf, fn, args);
     if (res.ok) {
       return new LuaMultiRes([true, ...res.values]);
@@ -595,30 +584,24 @@ const nextFunction = new LuaBuiltinFunction({
     index: number | null = null,
   ) => {
     if (!table) {
-      // When nil value
       return null;
     }
     const keys = luaKeys(table);
 
-    // Empty table -> null return value
     if (keys.length === 0) {
       return null;
     }
 
     if (index === null) {
-      // Return the first key, value
       const key = keys[0];
       return new LuaMultiRes([key, luaGet(table, key, sf.astCtx ?? null, sf)]);
     }
-    // Find index in the key list
     const idx = keys.indexOf(index);
     if (idx === -1) {
-      // Not found
       throw new LuaRuntimeError("invalid key to 'next': key not found", sf);
     }
     const key = keys[idx + 1];
     if (key === undefined) {
-      // When called with the last key, should return nil
       return null;
     }
     return new LuaMultiRes([key, luaGet(table, key, sf.astCtx ?? null, sf)]);
@@ -635,7 +618,6 @@ const nextFunction = new LuaBuiltinFunction({
   ],
 });
 
-// Non-standard, but useful
 const someFunction = new LuaBuiltinFunction({
   callback: async (_sf, value: any) => {
     switch (await luaTypeOf(value)) {
@@ -704,13 +686,11 @@ function annotateBuiltinApi(
 
 export function luaBuildStandardEnv() {
   const env = new LuaEnv();
-  // _G global
   env.set("_G", env);
   // Lua version string - for now it signals Lua 5.4 compatibility with
   // selective 5.5 features; kept non-standard so callers can distinguish
   // Space Lua from a plain Lua runtime.
   env.set("_VERSION", "Lua 5.4+");
-  // Top-level builtins
   env.set("print", printFunction);
   env.set("assert", assertFunction);
   env.set("type", typeFunction);
@@ -718,10 +698,8 @@ export function luaBuildStandardEnv() {
   env.set("tonumber", tonumberFunction);
   env.set("select", selectFunction);
   env.set("next", nextFunction);
-  // Iterators
   env.set("pairs", pairsFunction);
   env.set("ipairs", ipairsFunction);
-  // meta table stuff
   env.set("setmetatable", setmetatableFunction);
   env.set("getmetatable", getmetatableFunction);
   env.set("rawlen", rawlenFunction);
@@ -729,19 +707,15 @@ export function luaBuildStandardEnv() {
   env.set("rawget", rawgetFunction);
   env.set("rawequal", rawequalFunction);
   env.set("dofile", dofileFunction);
-  // Error handling
   env.set("error", errorFunction);
   env.set("pcall", pcallFunction);
   env.set("xpcall", xpcallFunction);
-  // Evaluation
   env.set("load", loadFunction);
-  // APIs
   env.set("string", stringApi);
   env.set("table", tableApi);
   env.set("os", osApi);
   env.set("js", jsApi);
   env.set("math", mathApi);
-  // Non-standard
   env.set("each", eachFunction);
   env.set("spacelua", spaceluaApi);
   env.set("encoding", encodingApi);

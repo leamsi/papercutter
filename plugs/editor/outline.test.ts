@@ -41,7 +41,6 @@ function detect(marked: string): CursorContext | null {
   return detectContext(tree, pos);
 }
 
-// Bullet Lists: Move Up/Down
 describe("Bullet list move up/down", () => {
   test("swap two flat bullets", () => {
     expect(
@@ -170,7 +169,6 @@ describe("Bullet list move up/down", () => {
   });
 });
 
-// Bullet Lists: Indent/Outdent
 describe("Bullet list indent/outdent", () => {
   test("indent then outdent flat bullet", () => {
     const flat = `- first
@@ -396,7 +394,6 @@ describe("Bullet list mixed markers", () => {
   });
 });
 
-// Headers: Move Up/Down
 describe("Heading move up/down", () => {
   test("swap two h2 sections", () => {
     expect(
@@ -574,7 +571,6 @@ Body 2a
   });
 });
 
-// Headers: Indent/Outdent
 describe("Heading indent/outdent", () => {
   test("basic", () => {
     const h2 = `## He|^|ading
@@ -606,7 +602,6 @@ describe("Heading indent/outdent", () => {
   });
 });
 
-// Paragraphs: Move Up/Down
 describe("Paragraph operations", () => {
   test("swap two consecutive paragraphs", () => {
     expect(
@@ -654,7 +649,6 @@ Some |^|text.
   });
 });
 
-// Ordered Lists: all operations
 describe("Ordered list operations", () => {
   test("move up", () => {
     expect(
@@ -709,7 +703,6 @@ describe("Ordered list operations", () => {
   });
 });
 
-// Edge Cases
 describe("Edge cases", () => {
   test("empty and single-item no-ops", () => {
     const empty = `|^|`;
@@ -758,7 +751,6 @@ describe("Edge cases", () => {
   });
 });
 
-// Context Detection
 describe("Cursor positions in bullet list", () => {
   test("on list marker", () => {
     const ctx = detect("|^|- one\n- two\n");
@@ -880,7 +872,6 @@ describe("List marker variants", () => {
   });
 });
 
-// Table Rows: Move Up/Down
 describe("Table row move up/down", () => {
   test("swap two data rows", () => {
     expect(
@@ -985,7 +976,6 @@ describe("Table row move up/down", () => {
   });
 });
 
-// Table Rows: Context Detection
 describe("Table row context detection", () => {
   test("cursor in data row detects tableRow", () => {
     const ctx = detect(`| A | B |

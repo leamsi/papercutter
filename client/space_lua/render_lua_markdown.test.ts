@@ -10,14 +10,11 @@ import {
 } from "./render_lua_markdown.ts";
 import { LuaTable } from "./runtime.ts";
 
-// Helper: render a value all the way to final HTML.
 function toHtml(value: any): string {
   const { markdown } = renderResultToMarkdown(value);
   const tree = parse(extendedMarkdownLanguage, markdown);
   return renderMarkdownToHtml(tree, {});
 }
-
-// ── Nil / empty values ──────────────────────────────────────────────
 
 test("null renders as empty markdown with dataType nil", async () => {
   const r = renderResultToMarkdown(null);
@@ -33,8 +30,6 @@ test("SLIQ_NULL (SQL NULL) renders as empty markdown with dataType nil", async (
   const r = renderResultToMarkdown(SLIQ_NULL);
   expect(r).toEqual({ markdown: "", dataType: "nil" });
 });
-
-// ── Strings ─────────────────────────────────────────────────────────
 
 test("string is returned as raw markdown", async () => {
   const r = renderResultToMarkdown("hello world");
@@ -64,8 +59,6 @@ test("string with HTML is not escaped (raw markdown)", async () => {
   });
 });
 
-// ── Numbers ─────────────────────────────────────────────────────────
-
 test("integer number", async () => {
   const r = renderResultToMarkdown(42);
   expect(r).toEqual({ markdown: "42", dataType: "number" });
@@ -86,8 +79,6 @@ test("tagged float (integer-valued)", async () => {
   expect(r).toEqual({ markdown: "2.0", dataType: "number" });
 });
 
-// ── Booleans ────────────────────────────────────────────────────────
-
 test("boolean true", async () => {
   const r = renderResultToMarkdown(true);
   expect(r).toEqual({ markdown: "true", dataType: "boolean" });
@@ -98,16 +89,12 @@ test("boolean false", async () => {
   expect(r).toEqual({ markdown: "false", dataType: "boolean" });
 });
 
-// ── Fallback (unknown object type) ──────────────────────────────────
-
 test("non-matching object is stringified", async () => {
   const d = new Date("2024-01-15T00:00:00.000Z");
   const r = renderResultToMarkdown(d);
   expect(r.dataType).toBe("string");
   expect(r.markdown).toContain("2024");
 });
-
-// ── LuaTable: empty ─────────────────────────────────────────────────
 
 test("empty LuaTable", async () => {
   const r = renderResultToMarkdown(new LuaTable());
@@ -116,8 +103,6 @@ test("empty LuaTable", async () => {
     dataType: "table",
   });
 });
-
-// ── LuaTable: pure array of scalars ─────────────────────────────────
 
 test("LuaTable array of scalars renders as unmarked list, one item per line", async () => {
   const tbl = new LuaTable();
@@ -129,8 +114,6 @@ test("LuaTable array of scalars renders as unmarked list, one item per line", as
   expect(r.dataType).toBe("list");
   expect(r.markdown).toBe("alpha\nbeta\ngamma");
 });
-
-// ── LuaTable: array of LuaTables → multi-row table ─────────────────
 
 test("LuaTable array of LuaTables renders as multi-row table", async () => {
   const row1 = new LuaTable();
@@ -156,8 +139,6 @@ test("LuaTable array of LuaTables renders as multi-row table", async () => {
   );
 });
 
-// ── LuaTable: record (string keys) ─────────────────────────────────
-
 test("LuaTable with string keys renders as single-row table", async () => {
   const tbl = new LuaTable();
   await tbl.rawSet("x", 10);
@@ -171,8 +152,6 @@ test("LuaTable with string keys renders as single-row table", async () => {
   );
 });
 
-// ── LuaTable: mixed keys ────────────────────────────────────────────
-
 test("LuaTable with mixed keys uses keys order in header", async () => {
   const tbl = new LuaTable();
   await tbl.rawSet(1, "first");
@@ -185,8 +164,6 @@ test("LuaTable with mixed keys uses keys order in header", async () => {
   expect(r.markdown).toContain("first");
   expect(r.markdown).toContain("test");
 });
-
-// ── Null / empty values inside cells ────────────────────────────────
 
 test("SLIQ_NULL value in a table cell renders as empty td", async () => {
   const row = new LuaTable();
@@ -223,8 +200,6 @@ test("SLIQ_NULL item in a list renders as empty bullet", async () => {
   expect(r.markdown).toBe("1\n\n3");
 });
 
-// ── Sparse / missing key handling ───────────────────────────────────
-
 test("LuaTable array with different keys shows union of headers", async () => {
   const row1 = new LuaTable();
   await row1.rawSet("x", 1);
@@ -242,8 +217,6 @@ test("LuaTable array with different keys shows union of headers", async () => {
   const empties = r.markdown.match(/<td data-table-cell-empty><\/td>/g);
   expect(empties).toHaveLength(2);
 });
-
-// ── Nested rendering ────────────────────────────────────────────────
 
 test("nested LuaTable in a cell renders recursively", async () => {
   const inner = new LuaTable();
@@ -337,8 +310,6 @@ test("nested scalar array in table cell renders as br-separated lines", async ()
   expect(r.markdown).toContain("aaa<br/>bbb");
 });
 
-// ── Markdown in cell values ─────────────────────────────────────────
-
 test("wiki link syntax in table cell is preserved", async () => {
   const row = new LuaTable();
   await row.rawSet("name", "[[Alice]]");
@@ -390,8 +361,6 @@ test("bold in list item is preserved", async () => {
   const r = renderResultToMarkdown(tbl);
   expect(r.markdown).toBe("**bold**\nnormal");
 });
-
-// ── End-to-end: markdown → parse → HTML ─────────────────────────────
 
 test("e2e: table with wiki links produces clickable links", async () => {
   const row = new LuaTable();
@@ -530,8 +499,6 @@ test("e2e: nested table in cell renders full sub-table", async () => {
   );
 });
 
-// ── Clean markdown (Copy button) output ─────────────────────────────
-
 test("clean: nil renders as empty string", async () => {
   expect(await renderResultToCleanMarkdown(null)).toBe("");
   expect(await renderResultToCleanMarkdown(undefined)).toBe("");
@@ -622,7 +589,6 @@ test("clean: nested LuaTable in cell renders as Lua literal", async () => {
   expect(result).toContain("|info|label|");
   expect(result).not.toContain("<table");
   expect(result).not.toContain("<td");
-  // Lua literal form (produced by LuaTable.toStringAsync)
   expect(result).toMatch(/\{\s*a\s*=\s*1/);
 });
 

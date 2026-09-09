@@ -100,10 +100,8 @@ impl AuthConfig {
             h.update(field.as_bytes());
             h.update([0u8]); // domain separator between fields
         }
-        // Only fold `pass_hash` in when it is set, so existing single-space
-        // servers (which always have `pass_hash: None`) keep the legacy digest
-        // and don't have their persisted sessions invalidated on upgrade. A
-        // domain tag distinguishes `None` from `Some("")`.
+        // Omit an absent pass_hash to preserve the single-space security digest.
+        // The domain tag distinguishes None from Some("").
         if let Some(pass_hash) = &self.pass_hash {
             h.update(b"pass_hash:");
             h.update(pass_hash.as_bytes());

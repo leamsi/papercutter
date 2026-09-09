@@ -7,7 +7,6 @@ test("Test LateBinder - basic get functionality", () => {
   });
   const p = binder.buildProxy();
   expect(p.returnNumber()).toEqual(1);
-  // Now swap out target
   binder.setTarget({
     returnNumber: () => 3,
   });

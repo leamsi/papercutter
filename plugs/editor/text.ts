@@ -9,7 +9,6 @@ export async function quoteSelection() {
   }
   from++;
   if (text[from] === ">" && text[from + 1] === " ") {
-    // Already quoted, we have to unquote
     text = text.slice(from + 2, selection.to);
     text = text.replaceAll("\n> ", "\n");
   } else {
@@ -23,7 +22,6 @@ export async function listifySelection() {
   let text = await editor.getText();
   const selection = await editor.getSelection();
 
-  //if very first of doc, just add a bullet and end
   if (selection.to === 0 && selection.from === 0) {
     await editor.insertAtCursor("* ");
     return;
@@ -87,12 +85,9 @@ async function insertMarker(marker: string) {
   const text = await editor.getText();
   const selection = await editor.getSelection();
   if (selection.from === selection.to) {
-    // empty selection
     if (markerAt(selection.from)) {
-      // Already there, skipping ahead
       await editor.moveCursor(selection.from + marker.length);
     } else {
-      // Not there, inserting
       await editor.insertAtCursor(marker + marker);
       await editor.moveCursor(selection.from + marker.length);
     }
@@ -108,7 +103,6 @@ async function insertMarker(marker: string) {
     }
 
     if (!hasMarker) {
-      // Adding
       await editor.replaceRange(
         selection.from,
         selection.to,
@@ -119,7 +113,6 @@ async function insertMarker(marker: string) {
         selection.to + marker.length,
       );
     } else {
-      // Removing
       await editor.replaceRange(
         from,
         to,

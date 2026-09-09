@@ -11,12 +11,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// Keeps concurrent probes on the same root from colliding.
 static PROBE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-/// Detect whether `root` lives on a case-insensitive filesystem.
-///
-/// The probe file is dot-prefixed because `fetch_file_list` and the client's
-/// `CheckedSpacePrimitives` both skip those, so it can't surface to a user even
-/// if cleanup fails. Any failure reports `false`, keeping the backend on its
-/// historical behavior.
+/// Detect a case-insensitive filesystem with a hidden probe file.
+/// Hidden names stay out of client listings even if cleanup fails.
+/// Errors return false, disabling automatic recasing.
 pub(crate) fn detect_case_insensitive(root: &Path) -> bool {
     let n = PROBE_COUNTER.fetch_add(1, Ordering::Relaxed);
     let lower = format!(".sb-case-probe-{}-{}", std::process::id(), n);
@@ -210,26 +207,13 @@ fn walk_true_relative(root: &Path, rel: &Path) -> std::io::Result<Option<PathBuf
     Ok(Some(resolved))
 }
 
-/// Apply a plan from `plan_recase`, best-effort.
-///
-/// Never surfaces an error: if a rename fails the caller's write still lands
-/// through the case-insensitive alias, which is the historical behavior.
-/// Failures are expected in the wild — on Windows a directory rename fails
-/// while antivirus or a search indexer holds a handle inside it.
-///
-/// Stops at the first problem rather than skipping ahead, since every later
-/// pair assumes the earlier renames landed.
+/// Apply a recasing plan without failing the caller's write. On failure the
+/// write follows the existing alias; Windows directory handles may block renames.
+/// Stop at the first failure because each pair depends on earlier renames.
 pub(crate) fn apply_recase(plan: &[(PathBuf, PathBuf)]) {
     for (from, to) in plan {
-        // Fires when a plan pair's `from` is itself the symlinked entry:
-        // renaming the link rather than what it points at is not ours to do.
-        // Renames *through* a symlinked directory pass this check and should —
-        // an external folder symlinked into a space holds real space files, and
-        // renaming one is exactly what the user asked for.
-        //
-        // Reachable on every platform. On macOS and Windows it is the fallback
-        // walk in `true_relative_path` that produces such a pair, since the OS
-        // resolver's own answer never survives the containment check.
+        // Rename through symlinked directories, but never rename a symlink itself.
+        // The fallback directory walk can produce either kind of pair on any platform.
         match std::fs::symlink_metadata(from) {
             Ok(md) if md.file_type().is_symlink() => {
                 tracing::debug!(
@@ -485,10 +469,7 @@ mod tests {
             Path::new("linked/a.md"),
         ));
 
-        // Reads the literal directory entry name rather than doing a
-        // case-insensitive path lookup (`.join("Linked").is_symlink()`) —
-        // on default APFS that lookup would still resolve to a renamed
-        // `linked` entry and pass either way, masking a regression.
+        // Inspect the directory entry: a case-insensitive lookup would accept either casing.
         let entries: Vec<String> = std::fs::read_dir(dir.path())
             .unwrap()
             .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())

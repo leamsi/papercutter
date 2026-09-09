@@ -26,11 +26,9 @@ export function luaDirectivePlugin(client: Client) {
     syntaxTree(state).iterate({
       enter: (node) => {
         // Disable rendering of Lua directives in #meta/template pages
-        // Either in frontmatter
         if (node.name === "FrontMatterCode") {
           const text = state.sliceDoc(node.from, node.to);
           try {
-            // Very ad-hoc regex to detect if meta/template appears in the tag list
             if (/tags:.*meta\/template/s.exec(text)) {
               shouldRender = false;
               return;
@@ -39,7 +37,6 @@ export function luaDirectivePlugin(client: Client) {
             // Ignore
           }
         }
-        // Or with a hash tag
         if (node.name === "Hashtag") {
           const text = state.sliceDoc(node.from, node.to);
           if (text.startsWith("#meta/template")) {

@@ -17,8 +17,7 @@ use crate::state::ServerState;
 
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
-/// `X-Timeout` is a whole number of **seconds** (default 30), matching the
-/// legacy standalone server.
+/// X-Timeout is a whole number of seconds, defaulting to 30.
 pub(crate) fn parse_timeout(headers: &HeaderMap) -> Duration {
     headers
         .get("X-Timeout")
@@ -82,7 +81,6 @@ async fn runtime_eval(
     body: Bytes,
     kind: EvalKind,
 ) -> Response {
-    // Counted on entry (the eval endpoints only).
     if let Some(metrics) = state.metrics.as_ref() {
         metrics.runtime_api_requests.inc();
     }
@@ -264,7 +262,6 @@ mod tests {
         let (status, body) = post_lua(state_with_runtime(Some(backend)), "editor.reload()").await;
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
         assert!(body.contains("script_error"), "{body}");
-        // The clean message flows verbatim into the `error` field (no Debug dump).
         assert!(
             body.contains(r#""error":"attempt to call a nil value""#),
             "{body}"

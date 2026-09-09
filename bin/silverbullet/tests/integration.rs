@@ -110,10 +110,6 @@ fn no_redirect_client() -> reqwest::blocking::Client {
         .unwrap()
 }
 
-// ---------------------------------------------------------------------------
-// Open server (no auth)
-// ---------------------------------------------------------------------------
-
 #[test]
 fn ping_reports_server_version() {
     let (_srv, _space, base) = start(&[]);
@@ -153,7 +149,6 @@ fn fs_put_get_roundtrip_with_meta_headers() {
 
     let get = http.get(format!("{base}/.fs/test.md")).send().unwrap();
     assert!(get.status().is_success(), "GET status {}", get.status());
-    // Metadata headers emitted by fs.rs::set_file_meta_headers.
     assert!(
         get.headers().get("x-last-modified").is_some(),
         "missing X-Last-Modified"
@@ -202,7 +197,6 @@ fn fs_list_includes_written_file() {
         .send()
         .unwrap();
 
-    // Without X-Sync-Mode.
     let resp = http.get(format!("{base}/.fs/")).send().unwrap();
     assert!(resp.status().is_success(), "list status {}", resp.status());
     let files: serde_json::Value = resp.json().unwrap();
@@ -215,7 +209,6 @@ fn fs_list_includes_written_file() {
         "listing missing test.md: {files}"
     );
 
-    // With X-Sync-Mode: true.
     let resp = http
         .get(format!("{base}/.fs/"))
         .header("X-Sync-Mode", "true")
@@ -258,7 +251,6 @@ fn fs_nested_and_url_encoded_paths_roundtrip() {
     let (_srv, _space, base) = start(&[]);
     let http = client();
 
-    // Nested path.
     let put = http
         .put(format!("{base}/.fs/sub/dir/page.md"))
         .header("Content-Type", "text/markdown")
@@ -273,7 +265,6 @@ fn fs_nested_and_url_encoded_paths_roundtrip() {
     assert!(get.status().is_success());
     assert_eq!(get.text().unwrap(), "nested");
 
-    // Path containing a space (URL-encoded).
     let put = http
         .put(format!("{base}/.fs/file%20with%20spaces.md"))
         .header("Content-Type", "text/markdown")
@@ -314,7 +305,6 @@ fn shell_echo_and_stdin_pipe() {
     let (_srv, _space, base) = start(&[]);
     let http = client();
 
-    // echo hello → code 0, stdout contains hello.
     let resp = http
         .post(format!("{base}/.shell"))
         .header("Content-Type", "application/json")
@@ -329,7 +319,6 @@ fn shell_echo_and_stdin_pipe() {
         "echo stdout: {v}"
     );
 
-    // stdin piped to cat → stdout echoes the stdin.
     let resp = http
         .post(format!("{base}/.shell"))
         .header("Content-Type", "application/json")
@@ -347,13 +336,10 @@ fn shell_echo_and_stdin_pipe() {
 
 #[test]
 fn proxy_forwards_to_a_throwaway_upstream() {
-    // Hand-rolled raw-TCP upstream: accept one connection, read the request,
-    // reply with a fixed HTTP/1.1 200 carrying the body `ok`.
     let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
     let upstream_port = upstream.local_addr().unwrap().port();
     let handle = std::thread::spawn(move || {
         if let Ok((mut conn, _)) = upstream.accept() {
-            // Drain the request headers (read until we've seen the blank line).
             let mut buf = [0u8; 1024];
             let _ = conn.read(&mut buf);
             let body = b"ok";
@@ -373,7 +359,6 @@ fn proxy_forwards_to_a_throwaway_upstream() {
         .get(format!("{base}/.proxy/127.0.0.1:{upstream_port}/x"))
         .send()
         .unwrap();
-    // The proxy returns 200 and surfaces the upstream status in a header.
     assert!(resp.status().is_success(), "proxy status {}", resp.status());
     assert_eq!(
         resp.headers()
@@ -388,10 +373,6 @@ fn proxy_forwards_to_a_throwaway_upstream() {
 
     let _ = handle.join();
 }
-
-// ---------------------------------------------------------------------------
-// Auth server (SB_USER + SB_AUTH_TOKEN)
-// ---------------------------------------------------------------------------
 
 /// Spawn a server with a single user `alice:s3cret` and a static bearer token.
 fn start_auth() -> (Server, tempfile::TempDir, String) {
@@ -469,7 +450,6 @@ fn auth_post_good_credentials_sets_cookie_and_cookie_round_trips() {
         .to_str()
         .unwrap()
         .to_string();
-    // Host-derived cookie name starts with `auth_`.
     assert!(
         set_cookie.starts_with("auth_"),
         "cookie name should start with auth_: {set_cookie}"
@@ -478,7 +458,6 @@ fn auth_post_good_credentials_sets_cookie_and_cookie_round_trips() {
     let v: serde_json::Value = resp.json().unwrap();
     assert_eq!(v["status"], "ok", "login JSON: {v}");
 
-    // Replay the cookie (name=value before the first `;`) against /.config.
     let cookie = set_cookie.split(';').next().unwrap().to_string();
     let resp = http
         .get(format!("{base}/.config"))

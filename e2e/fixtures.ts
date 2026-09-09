@@ -179,7 +179,6 @@ export const test = base.extend<SBFixtures>({
 
     await use({ url, port, spaceDir, stop });
 
-    // Cleanup
     await stop();
     await rm(spaceDir, { recursive: true, force: true });
   },

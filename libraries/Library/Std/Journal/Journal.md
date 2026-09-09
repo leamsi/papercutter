@@ -143,18 +143,14 @@ if config.get("journal.enabled", true) then
       end
     end,
   }
-  -- Journals are dated paths ("Journal/2026/08/07"), so a tree is the shape
-  -- they already have: a year is a folder, a month is a folder, and reaching
-  -- last March is three keystrokes rather than a phrase.
+  -- Dated paths form a year/month/day tree.
   navigator.define {
     name = "std.journal",
     title = "Journal",
     dock = "modal",
     presentation = {
       mode = "tree",
-      -- A picker has to open with something to pick: collapsed, this one opens
-      -- as a single "Journal" folder row and nothing else. Expanded, the dates
-      -- are on screen and what you close is what it remembers.
+      -- Expand initially so dates are visible instead of only the root folder.
       expandAll = true,
       row = {
         icon = function(obj)

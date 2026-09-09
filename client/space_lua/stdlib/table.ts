@@ -274,12 +274,10 @@ export const tableApi = new LuaTable({
       t: number,
       a2?: LuaTable | any[],
     ) => {
-      // a2 defaults to a1
       if (a2 === undefined || a2 === null) {
         a2 = a1;
       }
 
-      // Empty range: nothing to do, return destination
       if (e < f) {
         return a2;
       }
@@ -422,7 +420,6 @@ export const tableApi = new LuaTable({
         return false;
       }
       if (tbl instanceof LuaTable) {
-        // Iterate over the table
         for (const key of tbl.keys()) {
           if (luaEquals(tbl.get(key), value)) {
             return true;
@@ -459,9 +456,7 @@ export const tableApi = new LuaTable({
       tbl: LuaTable | Record<string, any>,
       ...keys: LuaValue[]
     ) => {
-      // Normalize arguments
       if (Array.isArray(keys[0])) {
-        // First argument is key array, let's unpack
         keys = keys[0];
       } else if (keys[0] instanceof LuaTable) {
         keys = keys[0].toJSArray();

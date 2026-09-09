@@ -138,8 +138,6 @@ export function deleteDocument(name: string): Promise<void> {
   return syscall("space.deleteDocument", name);
 }
 
-// Lower level-file operations
-
 /**
  * List all files in the space (pages, documents and plugs).
  * @returns a list of all files in the space represented as FileMeta objects

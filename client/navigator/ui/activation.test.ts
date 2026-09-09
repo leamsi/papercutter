@@ -107,7 +107,6 @@ test("a carried dropdown value applies to that activation only, unpersisted", as
   });
   await settled();
   expect(setDropdownValue).toHaveBeenCalledWith("recipient:sales");
-  // Ephemeral by design: the carried value is never written back.
   expect(datastore.set).not.toHaveBeenCalled();
 
   // The next open without a carried value restores the remembered
@@ -134,7 +133,6 @@ test("without a remembered value, the open after a carried one is back on All", 
   setDropdownValue.mockClear();
   await activate({ view: "inbox", token: 2 });
   await settled();
-  // Nothing remembered: the reset to the built-in "All" is the last word.
   expect(setDropdownValue).toHaveBeenLastCalledWith(undefined);
 });
 

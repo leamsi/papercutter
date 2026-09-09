@@ -189,9 +189,7 @@ describe("ObjectIndex initial-index completion verification", () => {
       await eventHook.dispatchEvent("mq:emptyQueue:indexQueue");
     };
 
-    // Four pages, none indexed yet; each round indexes exactly one more.
-    // That is four shrinking rounds -- more than the old fixed cap of three,
-    // which would have declared the index complete with a page still missing.
+    // Each round indexes one of four pages; keep retrying while the set shrinks.
     const names = ["A", "B", "C", "D"];
     await eventHook.dispatchEvent(
       "file:listed",

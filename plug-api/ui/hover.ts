@@ -1,13 +1,8 @@
 import { useEffect, useState } from "preact/hooks";
 
 /**
- * Which row the pointer is over, deliberately kept out of the render tree.
- *
- * Mounting a row's actions on demand means hover changes what is rendered --
- * but holding that in a parent's state would re-render every row it draws on
- * every row-to-row pointer transition, and an expanded list can be thousands
- * of rows. Rows subscribe individually instead, so a transition re-renders the
- * two rows whose answer actually changed.
+ * Tracks hover outside parent state. Individual subscriptions re-render only
+ * the two affected rows instead of the entire expanded list.
  */
 export class HoverTracker {
   private key: unknown = undefined;

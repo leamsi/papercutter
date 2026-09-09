@@ -31,7 +31,6 @@ export class LimitedMap<V> {
       }, ttl);
     }
     if (this.map.size >= this.maxSize) {
-      // Remove the oldest key before adding a new one
       const oldestKey = this.getOldestKey();
       this.map.delete(oldestKey!);
     }
@@ -41,7 +40,6 @@ export class LimitedMap<V> {
   get(key: string): V | undefined {
     const entry = this.map.get(key);
     if (entry) {
-      // Update the last accessed timestamp
       entry.la = Date.now();
       return entry.value;
     }

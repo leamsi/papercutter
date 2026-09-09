@@ -12,10 +12,6 @@ use crate::{
     crypto,
 };
 
-// ---------------------------------------------------------------------------
-// Pure helpers (tested)
-// ---------------------------------------------------------------------------
-
 /// Space names must be alphanumeric + hyphens (`^[a-zA-Z0-9-]+$`).
 pub fn is_valid_space_name(name: &str) -> bool {
     !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
@@ -31,7 +27,7 @@ pub fn render_space_table(cfg: &Config) -> String {
     }
 
     let mut lines: Vec<String> = Vec::new();
-    lines.push(String::new()); // leading blank line
+    lines.push(String::new());
     lines.push(format!("{:<20}{:<40}{}", "NAME", "URL", "AUTH"));
     lines.push("-".repeat(70));
     for s in &cfg.spaces {
@@ -42,10 +38,8 @@ pub fn render_space_table(cfg: &Config) -> String {
         };
         lines.push(format!("{:<20}{:<40}{}", s.name, loc, s.auth.method));
     }
-    lines.push(String::new()); // trailing blank line
+    lines.push(String::new());
 
-    // Join with newlines — each element is one line, trailing blank produces a
-    // final "\n" after the join.
     lines.join("\n")
 }
 
@@ -59,10 +53,6 @@ pub fn remove_space(cfg: &mut Config, name: &str) -> Result<(), String> {
     cfg.spaces.remove(idx);
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Command functions
-// ---------------------------------------------------------------------------
 
 /// `sb space ls` — print a table of configured spaces.
 pub fn space_ls() -> Result<(), String> {
@@ -89,7 +79,6 @@ pub fn space_add_interactive(preset_url: Option<&str>) -> Result<(), String> {
     let stdin = std::io::stdin();
     let mut reader = BufReader::new(stdin);
 
-    // --- Name ---
     print!("Space name: ");
     std::io::stdout()
         .flush()
@@ -108,7 +97,6 @@ pub fn space_add_interactive(preset_url: Option<&str>) -> Result<(), String> {
         }
     }
 
-    // --- URL ---
     let space_url: String = if let Some(u) = preset_url {
         u.to_string()
     } else {
@@ -123,14 +111,12 @@ pub fn space_add_interactive(preset_url: Option<&str>) -> Result<(), String> {
         raw.trim().to_string()
     };
 
-    // Validate with reqwest::Url — require a host.
     let parsed = reqwest::Url::parse(&space_url).map_err(|_| "invalid URL format".to_string())?;
     if !parsed.has_host() {
         return Err("invalid URL format".to_string());
     }
     let space_url = space_url.trim_end_matches('/').to_string();
 
-    // --- Probe ---
     let probe_timeout = Duration::from_secs(30);
     let probe_conn = SpaceConnection {
         client: conn::new_client(probe_timeout)?,
@@ -155,7 +141,6 @@ pub fn space_add_interactive(preset_url: Option<&str>) -> Result<(), String> {
         if !trimmed.is_empty() {
             auth_type = trimmed;
         }
-        // auth_type stays "none" if empty
     } else if needs_auth {
         println!("Server requires authentication.");
         print!("Auth type (password / token) [password]:");
@@ -180,7 +165,6 @@ pub fn space_add_interactive(preset_url: Option<&str>) -> Result<(), String> {
         return Err("auth type must be token, password, or none".to_string());
     }
 
-    // --- Build the space config skeleton ---
     let mut space = SpaceConfig {
         id: config::new_uuid(),
         name: name.clone(),
@@ -192,7 +176,6 @@ pub fn space_add_interactive(preset_url: Option<&str>) -> Result<(), String> {
         ..Default::default()
     };
 
-    // --- Credential loop ---
     while auth_type != "none" {
         if auth_type == "token" {
             print!("Token: ");
@@ -214,7 +197,6 @@ pub fn space_add_interactive(preset_url: Option<&str>) -> Result<(), String> {
             space.auth.username = String::new();
             space.auth.method = auth_type.clone();
 
-            // Verify auth
             let verify_conn = SpaceConnection {
                 client: conn::new_client(probe_timeout)?,
                 base_url: space_url.clone(),
@@ -255,7 +237,6 @@ pub fn space_add_interactive(preset_url: Option<&str>) -> Result<(), String> {
             space.auth.encrypted_token = String::new();
             space.auth.method = auth_type.clone();
 
-            // Verify auth via JWT login
             let verify_client = conn::new_client(probe_timeout)?;
             let verify_auth =
                 match conn::login_for_jwt(&verify_client, &space_url, &username, &plain_password) {
@@ -264,7 +245,6 @@ pub fn space_add_interactive(preset_url: Option<&str>) -> Result<(), String> {
                         value: jwt,
                     },
                     Err(e) => {
-                        // Surface the login error as an auth failure message
                         println!("Authentication failed: {e}. Try again.");
                         print!("Auth type (password / token) [password]:");
                         std::io::stdout()
@@ -299,7 +279,6 @@ pub fn space_add_interactive(preset_url: Option<&str>) -> Result<(), String> {
             }
         }
 
-        // auth check failed
         println!("Authentication failed. Try again.");
         print!("Auth type (password / token) [password]:");
         std::io::stdout()
@@ -327,18 +306,10 @@ pub fn space_add_interactive(preset_url: Option<&str>) -> Result<(), String> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::{AuthConfig, Config, SpaceConfig};
-
-    // -----------------------------------------------------------------------
-    // is_valid_space_name
-    // -----------------------------------------------------------------------
 
     #[test]
     fn valid_space_names() {
@@ -358,10 +329,6 @@ mod tests {
         assert!(!is_valid_space_name("has.dot"));
         assert!(!is_valid_space_name("has/slash"));
     }
-
-    // -----------------------------------------------------------------------
-    // render_space_table
-    // -----------------------------------------------------------------------
 
     #[test]
     fn render_empty_cfg() {
@@ -385,7 +352,6 @@ mod tests {
             }],
         };
         let out = render_space_table(&cfg);
-        // Must contain NAME header, 70 dashes, and the space row
         assert!(out.contains("NAME"), "must contain NAME header");
         assert!(out.contains("URL"), "must contain URL header");
         assert!(out.contains("AUTH"), "must contain AUTH header");
@@ -396,7 +362,6 @@ mod tests {
             "must contain space URL"
         );
         assert!(out.contains("token"), "must contain auth method");
-        // Leading and trailing blank lines
         assert!(out.starts_with('\n'), "must start with blank line");
         assert!(out.ends_with('\n'), "must end with newline");
     }
@@ -407,7 +372,7 @@ mod tests {
             spaces: vec![SpaceConfig {
                 id: "id2".into(),
                 name: "local".into(),
-                url: String::new(), // empty URL
+                url: String::new(),
                 folder_path: "/home/user/notes".into(),
                 auth: AuthConfig {
                     method: "none".into(),
@@ -458,10 +423,6 @@ mod tests {
         assert!(out.contains("/notes"));
         assert!(out.contains("none"));
     }
-
-    // -----------------------------------------------------------------------
-    // remove_space
-    // -----------------------------------------------------------------------
 
     #[test]
     fn remove_space_existing() {

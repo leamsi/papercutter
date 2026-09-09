@@ -202,8 +202,6 @@ test("firstSyncPrompt: no status at all (both the refetch and the cache failed) 
     kind: "unknown",
     message: COULD_NOT_CHECK_FIRST_SYNC,
   });
-  // The prompt now fires on Save, not on a sync toggle, so it must ask
-  // about saving rather than about turning something on.
   expect(COULD_NOT_CHECK_FIRST_SYNC).toContain("Save anyway?");
 });
 

@@ -69,7 +69,6 @@ export function parse(
   text: string,
   offset?: number,
 ): ParseTree {
-  // Remove \r for Windows before parsing
   text = text.replaceAll("\r", "");
   const tree = lezerToParseTree(
     text,

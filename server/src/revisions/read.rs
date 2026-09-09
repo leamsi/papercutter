@@ -781,7 +781,6 @@ pub fn working_diff(store: &RevisionStore, space_path: &str) -> Result<Option<St
             return Ok(Some(tracked));
         }
     }
-    // Tracked and no diff against HEAD: genuinely unchanged.
     if !git::run(&repo, &["ls-files", "--", &pathspec], &[])?
         .trim()
         .is_empty()

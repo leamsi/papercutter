@@ -112,7 +112,6 @@ export function setupMessageListener(
       }
     })().catch(console.error);
   });
-  // Signal initialization with manifest
   workerPostMessage({
     type: "manifest",
     manifest,
@@ -139,7 +138,6 @@ export async function sandboxFetch(
 
 globalThis.nativeFetch = globalThis.fetch;
 
-// Monkey patch fetch()
 export function monkeyPatchFetch() {
   // @ts-expect-error: monkey patching fetch
   globalThis.fetch = async (

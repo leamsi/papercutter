@@ -53,7 +53,6 @@ const WikiLink: MarkdownConfig = {
           return -1;
         }
 
-        //const [fullMatch, firstMark, page, alias, _lastMark] = match;
         const { leadingTrivia, stringRef, alias } = match.groups;
         const endPos = pos + match[0].length;
         let aliasElts: any[] = [];
@@ -80,7 +79,6 @@ const WikiLink: MarkdownConfig = {
           cx.elt("WikiLinkMark", endPos - 2, endPos),
         ]);
 
-        // If inline image
         if (next === 33) {
           allElts = cx.elt("Image", pos, endPos, [allElts]);
         }
@@ -118,7 +116,6 @@ const LuaDirectives: MarkdownConfig = {
             case "}":
               bracketNestingDepth--;
               if (bracketNestingDepth === 0) {
-                // Done!
                 break loopLabel;
               }
               break;
@@ -131,7 +128,6 @@ const LuaDirectives: MarkdownConfig = {
         const bodyText = textFromPos.slice(2, valueLength);
         const endPos = pos + valueLength + 1;
 
-        // Let's parse as an expression
         const parsedExpression = luaLanguage.parser.parse(`_(${bodyText})`);
 
         // If bodyText starts with whitespace, we need to offset this later
@@ -203,7 +199,6 @@ export const Attribute: MarkdownConfig = {
         const textFromPos = cx.slice(pos, cx.end);
         if (
           next !== 91 /* '[' */ ||
-          // and match the whole thing
           !(match = attributeStartRegex.exec(textFromPos))
         ) {
           return -1;
@@ -219,7 +214,6 @@ export const Attribute: MarkdownConfig = {
             case "]":
               bracketNestingDepth--;
               if (bracketNestingDepth === 0) {
-                // Done!
                 break loopLabel;
               }
               break;
@@ -231,7 +225,6 @@ export const Attribute: MarkdownConfig = {
         }
 
         if (textFromPos[valueLength + 1] === "(") {
-          // This turns out to be a link, back out!
           return -1;
         }
 
@@ -430,8 +423,6 @@ const AtMentionSignature: MarkdownConfig = {
   ],
 };
 
-// FrontMatter parser
-
 const yamlLang = StreamLanguage.define(yamlLanguage);
 
 export const FrontMatter: MarkdownConfig = {
@@ -521,15 +512,12 @@ const baseMarkdownExtensions: MarkdownConfig[] = [
   {
     props: [
       foldNodeProp.add({
-        // Don't fold at the list level
         BulletList: () => null,
         OrderedList: () => null,
-        // Fold list items
         ListItem: (tree, state) => ({
           from: state.doc.lineAt(tree.from).to,
           to: tree.to,
         }),
-        // Fold frontmatter
         FrontMatter: (tree) => ({
           from: tree.from,
           to: tree.to,

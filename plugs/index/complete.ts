@@ -117,9 +117,7 @@ export async function anchorComplete(completeEvent: CompleteEvent) {
   // Match `[[` (or `[alias](`) followed by an optional page name, then `$` and optional prefix.
   // Group `page`: everything before the `$` (may be empty for bare anchors).
   // Group `prefix`: the partial anchor name typed so far (may be empty).
-  // This negative lookbehind is to prevent matching query[[. This requires negative lookbehind,
-  // which is generally supported now (it seems), in versions of iOS Safari 13.1 and later
-  // https://caniuse.com/js-regexp-lookbehind
+  // Negative lookbehind excludes query[[.
   const anchorMatch =
     /(?<!query)\[\[(?<page>[^\]$]*)\$(?<prefix>[A-Za-z0-9_/:-]*)$/.exec(
       completeEvent.linePrefix,

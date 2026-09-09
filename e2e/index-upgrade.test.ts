@@ -186,19 +186,11 @@ test.describe("index version upgrade (service worker disabled)", () => {
     await gotoSilverBulletPage(page, sbServer);
     await waitForEditor(page);
 
-    // A stale-but-present index should not flip widgets into the
-    // loading/spinner mode at boot — the existing entries are still
-    // queryable until the actual reindex starts. (Before this fix the
-    // boot-time flag was set from `hasFullIndexCompleted()`, which is
-    // `stored >= desired` and therefore false during the wait, and
-    // `updatePageListCache` would take the fallback branch and leave
-    // `pageListLoaded` false.)
+    // A stale index stays queryable while the reindex waits, so widgets must
+    // remain ready during boot.
     expect(await readFullIndexCompleted(page)).toBe(true);
     await waitForWidgetsReady(page);
-    // Custom styles must also load from the stale-but-present index —
-    // before this was wired up, `loadCustomStyles` bailed out on the
-    // strict `hasFullIndexCompleted` check and the `#custom-styles`
-    // element stayed empty.
+    // Custom styles must load from the stale index while reindexing waits.
     expect(await customStylesContent(page)).toContain(SPACE_STYLE_MARKER);
 
     // Critical assertion: a real reindex must actually have run, not
@@ -287,10 +279,7 @@ test.describe("index version upgrade (service worker enabled)", () => {
     // test for the rationale).
     expect(await readFullIndexCompleted(page)).toBe(true);
     await waitForWidgetsReady(page);
-    // Custom styles must also load from the stale-but-present index —
-    // before this was wired up, `loadCustomStyles` bailed out on the
-    // strict `hasFullIndexCompleted` check and the `#custom-styles`
-    // element stayed empty.
+    // Custom styles must load from the stale index while reindexing waits.
     expect(await customStylesContent(page)).toContain(SPACE_STYLE_MARKER);
 
     await waitForReindexLog(consoleState);

@@ -102,9 +102,7 @@ describe("computeExternalChanges", () => {
         current,
         computeExternalChanges(base, disk, current),
       );
-      // The pre-fix result was "Line2 changed by Remchaned by Tteb1": both
-      // sides' fragments concatenated in position order. Whatever this
-      // merge does, every line must be text somebody actually wrote.
+      // Conflicting rewrites must not splice fragments into a line nobody wrote.
       for (const line of merged.split("\n")) {
         expect(["Line1", "Line3", ""]).toContain(
           line.startsWith("Line2") ? "" : line,
@@ -152,11 +150,8 @@ describe("computeExternalChanges", () => {
       const disk = "Line1\nLine2 changed by Remote\nLine3\n";
       const current = "Line1\nLine2 changed by Tab1\nLine3\n";
       expect(computeExternalChanges(base, disk, current).deferred).toBe(true);
-      // Same-text echo: empty, but nothing was withheld.
       expect(computeExternalChanges(base, disk, disk).deferred).toBe(false);
-      // Disk never moved: empty, but nothing was withheld.
       expect(computeExternalChanges(base, base, current).deferred).toBe(false);
-      // A clean merge is not a deferral either.
       expect(
         computeExternalChanges(base, `${base}Line4 remote\n`, current).deferred,
       ).toBe(false);

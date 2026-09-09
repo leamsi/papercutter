@@ -96,7 +96,6 @@ mod tests {
 
     #[test]
     fn from_env_parse_disabled_for_non_local_backend() {
-        // Anything other than `local` fails safe to disabled.
         assert!(!ShellConfig::parse(Some("off"), Some("git npm"), false).enabled);
         assert!(!ShellConfig::parse(Some("noop"), None, false).enabled);
         assert!(!ShellConfig::parse(Some("disabled"), None, false).enabled);
@@ -118,7 +117,6 @@ mod tests {
 
     #[test]
     fn from_env_parse_enabled_with_whitelist() {
-        // Unset backend + not read-only ⇒ enabled; whitelist is space-separated.
         let c = ShellConfig::parse(None, Some("git  npm python"), false);
         assert!(c.enabled);
         assert_eq!(c.whitelist, vec!["git", "npm", "python"]);

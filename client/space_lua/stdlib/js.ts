@@ -41,7 +41,6 @@ export const jsApi = new LuaTable({
   import: new LuaBuiltinFunction({
     callback: async (_sf, url) => {
       let m = await import(url);
-      // Unwrap default if it exists
       if (Object.keys(m).length === 1 && m.default) {
         m = m.default;
       }
@@ -179,6 +178,5 @@ export const jsApi = new LuaTable({
     examples: [{ code: "print(js.stringify({1, 2, 3})) -- [1,2,3]" }],
   }),
 
-  // Expose the global window object
   window: globalThis,
 });

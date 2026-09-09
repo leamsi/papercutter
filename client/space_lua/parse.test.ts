@@ -3,13 +3,11 @@ import { parseBlock, parseExpressionString, parseToAST } from "./parse.ts";
 import type { LuaFunctionStatement, LuaNumberLiteral } from "./ast.ts";
 
 test("Test Lua parser", () => {
-  // Basic block test
   parseBlock(`
         print("Hello, World!")
         print(10)
 `);
   parseBlock("");
-  // Expression tests
   parseBlock(
     `e(1, 1.2, -3.8, -4, #lst, true, false, nil, "string", "", "Hello there \x00", ...)`,
   );
@@ -33,10 +31,8 @@ test("Test Lua parser", () => {
   parseBlock(`e(a.b.c)`);
   parseBlock(`e((1+2))`);
 
-  // Use keywordy variables
   parseBlock(`e(order, limit, where)`);
 
-  // Table expressions
   parseBlock(`e({})`);
   parseBlock(`e({1, 2, 3, })`);
   parseBlock(`e({1 ; 2 ; 3})`);
@@ -46,14 +42,11 @@ test("Test Lua parser", () => {
   parseBlock(`e(tbl["name" + 10])`);
   parseBlock(`e(test().bla)`);
 
-  // Function calls
   parseBlock(`e(func(), func(1, 2, 3), a.b(), a.b.c:hello(), (a.b)(7))`);
 
-  // Function expression
   parseBlock(`e(function(a, b) test() end)`);
   parseBlock(`e(function(a, b, ...) end)`);
 
-  // Statements
   parseBlock(`do end`);
   parseBlock(`do print() end`);
   parseBlock(`::hello::
@@ -67,13 +60,11 @@ test("Test Lua parser", () => {
   parseBlock(`if true then print() else print2() end`);
   parseBlock(`if true then print() elseif false then print2() end`);
 
-  // For loops
   parseBlock(`for i = 1, 10, 1 do print(i) end`);
   parseBlock(`for i = 1, 10 do print(i) end`);
   parseBlock(`for el in each({1, 2, 3}) do print(i) end`);
   parseBlock(`for i, l in 1, pairs() do print(i) end`);
 
-  // Function statements
   parseBlock(`function a() end`);
   parseBlock(`function a:b() end`);
   parseBlock(`function a.b.c:d() end`);
@@ -82,7 +73,6 @@ test("Test Lua parser", () => {
   parseBlock(`function hello(a, b, ...) end`);
   parseBlock(`local function hello() end`);
 
-  // Assignments, local variables etc.
   parseBlock(`a = 1`);
   parseBlock(`a, b = 1, 2`);
   parseBlock(`a.b.c = 1`);
@@ -92,12 +82,10 @@ test("Test Lua parser", () => {
   parseBlock(`local a<const> = 4`);
   parseBlock(`local a, b = 1, 2`);
 
-  // Function calls
   parseBlock(`a(1, 2, 3)`);
   parseBlock(`print "Sup"`);
   parseBlock(`e(1 + print "8")`);
 
-  // Return statements
   parseBlock(`return`);
   parseBlock(`return 1`);
   parseBlock(`return 1, 2, 3`);
@@ -188,17 +176,13 @@ test("Test query parsing", () => {
     `_(query[[from p = index.tag("page") order by p.lastModified desc, p.name]])`,
   );
   parseBlock(`_(query[[from p = index.tag("page") order by p.lastModified]])`);
-  // group by single key
   parseBlock(`_(query[[from p = index.tag("page") group by p.category]])`);
-  // group by multiple keys
   parseBlock(
     `_(query[[from p = index.tag("page") group by p.category, p.status]])`,
   );
-  // group by + having
   parseBlock(
     `_(query[[from p = index.tag("page") group by p.category having #group > 1]])`,
   );
-  // group by + having + select
   parseBlock(
     `_(query[[from p = index.tag("page") group by p.category, p.status having #group > 2 select { key = key, count = #group }]])`,
   );

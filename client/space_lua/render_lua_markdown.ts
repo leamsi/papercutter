@@ -99,8 +99,7 @@ export type Classified =
       headers: string[];
       rowCount: number;
       getCell: (rowIndex: number, header: string) => any;
-      // LuaTable record-arrays are historically tagged as "list", while
-      // JS record-arrays are tagged as "table". Preserved for compatibility.
+      // Compatibility contract: LuaTable record-arrays use "list"; JS arrays use "table".
       dataType: "table" | "list";
     }
   | { kind: "scalarArray"; items: any[]; dataType: "list" };
@@ -138,7 +137,6 @@ export function classifyResult(result: any): Classified {
     const arrayLen = result.length;
     const hasStrKeys = keys.some((k) => typeof k === "string");
 
-    // Pure array
     if (arrayLen > 0 && !hasStrKeys) {
       const elements: any[] = [];
       for (let i = 1; i <= arrayLen; i++) elements.push(result.rawGet(i));
@@ -162,7 +160,6 @@ export function classifyResult(result: any): Classified {
       return { kind: "scalarArray", items: elements, dataType: "list" };
     }
 
-    // Has string keys (record or mixed) — single-row table
     const headers = keys.map(String);
     return {
       kind: "record",
@@ -267,9 +264,7 @@ export function renderResultToMarkdown(
 /**
  * Cell transformer for the clean-markdown (copy) path. Renders:
  *  - `ref` columns as wiki links,
- *  - scalar arrays as `<br/>`-joined lines (mirrors the HTML display
- *    path, and relies on the markdown renderer now handling self-closing
- *    `<br/>` inside GFM table cells),
+ *  - scalar arrays as `<br/>`-joined lines inside GFM table cells,
  *  - everything else via `defaultTransformer` (which Lua-encodes nested
  *    tables and escapes pipes for scalars).
  */

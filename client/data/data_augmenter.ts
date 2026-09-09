@@ -20,7 +20,6 @@ export class Augmenter {
    */
   async augmentObjectArray(objects: any[], keyField: string): Promise<void> {
     const objectMap = new Map<string, any>();
-    // create a lookup map based on objects
     for (const obj of objects) {
       objectMap.set(obj[keyField], obj);
     }
@@ -28,7 +27,6 @@ export class Augmenter {
   }
 
   async augmentObjectMap(objectMap: Map<string, any>) {
-    // Now augment
     for await (const augmentation of this.ds.query({
       prefix: this.augmentationNamespace,
     })) {
@@ -36,7 +34,6 @@ export class Augmenter {
         augmentation.key[this.augmentationNamespace.length],
       );
       if (obj) {
-        // Copy over properties from augmentation
         Object.assign(obj, augmentation.value);
       }
     }

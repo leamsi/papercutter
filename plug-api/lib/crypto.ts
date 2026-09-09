@@ -40,18 +40,15 @@ export function base64DecodeDataUrl(dataUrl: string): Uint8Array {
 export async function hashSHA256(
   message: string | Uint8Array,
 ): Promise<string> {
-  // Transform the string into an ArrayBuffer
   const encoder = new TextEncoder();
   const data: Uint8Array =
     typeof message === "string" ? encoder.encode(message) : message;
 
-  // Generate the hash
   const hashBuffer = await globalThis.crypto.subtle.digest(
     "SHA-256",
     data as BufferSource,
   );
 
-  // Transform the hash into a hex string
   return Array.from(new Uint8Array(hashBuffer))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
@@ -117,7 +114,6 @@ export async function encryptAesGcm(
   );
   const encrypted = new Uint8Array(encryptedBuffer);
 
-  // Prepend IV to ciphertext
   const result = new Uint8Array(iv.length + encrypted.length);
   result.set(iv, 0);
   result.set(encrypted, iv.length);
@@ -143,10 +139,8 @@ export async function deriveCTRKeyFromPassword(
   password: string,
   salt: Uint8Array,
 ): Promise<CryptoKey> {
-  // Encode password to ArrayBuffer
   const passwordBytes = new TextEncoder().encode(password);
 
-  // Import password as a CryptoKey
   const baseKey = await globalThis.crypto.subtle.importKey(
     "raw",
     passwordBytes,

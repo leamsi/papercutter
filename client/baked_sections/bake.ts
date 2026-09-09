@@ -126,7 +126,6 @@ export function unbakeSectionAtCursor(client: Client): void {
   const insert = `\${${section.expr}}`;
   view.dispatch({
     changes: { from: section.start, to: section.end, insert },
-    // Put the cursor back inside the restored directive.
     selection: { anchor: section.start + insert.length },
   });
   client.focus();

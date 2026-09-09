@@ -99,7 +99,6 @@ export class ContentManager {
             !this.client.ui.viewState.unsavedChanges ||
             this.client.isReadOnlyMode()
           ) {
-            // No unsaved changes, or read-only mode, not gonna save
             return resolve();
           }
 
@@ -113,14 +112,11 @@ export class ContentManager {
               this.client.currentPath(),
             );
 
-            // Only thing we can really do is request a save
             this.documentEditor.requestSave();
 
             return resolve();
           } else {
-            // Do not save while IME composition is active
             if (this.client.editorView.composing) {
-              // Re-schedule save after composition likely ends
               this.saveTimeout = setTimeout(
                 this.save.bind(this),
                 autoSaveInterval,
@@ -177,10 +173,8 @@ export class ContentManager {
                   meta,
                 );
 
-                // At this all the essential stuff is done, let's proceed
                 resolve();
 
-                // In the background we'll fetch any enriched meta data, if any
                 const enrichedMeta =
                   await this.client.objectIndex.getObjectByRef(
                     this.client.currentName(),
@@ -193,7 +187,6 @@ export class ContentManager {
                     meta: enrichedMeta,
                   });
 
-                  // Skip during IME composition
                   if (!this.client.editorView.composing) {
                     // Trigger editor re-render to update Lua widgets
                     // with the new metadata
@@ -271,12 +264,8 @@ export class ContentManager {
     if (previousPath) {
       this.client.space.unwatchFile(previousPath);
       await this.save(true);
-      // Wait for index to process the saved page so the next page renders
-      // with up-to-date widget data. Skip during initial indexing though:
-      // the queue may contain hundreds of files and blocking navigation on
-      // a full drain would make the app feel unresponsive. Cap the wait so
-      // a backed-up queue (e.g. just after sync) doesn't stall navigation
-      // for many seconds: fresh widget data is a nice-to-have.
+      // Wait briefly for saved-page indexing so widgets see fresh data. Skip
+      // initial indexing and cap the wait to keep navigation responsive.
       if (await this.client.objectIndex.hasFullIndexCompleted()) {
         await Promise.race([
           this.client.objectIndex.awaitIndexQueueDrain(),
@@ -304,7 +293,6 @@ export class ContentManager {
 
     const extension = getPathExtension(path as Path);
 
-    // Create the document editor if it doesn't already exist
     if (
       !this.isDocumentEditor() ||
       this.documentEditor.extension !== extension
@@ -312,7 +300,6 @@ export class ContentManager {
       try {
         await this.switchToDocumentEditor(extension);
       } catch (e: any) {
-        // If there is no document editor we will open the file raw
         if (e.message.includes("Couldn't find")) {
           this.client.openUrl(
             `${document.baseURI.replace(/\/*$/, "") + fsEndpoint}/${path}`,
@@ -328,7 +315,6 @@ export class ContentManager {
       }
     }
 
-    // This can throw, but that will be catched and handled upstream.
     const doc = await this.client.space.readDocument(path);
 
     this.documentEditor!.openFile(doc.data, doc.meta, locationState.details);
@@ -363,7 +349,6 @@ export class ContentManager {
       await this.leaveCurrentPage(path);
     const pageName = getNameFromPath(path);
 
-    // Fetch next page to open
     let doc;
     let markerIndex = -1;
     try {
@@ -373,7 +358,6 @@ export class ContentManager {
         e.message !== notFoundError.message &&
         e.message !== offlineError.message
       ) {
-        // If the error is not a "not found" or "offline" error, rethrow it
         throw e;
       }
 
@@ -383,11 +367,6 @@ export class ContentManager {
           pageName,
         );
       }
-
-      // Scenarios:
-      // 1. We got a not found error -> Create an empty page
-      // 2. We got a offline error (which meant that the service worker didn't locally retrieve the page either so likely it doesn't exist) -> Create a new page
-      // Either way... we create an empty page!
 
       console.log(`Page doesn't exist, creating new page: ${pageName}`);
 
@@ -405,7 +384,6 @@ export class ContentManager {
         } as PageMeta,
       };
 
-      // Let's dispatch a editor:pageCreating event to see if anybody wants to do something before the page is created
       const results = (await this.client.dispatchAppEvent(
         "editor:pageCreating",
         {
@@ -416,7 +394,6 @@ export class ContentManager {
       if (results.length === 1) {
         doc.text = results[0].text;
         doc.meta.perm = results[0].perm;
-        // check for |^| and remove it; record position to place cursor later
         const cursorMarker = "|^|";
         const idx = doc.text.indexOf(cursorMarker);
         if (idx !== -1) {
@@ -451,7 +428,6 @@ export class ContentManager {
 
     await this.refreshCurrentPageMeta(pageName, doc.meta);
 
-    // When loading a different page OR if the page is read-only (in which case we don't want to apply local patches, because there's no point)
     if (loadingDifferentPath || doc.meta.perm === "ro") {
       // Fresh state, nothing to diff against yet: doc.text *is* the new base.
       this.pendingExternal = undefined;
@@ -480,12 +456,9 @@ export class ContentManager {
     this.client.space.watchFile(path);
 
     if (navigateWithinPage) {
-      // Setup scroll position, cursor position, etc
       try {
         this.navigateWithinPage(locationState);
-      } catch {
-        // We don't really care if this fails.
-      }
+      } catch {}
     }
 
     forceParseVisibleRegion(this.client.editorView, locationState.scrollTop);
@@ -541,7 +514,6 @@ export class ContentManager {
       this.documentEditor.destroy();
     }
 
-    // This is probably not the best way to hide the codemirror editor, but it works
     document.getElementById("sb-editor")!.classList.add("hide-cm");
 
     this.documentEditor = new DocumentEditor(
@@ -572,7 +544,6 @@ export class ContentManager {
     await this.documentEditor.init(extension);
 
     // We have to rebuild the editor state here to update the keymap correctly
-    // This is a little hacky but any other solution would pose a larger rewrite
     this.client.rebuildEditorState();
     this.client.editorView.contentDOM.blur();
   }
@@ -780,7 +751,6 @@ export class ContentManager {
     // We can't use getOffsetFromRef here, because it is asyncronous.
     let pos: number | undefined;
 
-    // Don't use getOffsetFromRef, so we can show error messages
     if (pageState.details?.type === "header") {
       const pageText = this.client.editorView.state.sliceDoc();
 
@@ -824,19 +794,16 @@ export class ContentManager {
         }),
       });
 
-      // If a position was specified, we bail out and ignore any cached state
       return;
     }
 
     let adjustedPosition = false;
 
-    // Was a particular scroll position persisted?
     if (pageState.scrollTop && pageState.scrollTop > 0) {
       this.restoreScrollPosition(pageState.scrollTop);
       adjustedPosition = true;
     }
 
-    // Was a particular cursor/selection set?
     if (pageState.selection?.anchor) {
       this.client.editorView.dispatch({
         selection: pageState.selection,
@@ -844,28 +811,21 @@ export class ContentManager {
       adjustedPosition = true;
     }
 
-    // If not: just put the cursor at the top of the page, right after the frontmatter
     if (!adjustedPosition && this.scrollRestoreCleanup) {
-      // No scroll position to restore, cancel any pending restoration
       this.scrollRestoreCleanup();
       this.scrollRestoreCleanup = undefined;
     }
     if (!adjustedPosition) {
-      // Somewhat ad-hoc way to determine if the document contains frontmatter and if so, putting the cursor _after it_.
       const pageText = this.client.editorView.state.sliceDoc();
 
-      // Default the cursor to be at position 0
       let initialCursorPos = 0;
       const match = frontMatterRegex.exec(pageText);
       if (match) {
-        // Frontmatter found, put cursor after it
         initialCursorPos = match[0].length;
       }
-      // By default scroll to the top
       this.client.editorView.scrollDOM.scrollTop = 0;
       this.client.editorView.dispatch({
         selection: { anchor: initialCursorPos },
-        // And then scroll down if required
         scrollIntoView: true,
       });
     }
@@ -878,7 +838,6 @@ export class ContentManager {
    * rendering), with a timeout to stop after the layout has stabilized.
    */
   private restoreScrollPosition(scrollTop: number) {
-    // Cancel any previous scroll restoration
     if (this.scrollRestoreCleanup) {
       this.scrollRestoreCleanup();
     }
@@ -905,7 +864,6 @@ export class ContentManager {
       scrollDOM.style.visibility = "";
     });
 
-    // Watch for DOM mutations (widget rendering) and re-apply scroll position
     const observer = new MutationObserver(() => {
       applyScroll();
     });
@@ -914,11 +872,9 @@ export class ContentManager {
       childList: true,
       subtree: true,
       attributes: true,
-      // Watch for style changes (widget height changes)
       attributeFilter: ["style", "class"],
     });
 
-    // Also handle user scroll: if the user manually scrolls, stop restoring
     const onUserScroll = () => {
       cleanup();
     };
@@ -928,7 +884,6 @@ export class ContentManager {
       scrollDOM.addEventListener("scroll", onUserScroll, { once: true });
     }, 100);
 
-    // Stop restoring after a reasonable timeout (widgets should be done by then)
     const timeout = setTimeout(() => {
       cleanup();
     }, 2000);

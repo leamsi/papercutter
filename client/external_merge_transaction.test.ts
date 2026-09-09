@@ -41,7 +41,6 @@ describe("external patch transaction shape (headless EditorState)", () => {
       extensions: [history()],
     });
 
-    // User types locally (goes into normal history)
     state = state.update({
       changes: { from: 5, insert: " typed" },
     }).state;
@@ -65,11 +64,9 @@ describe("external patch transaction shape (headless EditorState)", () => {
       },
     };
 
-    // One undo should revert only the external change...
     expect(undo(target as any)).toBe(true);
     expect(state.sliceDoc()).toBe("Hello typed");
 
-    // ...and a second undo reverts the user's own typing
     expect(undo(target as any)).toBe(true);
     expect(state.sliceDoc()).toBe("Hello");
   });
@@ -77,7 +74,6 @@ describe("external patch transaction shape (headless EditorState)", () => {
   test("echo (disk matches current) yields an empty changeset, nothing to dispatch", () => {
     const base = "Hello world\n";
     const disk = "Hello world\nExternal line\n";
-    // Simulate our own write already having landed in the editor (echo)
     const current = disk;
     const { changes } = computeExternalChanges(base, disk, current);
     expect(changes.empty).toBe(true);
@@ -120,10 +116,8 @@ describe("undo/redo of an external edit preserves the user's cursor (regression)
       extensions: [history(), externalUndoField],
     });
 
-    // Page just loaded: cursor sits at 0, untouched.
     expect(state.selection.main.head).toBe(0);
 
-    // External write lands while the cursor is still at 0.
     state = dispatchExternalPatch(
       state,
       "Hello world\n",
@@ -132,9 +126,8 @@ describe("undo/redo of an external edit preserves the user's cursor (regression)
     expect(state.sliceDoc()).toBe("Hello world\nExternal line\n");
     expect(state.selection.main.head).toBe(0);
 
-    // *Then* the user moves the cursor -- the step a naive regression test
-    // (or the existing e2e's click-right-before-undo) skips, which is
-    // exactly why it missed this bug.
+    // Move the cursor after the external edit, so undo cannot restore the
+    // selection captured before it arrived.
     state = state.update({ selection: { anchor: 6 } }).state;
     expect(state.selection.main.head).toBe(6);
 

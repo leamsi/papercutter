@@ -17,7 +17,6 @@ export function attributePlugin() {
 
         const attributeText = state.sliceDoc(node.from, node.to);
 
-        // attribute text will have a format of [hell: bla bla bla]
         const attributeName = attributeText.slice(
           1,
           attributeText.indexOf(":"),
@@ -26,7 +25,6 @@ export function attributePlugin() {
           .slice(attributeText.indexOf(":") + 1, attributeText.length - 1)
           .trim();
 
-        // Wrap the tag in html anchor element
         widgets.push(
           Decoration.mark({
             tagName: "span",

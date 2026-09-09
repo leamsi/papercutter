@@ -220,9 +220,6 @@ export function NavRoot({
   } = derived;
 
   const isSidebar = slot !== "modal";
-  // A verb where the title goes, and a placeholder naming what is being
-  // picked -- which follows the segment, so the same view reads as "Page",
-  // "Meta page" or "Document" depending on which subset is active.
   const placeholder =
     segments?.[segmentIndex]?.placeholder ?? view?.meta.placeholder ?? "Filter";
   const noFilter = !!view?.meta.noFilter;
@@ -344,9 +341,7 @@ export function NavRoot({
             items={segments.map((s, i) => ({
               label: s.label,
               icon: view?.segmentIcons?.[i],
-              // A prefix is never on screen, so it is always worth saying;
-              // the icons-only fallback (labels as tooltip when collapsed)
-              // is the shared control's own concern.
+              // Say the prefix explicitly because it is not otherwise displayed.
               tooltip: s.prefix ? `${s.label} (${s.prefix})` : undefined,
             }))}
             activeIndex={segmentIndex}

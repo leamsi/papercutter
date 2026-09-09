@@ -20,7 +20,6 @@ export const FINE_POINTER_MEDIA_QUERY = "(pointer: fine)";
 
 export function isMobileDevice(): boolean {
   const query = globalThis.matchMedia?.(FINE_POINTER_MEDIA_QUERY);
-  // No `matchMedia` at all (SSR, tests) is treated as a desktop, matching what
-  // every caller did before this helper existed.
+  // Without matchMedia (SSR, tests), default to desktop.
   return query ? !query.matches : false;
 }

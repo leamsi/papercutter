@@ -83,7 +83,6 @@ test("Markdown render", () => {
 });
 
 test("Wiki link with embedded image path", () => {
-  // This particular one caused an infinite regex loop previously, adding it here as a regression to avoid in the future
   const example = `![[Inbox/2026-01-08/CleanShot 2026-01-01 at 12.36.23.png]]`;
   const tree = parse(extendedMarkdownLanguage, example);
   renderMarkdownToHtml(tree, {
@@ -190,7 +189,6 @@ test("Inline HTML renders inside task items", () => {
 });
 
 test("CustomSyntaxRenderedHtml renders raw HTML", () => {
-  // Directly test the renderer with a synthetic parse tree
   const tree = {
     type: "Document",
     children: [
@@ -211,7 +209,6 @@ test("CustomSyntaxRenderedHtml renders raw HTML", () => {
   expect(html).toEqual('<span class="p">Before <em>rendered</em> after</span>');
 });
 
-// Minimal stubs for expandMarkdown tests
 const stubSpace = {} as Space;
 const stubSle = { env: new LuaEnv() } as SpaceLuaEnvironment;
 const defaultExpandOpts = {
@@ -333,17 +330,13 @@ test("expandMarkdown skips custom syntax without renderHtml", async () => {
     syntaxExtensions: {
       Custom: {
         ...customSpec,
-        // No renderHtml callback
       },
     },
   });
 
   const html = renderMarkdownToHtml(expanded);
-  // Should fall through to default rendering (raw text, HTML-escaped)
   expect(html).toContain("&lt;&lt;content&gt;&gt;");
 });
-
-// ── Block-level HTML rendering ─────────────────────────────────────
 
 test("Block HTML table renders correctly", () => {
   const tree = parse(
@@ -441,7 +434,6 @@ test("Nested block HTML tables", () => {
   );
   const html = renderMarkdownToHtml(tree, { failOnUnknown: true });
   expect(html).toContain("<table><tr><td>inner</td></tr></table>");
-  // Should have two table open/close pairs
   expect(html.match(/<table>/g)).toHaveLength(2);
   expect(html.match(/<\/table>/g)).toHaveLength(2);
 });
@@ -545,9 +537,6 @@ test("Multiple blank lines between blocks collapse to nothing", () => {
 });
 
 test("Heading then list then heading (transclusion shape)", () => {
-  // Mirrors the transcluded API page: heading, query result (bullet list),
-  // heading, query result (bullet list). The bug being guarded against here
-  // is the original symptom: bare <br>...<br><br><br> between sections.
   const tree = parse(
     extendedMarkdownLanguage,
     "# Lua Standard Library\n" +

@@ -8,10 +8,8 @@ use serde::Deserialize;
 use crate::conn::SpaceConnection;
 use crate::output::{self, OutputMode};
 
-// ---------------------------------------------------------------------------
 // Lua scripts — call the index.* schema introspection API (single source of
 // truth in Core); whitespace-significant, do not reformat.
-// ---------------------------------------------------------------------------
 
 /// "describe all": raw JSON Schemas from the API plus the SLIQ reference syntax block.
 const DESCRIBE_ALL_SCRIPT: &str = "
@@ -33,10 +31,6 @@ fn describe_tag_script(tag: &str) -> String {
     DESCRIBE_TAG_BODY.replacen("%s", tag, 1)
 }
 
-// ---------------------------------------------------------------------------
-// Typed shapes matching the Lua return values
-// ---------------------------------------------------------------------------
-
 /// Deserialized result of `describe all`: a map of tag name → JSON Schema plus
 /// the SLIQ reference syntax text.
 #[derive(Debug, Deserialize)]
@@ -46,10 +40,6 @@ struct DescribeAllResult {
     #[serde(default)]
     syntax: String,
 }
-
-// ---------------------------------------------------------------------------
-// Internal property struct for text rendering (not from Lua)
-// ---------------------------------------------------------------------------
 
 /// A single property extracted from a JSON Schema `properties` object.
 #[derive(Debug)]
@@ -61,13 +51,7 @@ struct TagProperty {
     enum_values: Vec<String>,
 }
 
-// ---------------------------------------------------------------------------
-// Presentation-layer extraction: JSON Schema → Vec<TagProperty>
-// ---------------------------------------------------------------------------
-
-/// Walk a JSON Schema object and extract its `properties` into a sorted Vec of
-/// `TagProperty`. This is the flattening logic that used to live in
-/// `schema_introspection.ts`.
+/// Extract and sort properties from a JSON Schema object.
 fn extract_properties_from_schema(schema: &serde_json::Value) -> Vec<TagProperty> {
     let mut props = Vec::new();
     if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
@@ -107,10 +91,6 @@ fn extract_properties_from_schema(schema: &serde_json::Value) -> Vec<TagProperty
     props
 }
 
-// ---------------------------------------------------------------------------
-// Tag name validation
-// ---------------------------------------------------------------------------
-
 /// Returns true iff `name` matches `^[a-zA-Z_][a-zA-Z0-9_-]*$`.
 /// Hand-rolled to avoid adding the `regex` crate to this crate's dependencies.
 fn is_valid_tag_name(name: &str) -> bool {
@@ -125,10 +105,6 @@ fn is_valid_tag_name(name: &str) -> bool {
     chars.all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '-'))
 }
 
-// ---------------------------------------------------------------------------
-// Public entry point
-// ---------------------------------------------------------------------------
-
 /// Dispatch to `describe_all` or `describe_tag` based on `type_`.
 pub fn run(
     conn: &SpaceConnection,
@@ -141,10 +117,6 @@ pub fn run(
         None => describe_all(conn, mode, out),
     }
 }
-
-// ---------------------------------------------------------------------------
-// describe_all
-// ---------------------------------------------------------------------------
 
 fn describe_all(
     conn: &SpaceConnection,
@@ -188,10 +160,6 @@ fn describe_all(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// describe_tag
-// ---------------------------------------------------------------------------
-
 fn describe_tag(
     conn: &SpaceConnection,
     tag: &str,
@@ -212,7 +180,6 @@ fn describe_tag(
         return output::format(out, &raw, OutputMode::Json).map_err(|e| e.to_string());
     }
 
-    // `raw` is a raw JSON Schema value.
     let additional_properties = raw
         .get("additionalProperties")
         .and_then(|v| v.as_bool())
@@ -259,10 +226,6 @@ fn describe_tag(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// summarize_props — short summary for the "describe all" listing
-// ---------------------------------------------------------------------------
-
 fn summarize_props(props: &[TagProperty]) -> String {
     if props.is_empty() {
         return String::new();
@@ -275,18 +238,10 @@ fn summarize_props(props: &[TagProperty]) -> String {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::Value;
-
-    // -----------------------------------------------------------------------
-    // is_valid_tag_name
-    // -----------------------------------------------------------------------
 
     #[test]
     fn valid_tag_names() {
@@ -313,10 +268,6 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------------
-    // describe_tag_script
-    // -----------------------------------------------------------------------
-
     #[test]
     fn describe_tag_script_calls_api() {
         let script = describe_tag_script("task");
@@ -326,10 +277,6 @@ mod tests {
         );
         assert!(!script.contains("%s"), "no remaining %s placeholder");
     }
-
-    // -----------------------------------------------------------------------
-    // describe_all_script
-    // -----------------------------------------------------------------------
 
     #[test]
     fn describe_all_script_calls_api() {
@@ -343,10 +290,6 @@ mod tests {
             "should return schemas + syntax"
         );
     }
-
-    // -----------------------------------------------------------------------
-    // extract_properties_from_schema
-    // -----------------------------------------------------------------------
 
     #[test]
     fn extract_properties_sorts_by_name() {
@@ -411,10 +354,6 @@ mod tests {
         assert!(props.is_empty());
     }
 
-    // -----------------------------------------------------------------------
-    // summarize_props
-    // -----------------------------------------------------------------------
-
     fn make_props(names: &[&str]) -> Vec<TagProperty> {
         names
             .iter()
@@ -447,10 +386,6 @@ mod tests {
         assert!(result.ends_with(", ..."));
     }
 
-    // -----------------------------------------------------------------------
-    // describe_all text rendering (new schema-map shape)
-    // -----------------------------------------------------------------------
-
     #[test]
     fn describe_all_text_renders_header_and_tags() {
         let raw: Value = serde_json::json!({
@@ -473,7 +408,6 @@ mod tests {
             "syntax": ""
         });
 
-        // Exercise the text rendering path directly via serde parse + render
         let result: DescribeAllResult = serde_json::from_value(raw).unwrap();
         let mut buf: Vec<u8> = Vec::new();
 
@@ -500,10 +434,6 @@ mod tests {
         assert!(out.contains("name"));
         assert!(out.contains("Run 'sb describe <type>' for full schema."));
     }
-
-    // -----------------------------------------------------------------------
-    // describe_tag text rendering (new raw-schema shape)
-    // -----------------------------------------------------------------------
 
     #[test]
     fn describe_tag_text_renders_properties() {
@@ -569,10 +499,6 @@ mod tests {
         assert!(out.contains("(nullable, enum: open|closed)"));
     }
 
-    // -----------------------------------------------------------------------
-    // Deserialization contract for the new API shape
-    // -----------------------------------------------------------------------
-
     #[test]
     fn deserializes_describe_schema_payload_as_schema_map() {
         // Shape returned by `return { schemas = index.describeSchema(), syntax = "..." }`
@@ -611,7 +537,6 @@ mod tests {
                 "done": { "type": "boolean", "readOnly": true, "nullable": false }
             }
         });
-        // Not null, so we proceed to render
         assert!(!raw.is_null());
         let props = extract_properties_from_schema(&raw);
         assert_eq!(props.len(), 1);

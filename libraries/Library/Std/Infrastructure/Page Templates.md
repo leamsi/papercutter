@@ -143,7 +143,6 @@ function template.createPageFromTemplate(templatePage, pageName, openIfExists)
       .. string.trim(frontmatterText)
       .. "\n---\n"
   end
-  -- Write an empty page to start
   space.writePage(pageName, initialText)
   editor.navigate(pageName)
   -- Insert there, supporting |^| cursor placeholder
@@ -178,7 +177,6 @@ for pt in query[[
 end
 
 local function cleanName(path)
-  -- Just pull the last part
   local parts = path:split("/")
   return parts[#parts]
 end

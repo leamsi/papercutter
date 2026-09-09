@@ -39,7 +39,6 @@ export class CommandHook
     cmd: Command,
   ) {
     if (commands.has(name)) {
-      // Existing command, let's do some inline patching
       const existingCommand = commands.get(name)!;
       const command: Command = {
         ...existingCommand,
@@ -68,9 +67,7 @@ export class CommandHook
       }
       commands.set(name, cmd);
     }
-    // Add commands from plugs
     if (!this.system) {
-      // Not initialized yet
       return commands;
     }
     for (const plug of this.system.loadedPlugs.values()) {
@@ -82,7 +79,6 @@ export class CommandHook
         }
         const cmd = functionDef.command;
         if (cmd.requireMode === "rw" && this.readOnly) {
-          // Bit hacky, but don't expose commands that require write mode in read-only mode
           continue;
         }
         this.mergeCommand(commands, cmd.name, {
@@ -112,7 +108,6 @@ export class CommandHook
         this.throttledBuildAllCommandsAndEmit();
       },
     });
-    // On next tick
     setTimeout(() => {
       this.throttledBuildAllCommandsAndEmit();
     });

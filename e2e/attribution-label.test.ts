@@ -18,11 +18,8 @@ import { getFreePort, waitForServer } from "./fixtures.ts";
  * edit made in one browser must surface in the other with the *account
  * name* on the caret label, not the "external" fallback.
  *
- * Regression: the origin used to ride a single pending slot cleared when
- * the probe's getFileMeta settled; any concurrent metadata fetch (e.g. a
- * plug syscall) would overlap the probe, suppress its file:changed via the
- * operationCount gate, and dispatch its own after the slot was cleared —
- * so a verified username reliably degraded to "external".
+ * Attribution must survive concurrent metadata fetches that overlap the probe
+ * and suppress its file:changed event through the operationCount gate.
  */
 
 let proc: ChildProcess;

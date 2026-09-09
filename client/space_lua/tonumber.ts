@@ -142,7 +142,6 @@ function parseInt(s: string): { ok: boolean; value: number } {
   let acc = 0;
   let any = false;
 
-  // hex?
   if (s.charCodeAt(i) === 48 && i + 1 < n) {
     // '0'
     const x = s.charCodeAt(i + 1);
@@ -179,7 +178,6 @@ function parseInt(s: string): { ok: boolean; value: number } {
     }
   }
 
-  // decimal integer
   while (i < n) {
     const c = s.charCodeAt(i);
     if (c < 48 || c > 57) {
@@ -221,7 +219,6 @@ function parseDecFloat(s: string): { ok: boolean; value: number } {
   let fracAny = false;
   let val = 0;
 
-  // integer part
   while (i < n) {
     const c = s.charCodeAt(i);
     if (c < 48 || c > 57) {
@@ -233,7 +230,6 @@ function parseDecFloat(s: string): { ok: boolean; value: number } {
     i++;
   }
 
-  // fractional part
   if (i < n) {
     if (s.charCodeAt(i) === 46) {
       // '.'
@@ -253,7 +249,6 @@ function parseDecFloat(s: string): { ok: boolean; value: number } {
     }
   }
 
-  // exponent
   let exp = 0;
   let hasExp = false;
   if (i < n) {
@@ -347,7 +342,6 @@ function parseHexFloat(s: string): { ok: boolean; value: number } {
   let anyHex = false;
   let sawDot = false;
 
-  // integer hex digits
   while (i < n) {
     const c = s.charCodeAt(i);
     let d = -1;
@@ -371,7 +365,6 @@ function parseHexFloat(s: string): { ok: boolean; value: number } {
     i++;
   }
 
-  // optional fractional part
   if (i < n) {
     if (s.charCodeAt(i) === 46) {
       // '.'
@@ -444,7 +437,6 @@ function parseHexFloat(s: string): { ok: boolean; value: number } {
         return { ok: false, value: 0 };
       }
     } else {
-      // no exponent marker
       if (!sawDot) {
         // without dot we must reject so parseInt can claim it as integer
         return { ok: false, value: 0 };
@@ -456,7 +448,6 @@ function parseHexFloat(s: string): { ok: boolean; value: number } {
       exp = 0; // implicit p0
     }
   } else {
-    // end of string
     if (!sawDot) {
       return { ok: false, value: 0 };
     }

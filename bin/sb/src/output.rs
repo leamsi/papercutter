@@ -8,10 +8,6 @@ use std::io::{self, Write};
 
 use serde_json::Value;
 
-// ---------------------------------------------------------------------------
-// OutputMode
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputMode {
     /// Picks Text on a TTY, JSON otherwise.  Resolved away before `format`.
@@ -27,10 +23,6 @@ pub enum OutputMode {
     /// YAML.
     Yaml,
 }
-
-// ---------------------------------------------------------------------------
-// resolve_mode
-// ---------------------------------------------------------------------------
 
 /// Determine the output mode from the three flag inputs and stdout TTY state.
 ///
@@ -60,10 +52,6 @@ pub fn resolve_mode(json: bool, text: bool, output: &str, is_tty: bool) -> Outpu
     }
 }
 
-// ---------------------------------------------------------------------------
-// format
-// ---------------------------------------------------------------------------
-
 /// Write `result` to `w` in the requested `mode`.
 ///
 /// `Value::Null` writes nothing.  `OutputMode::Auto` is treated as indented
@@ -89,10 +77,6 @@ pub fn format(w: &mut dyn Write, result: &Value, mode: OutputMode) -> io::Result
         OutputMode::Auto => write_json_indent(w, result),
     }
 }
-
-// ---------------------------------------------------------------------------
-// Low-level writers
-// ---------------------------------------------------------------------------
 
 fn write_line(w: &mut dyn Write, s: &str) -> io::Result<()> {
     if s.ends_with('\n') {
@@ -130,10 +114,6 @@ fn write_yaml(w: &mut dyn Write, v: &Value) -> io::Result<()> {
     write!(w, "{}", s)
 }
 
-// ---------------------------------------------------------------------------
-// Table rendering
-// ---------------------------------------------------------------------------
-
 /// Preferred column order.  Columns not in this list come after, alphabetised.
 const PREFERRED_COLUMNS: &[&str] = &[
     "tag",
@@ -164,12 +144,10 @@ fn write_table_list(w: &mut dyn Write, items: &[Value]) -> io::Result<()> {
         return Ok(());
     }
 
-    // Separate objects from primitives.
     let rows: Vec<&serde_json::Map<String, Value>> =
         items.iter().filter_map(|v| v.as_object()).collect();
 
     if rows.is_empty() {
-        // Array of primitives — one formatted cell per line.
         for item in items {
             let cell = format_cell(Some(item));
             writeln!(w, "{}", cell)?;
@@ -177,7 +155,6 @@ fn write_table_list(w: &mut dyn Write, items: &[Value]) -> io::Result<()> {
         return Ok(());
     }
 
-    // Collect union of keys.
     let mut key_set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for row in &rows {
         for k in row.keys() {
@@ -186,7 +163,6 @@ fn write_table_list(w: &mut dyn Write, items: &[Value]) -> io::Result<()> {
     }
     let cols = pick_columns(&key_set);
 
-    // Determine column widths (max of header + all cells, in rune count).
     let mut widths: Vec<usize> = cols.iter().map(|c| char_count(c)).collect();
     for row in &rows {
         for (i, col) in cols.iter().enumerate() {
@@ -198,9 +174,7 @@ fn write_table_list(w: &mut dyn Write, items: &[Value]) -> io::Result<()> {
         }
     }
 
-    // Write header row.
     write_padded_row(w, &cols, &widths)?;
-    // Write data rows.
     for row in &rows {
         let cells: Vec<String> = cols.iter().map(|c| format_cell(row.get(c))).collect();
         write_padded_row(w, &cells, &widths)?;
@@ -213,12 +187,10 @@ fn write_table_object(w: &mut dyn Write, obj: &serde_json::Map<String, Value>) -
     let mut keys: Vec<String> = obj.keys().cloned().collect();
     sort_keys_preferred(&mut keys);
 
-    // Two-column key/value block; compute widths.
     let key_width = keys.iter().map(|k| char_count(k)).max().unwrap_or(0);
 
     for k in &keys {
         let val = format_cell(obj.get(k));
-        // Left-pad the key column + 2 spaces of padding, then the value.
         let padding = key_width - char_count(k) + 2;
         let pad_str = " ".repeat(padding);
         writeln!(w, "{}{}{}", k, pad_str, val)?;
@@ -243,7 +215,6 @@ fn pick_columns(keys: &std::collections::BTreeSet<String>) -> Vec<String> {
         }
     }
 
-    // Remaining keys, alphabetically (BTreeSet is already sorted).
     for k in keys {
         if !seen.contains(k) {
             cols.push(k.clone());
@@ -290,10 +261,8 @@ pub fn format_cell(v: Option<&Value>) -> String {
         }
     };
 
-    // Collapse whitespace runs (split on whitespace, join with single space).
     let collapsed: String = s.split_whitespace().collect::<Vec<&str>>().join(" ");
 
-    // Truncate to MAX_CELL_WIDTH runes.
     let runes: Vec<char> = collapsed.chars().collect();
     if runes.len() > MAX_CELL_WIDTH {
         let mut truncated: String = runes[..MAX_CELL_WIDTH - 1].iter().collect();
@@ -303,10 +272,6 @@ pub fn format_cell(v: Option<&Value>) -> String {
         collapsed
     }
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /// Count Unicode scalar values (chars) in a string.
 #[inline]
@@ -332,20 +297,13 @@ fn write_padded_row(w: &mut dyn Write, cells: &[String], widths: &[usize]) -> io
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
 
-    // --- resolve_mode -------------------------------------------------------
-
     #[test]
     fn test_resolve_json_flag_wins() {
-        // --json overrides everything
         assert_eq!(resolve_mode(true, true, "text", true), OutputMode::Json);
         assert_eq!(resolve_mode(true, false, "yaml", false), OutputMode::Json);
     }
@@ -395,8 +353,6 @@ mod tests {
         );
     }
 
-    // --- format: Json -------------------------------------------------------
-
     #[test]
     fn test_format_json_object() {
         let v = json!({"key": "value"});
@@ -404,11 +360,9 @@ mod tests {
         format(&mut buf, &v, OutputMode::Json).unwrap();
         let s = String::from_utf8(buf).unwrap();
         assert!(s.ends_with('\n'));
-        // compact: no extra spaces around colon in standard serde output
         let trimmed = s.trim_end_matches('\n');
         let parsed: Value = serde_json::from_str(trimmed).unwrap();
         assert_eq!(parsed, v);
-        // should be a single line
         assert_eq!(trimmed.lines().count(), 1);
     }
 
@@ -418,8 +372,6 @@ mod tests {
         format(&mut buf, &Value::Null, OutputMode::Json).unwrap();
         assert!(buf.is_empty());
     }
-
-    // --- format: Jsonl ------------------------------------------------------
 
     #[test]
     fn test_format_jsonl_array() {
@@ -445,8 +397,6 @@ mod tests {
         assert_eq!(lines.len(), 1);
     }
 
-    // --- format: Yaml -------------------------------------------------------
-
     #[test]
     fn test_format_yaml_object() {
         let v = json!({"foo": "bar", "num": 42});
@@ -456,8 +406,6 @@ mod tests {
         assert!(s.contains("foo: bar"), "got: {s}");
         assert!(s.contains("num: 42"), "got: {s}");
     }
-
-    // --- format: Text -------------------------------------------------------
 
     #[test]
     fn test_format_text_string() {
@@ -486,8 +434,6 @@ mod tests {
         assert!(s.contains("42"));
     }
 
-    // --- format: Table (array of objects) -----------------------------------
-
     #[test]
     fn test_format_table_array_of_objects_preferred_columns_first() {
         // "tag" and "name" are preferred; "zeta" is not.
@@ -499,7 +445,6 @@ mod tests {
         format(&mut buf, &v, OutputMode::Table).unwrap();
         let s = String::from_utf8(buf).unwrap();
         let header_line = s.lines().next().unwrap();
-        // "tag" should appear before "name", "name" before "zeta"
         let tag_pos = header_line.find("tag").unwrap();
         let name_pos = header_line.find("name").unwrap();
         let zeta_pos = header_line.find("zeta").unwrap();
@@ -516,14 +461,11 @@ mod tests {
         format(&mut buf, &v, OutputMode::Table).unwrap();
         let s = String::from_utf8(buf).unwrap();
         let lines: Vec<&str> = s.lines().collect();
-        // header + 1 data row
         assert_eq!(lines.len(), 2, "expected header + 1 row, got: {s}");
         assert!(lines[0].contains("tag"), "header should contain 'tag'");
         assert!(lines[1].contains("Alice"), "row should contain 'Alice'");
         assert!(lines[1].contains("person"), "row should contain 'person'");
     }
-
-    // --- format: Table (single object) -------------------------------------
 
     #[test]
     fn test_format_table_single_object_preferred_keys_first() {
@@ -532,15 +474,12 @@ mod tests {
         format(&mut buf, &v, OutputMode::Table).unwrap();
         let s = String::from_utf8(buf).unwrap();
         let lines: Vec<&str> = s.lines().collect();
-        // Find "tag" and "name" lines
         let tag_idx = lines.iter().position(|l| l.starts_with("tag")).unwrap();
         let name_idx = lines.iter().position(|l| l.starts_with("name")).unwrap();
         let zeta_idx = lines.iter().position(|l| l.starts_with("zeta")).unwrap();
         assert!(tag_idx < name_idx, "tag before name");
         assert!(name_idx < zeta_idx, "name before zeta");
     }
-
-    // --- format: Table (empty array) ----------------------------------------
 
     #[test]
     fn test_format_table_empty_array_writes_nothing_to_buf() {
@@ -549,8 +488,6 @@ mod tests {
         format(&mut buf, &v, OutputMode::Table).unwrap();
         assert!(buf.is_empty(), "buffer should be empty for empty array");
     }
-
-    // --- format: Text on array/object falls back to table -------------------
 
     #[test]
     fn test_format_text_array_of_objects_renders_table() {
@@ -562,8 +499,6 @@ mod tests {
         assert!(s.contains("Alice"), "table row should appear");
     }
 
-    // --- format_cell --------------------------------------------------------
-
     #[test]
     fn test_format_cell_whitespace_collapse() {
         let v = json!("a\n  b");
@@ -572,7 +507,6 @@ mod tests {
 
     #[test]
     fn test_format_cell_truncation() {
-        // 41 ASCII chars → truncated to 39 + "…"
         let s: String = "a".repeat(41);
         let v = Value::String(s);
         let cell = format_cell(Some(&v));
@@ -594,7 +528,6 @@ mod tests {
     fn test_format_cell_array() {
         let v = json!([1, 2, 3]);
         let cell = format_cell(Some(&v));
-        // Should be compact JSON collapsed to one line.
         assert_eq!(cell, "[1,2,3]");
     }
 
@@ -616,8 +549,6 @@ mod tests {
         assert_eq!(format_cell(None), "");
     }
 
-    // --- pick_columns -------------------------------------------------------
-
     #[test]
     fn test_pick_columns_prefers_preferred_order() {
         let keys: std::collections::BTreeSet<String> = ["name", "zeta", "tag", "alpha"]
@@ -625,11 +556,9 @@ mod tests {
             .map(|s| s.to_string())
             .collect();
         let cols = pick_columns(&keys);
-        // "tag" (index 0 in preferred) before "name" (index 2)
         let tag_pos = cols.iter().position(|c| c == "tag").unwrap();
         let name_pos = cols.iter().position(|c| c == "name").unwrap();
         assert!(tag_pos < name_pos);
-        // non-preferred keys should be after preferred
         let alpha_pos = cols.iter().position(|c| c == "alpha").unwrap();
         let zeta_pos = cols.iter().position(|c| c == "zeta").unwrap();
         assert!(name_pos < alpha_pos, "preferred before non-preferred");
@@ -638,7 +567,6 @@ mod tests {
 
     #[test]
     fn test_pick_columns_caps_at_max() {
-        // 10 unique non-preferred keys → should cap at MAX_TABLE_COLUMNS
         let keys: std::collections::BTreeSet<String> =
             (0..10).map(|i| format!("key{i:02}")).collect();
         let cols = pick_columns(&keys);

@@ -46,9 +46,7 @@ export function linkPlugin(client: Client) {
           url = resolveMarkdownLink(client.currentName(), decodeURI(url));
         }
 
-        // Hide the start [
         widgets.push(invisibleDecoration.range(from, from + 1));
-        // Wrap the link in a href
         widgets.push(
           Decoration.mark({
             tagName: "a",
@@ -59,7 +57,6 @@ export function linkPlugin(client: Client) {
             },
           }).range(from + 1, from + 1 + groups.title.length),
         );
-        // Hide the tail end of the link
         widgets.push(
           invisibleDecoration.range(from + 1 + groups.title.length, to),
         );

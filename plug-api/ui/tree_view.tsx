@@ -70,13 +70,9 @@ export function TreeView({
 }: TreeViewProps) {
   const selectedRef = useRef<HTMLDivElement>(null);
   const treeRef = useRef<HTMLUListElement>(null);
-  // Which row's actions are mounted besides the selected one's. Outside the
-  // render tree (see hover.ts): held here as state, every pointer transition
-  // between rows would re-render the whole expanded tree.
+  // Track hover outside parent state to avoid re-rendering the whole tree.
   const hover = useMemo(() => new HoverTracker(), []);
-  // The path being dragged. A ref, not state: `dataTransfer.getData` is
-  // deliberately unreadable until the drop, so every dragover has to consult
-  // this instead -- and nothing renders from it.
+  // dataTransfer.getData is unavailable until drop; dragover needs this ref.
   const dragging = useRef<string | undefined>(undefined);
   const [dropTarget, setDropTarget] = useState<string | undefined>(undefined);
   // Mirror of the above, so the drag handlers never read a stale closure.
@@ -89,9 +85,7 @@ export function TreeView({
   const pathAt = (node: Element | null) =>
     (node?.closest?.("[data-path]") as HTMLElement | null)?.dataset?.path;
 
-  // Deliberately keyed on the selection alone: `tree` is a fresh object after
-  // every refresh, and re-revealing there would yank the user's manual scroll
-  // position back to the selected row roughly once a second.
+  // Depending on tree would reset manual scrolling on every refresh.
   useEffect(() => {
     if (scrollContainerSelector) {
       revealInClosest(selectedRef.current, scrollContainerSelector);
@@ -193,10 +187,7 @@ export function TreeView({
     e.preventDefault();
     const from = dragging.current ?? e.dataTransfer?.getData(DRAG_MIME);
     const to = targetFor(e);
-    // A drag emits no pointer events, so the tracker still holds wherever the
-    // pointer was when the drag started -- rows away from where it now is.
-    // The drop is the only event that says where it ended up, and the effect
-    // above re-resolves from these coordinates once the move lands.
+    // Drags emit no pointer events; save the drop position for hover resolution.
     hover.track(e, pathAt);
     endDrag();
     if (from && isValidTarget(from, to)) onMove(from, to);

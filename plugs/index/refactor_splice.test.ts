@@ -82,8 +82,7 @@ describe("wikilinks", () => {
   });
 
   test("wikilink with `.md` suffix is normalized", () => {
-    // Conventionally wikilinks omit `.md`; the legacy refactor produced
-    // a bare name and we preserve that behavior.
+    // Wikilinks omit the .md extension.
     expect(splice("See [[Old.md]].", "[[Old.md]]", "Old", "New")).toBe(
       "See [[New]].",
     );

@@ -7,9 +7,7 @@ use silverbullet_server_common::{FileMeta, SpaceError, SpacePrimitives};
 
 use crate::auth::Actor;
 
-/// Above this many distinct paths, `path_lock` sweeps out entries nobody else
-/// holds a reference to, so a space that churns through many paths over its
-/// lifetime doesn't grow the map without bound.
+/// Sweep unused path locks above this threshold to bound growth in busy spaces.
 const LOCK_SWEEP_THRESHOLD: usize = 10_000;
 
 /// How long an expected-write entry stays attributable. Best-effort: a
@@ -18,11 +16,7 @@ const EXPECTED_WRITE_TTL: Duration = Duration::from_secs(30);
 /// Above this many entries, `record_expected_write` opportunistically sweeps
 /// out expired ones -- same spirit as `LOCK_SWEEP_THRESHOLD`.
 const EXPECTED_WRITE_SWEEP_THRESHOLD: usize = 10_000;
-/// Above this many cached content hashes, `record` evicts in insertion order.
-/// Plain FIFO rather than LRU: an entry evicted while still hot is re-recorded
-/// by its next write, costing one hash, and a space large enough to churn
-/// through this many paths is past the point where an exact policy pays for
-/// the bookkeeping.
+/// FIFO bounds the hash cache; an evicted hot entry costs only one rehash.
 const HASH_CACHE_CAPACITY: usize = 10_000;
 
 /// The resolved identity of a write this process just made, keyed by

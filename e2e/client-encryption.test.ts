@@ -153,12 +153,7 @@ async function freshPage(browser: Browser): Promise<Page> {
 test("without encryption, the local datastore names your pages in the clear", async ({
   browser,
 }) => {
-  // The control for the test below. Without it, "the name is absent" would
-  // also pass if the probe looked in the wrong place or nothing was ever
-  // written — which is how an encryption test rots into a tautology. It
-  // already earned its keep once: the first version of this pair asserted on
-  // page *bodies*, and this case proved they are never in IndexedDB at all,
-  // so its partner was passing for the wrong reason.
+  // Positive control: prove the probe can find a stored name without encryption.
   const page = await freshPage(browser);
   try {
     await login(page, { encrypt: false });
@@ -219,11 +214,7 @@ test("the key survives a reload, and its loss sends you back to login", async ({
     // this isolates "lost the key" from "lost the login": the client must
     // still bounce to the login page rather than boot without encryption.
     //
-    // Two independent guards enforce that — boot.ts redirects when
-    // `findEncryptionKey` comes back empty, and the service worker refuses to
-    // configure without a key and broadcasts an `auth-error`. Disabling either
-    // alone leaves this passing; it takes both to break it, which is the point
-    // of having both.
+    // Both boot and worker guards reject a missing key; either can trigger the redirect.
     await page.evaluate(async () => {
       for (const registration of await navigator.serviceWorker.getRegistrations()) {
         await registration.unregister();

@@ -37,7 +37,6 @@ export async function patchFrontmatter(
   const tree = await markdown.parseMarkdown(text);
   const frontmatter = collectNodesOfType(tree, "FrontMatter");
   if (frontmatter.length === 0) {
-    // No frontmatter found, create from patches
     const patchedFrontmatter = applyPatches("", patches).trim();
     if (patchedFrontmatter) {
       return `---\n${patchedFrontmatter}\n---\n${text}`;
@@ -45,15 +44,12 @@ export async function patchFrontmatter(
       return text;
     }
   } else {
-    // Existing frontmatter found, patch it
     const frontmatterText = renderToText(frontmatter[0].children![1]);
     const patchedFrontmatter = applyPatches(frontmatterText, patches).trim();
 
     if (patchedFrontmatter) {
-      // Replace the frontmatter with the patched frontmatter in the original string
       return `---\n${patchedFrontmatter}\n---${text.slice(frontmatter[0].to)}`;
     } else {
-      // Nothing left, let's just return the text content
       return text.slice(frontmatter[0].to! + 1); // +1 to skip the initial \n
     }
   }

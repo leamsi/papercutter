@@ -1,7 +1,6 @@
 import { type OutputUnit, Validator, format } from "@cfworker/json-schema";
 import { stripFunctions } from "./plugos/util.ts";
 
-// Register custom formats (shared with jsonschema.ts)
 format.email = (data: string) => data.includes("@");
 format["page-ref"] = (data: string) =>
   data.startsWith("[[") && data.endsWith("]]");
@@ -37,7 +36,6 @@ function isValidJsonSchema(schema: any): { valid: boolean; error?: string } {
   if (typeof schema !== "object" || Array.isArray(schema)) {
     return { valid: false, error: "schema must be an object or boolean" };
   }
-  // Check that type, if specified, is valid
   if (schema.type !== undefined) {
     const validTypes = [
       "string",
@@ -113,7 +111,6 @@ export class Config {
    * @param schema The JSON schema to validate against
    */
   define(key: string | string[], schema: any): void {
-    // Validate the schema itself first
     const result = isValidJsonSchema(schema);
     if (!result.valid) {
       throw new Error(`Invalid schema for key ${key}: ${result.error}`);
@@ -123,7 +120,6 @@ export class Config {
       key = key.split(".");
     }
 
-    // Navigate/create the path in the schema structure
     let current = this.schemas;
     for (let i = 0; i < key.length - 1; i++) {
       const part = key[i];
@@ -136,11 +132,9 @@ export class Config {
       current = current.properties[part];
     }
 
-    // Store the schema at the final key
     const finalKey = key[key.length - 1];
     current.properties[finalKey] = schema;
 
-    // Apply default values from schema for any properties not currently set
     this.applySchemaDefaults(key, schema);
   }
 
@@ -222,10 +216,8 @@ export class Config {
         this.applySchemaDefaults(key, schema);
       }
 
-      // Find and validate only the relevant schema
       this.validatePath(key);
     } else {
-      // Handle object form
       for (const [key, val] of Object.entries(keyOrValues)) {
         this.set(key, val);
       }
@@ -246,7 +238,6 @@ export class Config {
       throw new Error(`Invalid key ${key}`);
     }
 
-    // Find and validate only the relevant schema after the fact...
     this.validatePath(key);
   }
 
@@ -279,7 +270,6 @@ export class Config {
    * Validates a specific path against its schema
    */
   private validatePath(path: string[]): void {
-    // Find the deepest schema that applies to this path
     for (let i = path.length; i > 0; i--) {
       const schemaPath = path.slice(0, i);
       const schema = this.getSchemaAtPath(schemaPath);
@@ -326,7 +316,6 @@ function resolvePath(
   path: string[],
   create = false,
 ): { obj: any; key: string } | null {
-  // To avoid side effects, let's clone the path bits
   path = [...path];
 
   const lastKey = path.pop()!;
@@ -341,7 +330,6 @@ function resolvePath(
       }
     } else if (typeof current[part] !== "object" || current[part] === null) {
       if (create) {
-        // Convert primitive to object if we're creating the path
         current[part] = {};
       } else {
         return null;

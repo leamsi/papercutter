@@ -318,10 +318,8 @@ export class NavigatorEngine {
         ? allNodes(buildTree(rows, meta.hierarchy.separator, meta.foldersFirst))
         : undefined;
     const objs = nodes ? nodes.map(nodeObject) : rows.map((row) => row.obj);
-    // Ahead of the rowState batch, so a failure there doesn't take the
-    // dropdown down with it. A failure *here* leaves the options absent (the
-    // select shows only "All") and a selected value with no masks fails
-    // closed, like a segment whose masks never arrived.
+    // Load dropdown options before rowState so either failure stays independent.
+    // Missing masks fail closed when a value is selected.
     if (needsDropdown) {
       try {
         const result = await this.handle(meta.name, "dropdown", { objs });
@@ -466,10 +464,8 @@ export class NavigatorEngine {
   }
 }
 
-// One engine per slot, outliving the panel it belongs to: a dock the user
-// closes and reopens comes back on its cached rows, and two slots showing the
-// same view keep their own row state (which is what a modal picker over an
-// already-docked view expects).
+// Keep one engine per slot: reopened panels reuse cached rows, while two
+// slots showing the same view retain independent state.
 const engines = new Map<string, NavigatorEngine>();
 
 // Reachable from the page for the e2e suite, which instruments a slot's

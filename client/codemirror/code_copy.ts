@@ -29,7 +29,6 @@ class CodeCopyWidget extends WidgetType {
 
   toDOM() {
     const wrap = document.createElement("span");
-    // wrap.setAttribute("aria-hidden", "true");
     wrap.className = "sb-actions";
 
     const button = wrap.appendChild(document.createElement("button"));
@@ -85,7 +84,6 @@ function codeCopyDecoration(view: EditorView, client: Client) {
             return;
           }
 
-          // Accumulate the text content of the code block
           let text = "";
           for (const textNode of textNodes) {
             text += view.state.doc.sliceString(textNode.from, textNode.to);

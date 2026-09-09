@@ -59,9 +59,7 @@ The `templates` table contains ready-made templates for common query rendering p
 
 ```space-lua
 -- priority: 50
--- Template API root table
 template = template or {}
--- Template storage table
 templates = {}
 
 -- Iterates over a table/array and applies a function to each element,
@@ -76,7 +74,6 @@ end
 
 -- Creates a new template function from a string template
 function template.new(templateStr, stripIndent)
-  -- Preprocess: strip indentation
   if stripIndent == nil or stripIndent == true then
     local lines = {}
     local splitLines = string.split(templateStr, "\n")

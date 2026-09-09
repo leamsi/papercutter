@@ -76,7 +76,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-// A fixed tick count was vacuous here (passed even with the guard removed) -- this waits for the guard's actual selectInFlight consult so a regression would make it fail.
+// Wait for the actual selectInFlight check; a fixed tick count cannot prove ordering.
 test("a new pick opening in the same slot waits for a superseded pick's in-flight select before nulling it", async () => {
   const nav = await freshNavigator();
   registry.resolveMeta.mockReturnValue({ dock: "modal", refreshOn: [] });
@@ -215,7 +215,6 @@ test("the revision commands are absent when revisions are disabled", async () =>
   expect(commands.has("Revision: Page History")).toBe(false);
   expect(commands.has("Revision: Space History")).toBe(false);
   expect(commands.has("Revision: Create snapshot")).toBe(false);
-  // Unaffected by the flag.
   expect(commands.has("Navigate: Tree")).toBe(true);
 });
 
@@ -297,12 +296,8 @@ test("defineView registers the view and mirrors its command into config", async 
   expect(command).toMatchObject({ name: "Space: V", key: "Ctrl-j" });
 });
 
-// The one link nothing else exercises: a Space Lua `view.define`'s `menu`
-// table has to survive Lua-to-JS conversion intact (as a plain object with
-// the right keys, not a Lua table wrapper) since it's what eventually
-// reaches `buildAllCommands()` and, from there, the App's native-menu
-// assembler (`webview-scripts/menus/assemble.ts`, which only understands
-// plain `MenuContribution` objects).
+// Lua view menu metadata must become plain MenuContribution objects for
+// the App native-menu assembler.
 test("defineView mirrors a Lua `menu` table into the command's config entry intact", async () => {
   const nav = await freshNavigator();
   const { LuaEnv, LuaStackFrame } = await import("../space_lua/runtime.ts");
@@ -385,9 +380,8 @@ test("moveDock persists the dock and reopens a visible window view there", async
   );
 });
 
-// Round 2 (a): the modal used to linger on screen after picking a dock from
-// its own dock menu -- `isWindowDock("modal")` is false, so the old guard
-// never hid it. `moveDock` now hides `before` on modal too, not just lhs/rhs.
+// Moving from modal to a dock must hide the modal even though
+// isWindowDock("modal") is false.
 test("moveDock hides the modal slot (not just a window dock) when moving a view out of it", async () => {
   const nav = await freshNavigator();
   registry.resolveMeta.mockReturnValue({

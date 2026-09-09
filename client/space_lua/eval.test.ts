@@ -32,12 +32,10 @@ test("Evaluator test", async () => {
   env.set("test", new LuaNativeJSFunction((n) => n));
   env.set("asyncTest", new LuaNativeJSFunction((n) => Promise.resolve(n)));
 
-  // Basic arithmetic
   expect(evalExpr(`1 + 2 + 3 - 3`)).toEqual(3);
   expect(evalExpr(`4 // 3`)).toEqual(1);
   expect(evalExpr(`4 % 3`)).toEqual(1);
 
-  // Bitwise arithmetic
   expect(evalExpr(`~171`)).toEqual(-172); // signed two's complement
   expect(evalExpr(`5 & 3`)).toEqual(1); // 101 & 011 = 001
   expect(evalExpr(`5 | 3`)).toEqual(7); // 101 | 011 = 111
@@ -45,20 +43,16 @@ test("Evaluator test", async () => {
   expect(evalExpr(`5 << 3`)).toEqual(40); // 101 << 3 = 101000
   expect(evalExpr(`5 >> 2`)).toEqual(1); // 101 >> 2 = 1
 
-  // Strings
   expect(evalExpr(`"a" .. "b"`)).toEqual("ab");
 
-  // Logic
   expect(evalExpr(`true and false`)).toEqual(false);
   expect(evalExpr(`true or false`)).toEqual(true);
   expect(evalExpr(`not true`)).toEqual(false);
-  // Test eager evaluation of left operand
   expect(
     evalExpr(
       `true or (function() error("this should not be evaluated") end)()`,
     ),
   ).toEqual(true);
-  // Tables
   const tbl = await evalExpr(`{3, 1, 2}`);
   expect(tbl.get(1)).toEqual(3);
   expect(tbl.get(2)).toEqual(1);
@@ -86,19 +80,15 @@ test("Evaluator test", async () => {
   expect(await evalExpr(`#{}`)).toEqual(0);
   expect(await evalExpr(`#{1, 2, 3}`)).toEqual(3);
 
-  // Unary operators
   expect(await evalExpr(`-asyncTest(3)`, env)).toEqual(-3);
 
-  // Function calls
   expect(singleResult(evalExpr(`test(3)`, env))).toEqual(3);
   expect(singleResult(await evalExpr(`asyncTest(3) + 1`, env))).toEqual(4);
 
-  // Function expressions and table access
   expect(
     await evalExpr(`(function() return {name="John"} end)().name`),
   ).toEqual("John");
 
-  // Function definitions
   const fn = evalExpr(`function(a, b) return a + b end`);
   expect(fn.body.parameters).toEqual(["a", "b"]);
 });
@@ -309,13 +299,11 @@ test("Statement evaluation", async () => {
   await evalBlock(`c = asyncTest(3)`, env);
   expect(env.get("c")).toEqual(3);
 
-  // Multiple assignments
   const env2 = new LuaEnv();
   expect(await evalBlock(`a, b = 1, 2`, env2)).toEqual(undefined);
   expect(env2.get("a")).toEqual(1);
   expect(env2.get("b")).toEqual(2);
 
-  // Other lvalues
   const env3 = new LuaEnv();
   await evalBlock(`tbl = {1, 2, 3}`, env3);
   await evalBlock(`tbl[1] = 3`, env3);
@@ -326,7 +314,6 @@ test("Statement evaluation", async () => {
   await evalBlock(`tbl[2].age = 20`, env3);
   expect(env3.get("tbl").get(2).get("age")).toEqual(20);
 
-  // Blocks and scopes
   const env4 = new LuaEnv();
   env4.set("print", new LuaNativeJSFunction(console.log));
   await evalBlock(
@@ -380,7 +367,6 @@ test("Statement evaluation", async () => {
   );
   expect(env5.get("var")).toEqual(1);
 
-  // While loop
   const env6 = new LuaEnv();
   await evalBlock(
     `
@@ -396,7 +382,6 @@ test("Statement evaluation", async () => {
   );
   expect(env6.get("c")).toEqual(3);
 
-  // Repeat loop
   const env7 = new LuaEnv();
   await evalBlock(
     `
@@ -412,7 +397,6 @@ test("Statement evaluation", async () => {
   );
   expect(env7.get("c")).toEqual(3);
 
-  // Function definition and calling
   const env8 = new LuaEnv();
   env8.set("print", new LuaNativeJSFunction(console.log));
   await evalBlock(
@@ -425,7 +409,6 @@ test("Statement evaluation", async () => {
     env8,
   );
 
-  // Local fucntion definition
   const env9 = new LuaEnv();
   env9.set("print", new LuaNativeJSFunction(console.log));
   await evalBlock(
@@ -438,7 +421,6 @@ test("Statement evaluation", async () => {
     env9,
   );
 
-  // For loop over range
   const env10 = new LuaEnv();
   await evalBlock(
     `
@@ -451,7 +433,6 @@ test("Statement evaluation", async () => {
   );
   expect(env10.get("c")).toEqual(6);
 
-  // For loop over iterator
   const env11 = new LuaEnv(luaBuildStandardEnv());
   await evalBlock(
     `
@@ -483,7 +464,6 @@ test("Statement evaluation", async () => {
     luaBuildStandardEnv(),
   );
 
-  // Passing a Lua function as callback to a JS function
   const env12 = new LuaEnv();
   env12.set(
     "runMe",
@@ -520,13 +500,11 @@ test("Thread local _CTX", async () => {
 });
 
 test("Thread local _CTX - advanced cases", async () => {
-  // Create environment with standard library
   const env = new LuaEnv(luaBuildStandardEnv());
   const threadLocal = new LuaEnv();
 
   env.setLocal("globalEnv", "GLOBAL");
 
-  // Set up some thread local values
   threadLocal.setLocal("user", "alice");
   threadLocal.setLocal("permissions", new LuaTable());
   threadLocal.get("permissions").set("admin", true);
@@ -537,7 +515,6 @@ test("Thread local _CTX - advanced cases", async () => {
 
   const sf = new LuaStackFrame(threadLocal, null);
 
-  // Test 1: Nested function access
   await evalBlock(
     `
     function outer()
@@ -551,7 +528,6 @@ test("Thread local _CTX - advanced cases", async () => {
   );
   expect(await evalExpr("outer()", env, sf)).toEqual("alice");
 
-  // Test 2: Table access and modification
   await evalBlock(
     `
     function checkAdmin()
@@ -569,7 +545,6 @@ test("Thread local _CTX - advanced cases", async () => {
   expect(await evalExpr("revokeAdmin()", env, sf)).toEqual(false);
   expect(threadLocal.get("permissions").get("admin")).toEqual(false);
 
-  // Test 3: Complex data structures
   await evalBlock(
     `
     function getNestedData()
@@ -586,7 +561,6 @@ test("Thread local _CTX - advanced cases", async () => {
   expect(await evalExpr("getNestedData()", env, sf)).toEqual("dark");
   expect(await evalExpr("updateTheme('light')", env, sf)).toEqual("light");
 
-  // Test 4: Multiple thread locals
   const threadLocal2 = new LuaEnv();
   threadLocal2.setLocal("user", "bob");
   const sf2 = new LuaStackFrame(threadLocal2, null);
@@ -600,11 +574,9 @@ test("Thread local _CTX - advanced cases", async () => {
     env,
   );
 
-  // Same function, different thread contexts
   expect(await evalExpr("getUser()", env, sf)).toEqual("alice");
   expect(await evalExpr("getUser()", env, sf2)).toEqual("bob");
 
-  // Test 5: Async operations with _CTX
   env.set(
     "asyncOperation",
     new LuaNativeJSFunction(async () => {
@@ -628,7 +600,6 @@ test("Thread local _CTX - advanced cases", async () => {
   expect(await evalExpr("asyncTest()", env, sf)).toEqual("completed");
   expect(threadLocal.get("status")).toEqual("completed");
 
-  // Test 6: Error handling with _CTX
   await evalBlock(
     `
     function errorTest()
@@ -646,7 +617,6 @@ test("Thread local _CTX - advanced cases", async () => {
   expect(await evalExpr("errorTest()", env, sf)).toEqual("caught");
   expect(threadLocal.get("error")).toEqual("caught");
 
-  // Test string interpolation
   sf.threadLocal.setLocal("_GLOBAL", env);
   expect(
     await evalExpr(
@@ -656,7 +626,6 @@ test("Thread local _CTX - advanced cases", async () => {
     ),
   ).toEqual("Hello, GLOBAL and local!");
 
-  // Some more complex string interpolation with more complex lua expressions, with nested {}
   expect(
     await evalExpr(
       `spacelua.interpolate('Some JSON \${js.stringify(js.tojs({name="Pete"}))}!')`,

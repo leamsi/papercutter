@@ -30,7 +30,6 @@ export function hashtagPlugin(client: Client) {
         );
         const target = tagPage ?? Constants.tagPrefix + tagName;
 
-        // Wrap the tag in html anchor element
         widgets.push(
           Decoration.mark({
             tagName: "a",

@@ -29,7 +29,6 @@ export type LuaType =
   | "userdata"
   | "thread";
 
-// These types are for documentation only
 export type LuaValue = any;
 export type JSValue = any;
 
@@ -62,7 +61,6 @@ export interface ILuaGettable {
   getNumericType?(key: LuaValue): NumericType | undefined;
 }
 
-// Small helpers for type safety/readability
 export function isILuaFunction(v: unknown): v is ILuaFunction {
   return !!v && typeof (v as any).call === "function";
 }
@@ -90,7 +88,6 @@ const EMPTY_CTX = {} as ASTCtx;
 
 const MAX_TAG_LOOP = 200;
 
-// Close-stack support
 export type LuaCloseEntry = { value: LuaValue; ctx: ASTCtx };
 
 type LuaThreadState = {
@@ -346,14 +343,10 @@ export class LuaEnv implements ILuaSettable, ILuaGettable {
   }
 
   get(name: string, _sf?: LuaStackFrame): Promise<LuaValue> | LuaValue | null {
-    // Fast path: single Map.get() instead of has() + get() for the common case
-    // where the variable exists and has a non-undefined value (null = Lua nil is fine).
     const v = this.variables.get(name);
     if (v !== undefined) {
       return v;
     }
-    // Variable set to null (Lua nil) returns null from Map.get() which is !== undefined,
-    // so it's handled above. Only fall through when the key is truly absent.
     if (this.parent) {
       return this.parent.get(name, _sf);
     }
@@ -498,39 +491,31 @@ export class LuaFunction implements ILuaFunction {
   }
 
   call(sf: LuaStackFrame, ...args: LuaValue[]): Promise<LuaValue> | LuaValue {
-    // Create a new environment that chains to the captured environment
     const env = new LuaEnv(this.capturedEnv);
-    // Set _CTX to the thread local environment from the stack frame
     env.setLocal("_CTX", sf.threadLocal);
 
-    // Eval using a stack frame that knows the current function
     const sfWithFn = sf.currentFunction === this ? sf : sf.withFunction(this);
 
     const params = this.body.parameters;
     const hasVarargs = params.length > 0 && params[params.length - 1] === "...";
 
-    // Resolve args (sync-first)
     const argsRP = rpAll(args as any[]);
     const resolveArgs = (resolvedArgs: any[]) => {
       if (hasVarargs) {
-        // Variadic function: bind named params, collect rest into varargs
         const varargStart = params.length - 1;
         for (let i = 0; i < varargStart; i++) {
           env.setLocal(params[i], resolvedArgs[i] ?? null);
         }
         env.setLocal("...", new LuaMultiRes(resolvedArgs.slice(varargStart)));
       } else {
-        // Non-variadic: bind all named params directly
         for (let i = 0; i < params.length; i++) {
           env.setLocal(params[i], resolvedArgs[i] ?? null);
         }
       }
 
-      // Evaluate the function body with returnOnReturn set to true
       const r = evalStatement(this.body.block, env, sfWithFn, true);
 
       if (!isPromise(r)) {
-        // Fast path: synchronous result
         if (r === undefined) return;
         if (r && typeof r === "object" && r.ctrl === "return") {
           return mapFunctionReturnValue(r.values);
@@ -685,14 +670,10 @@ export class LuaBuiltinFunction implements ILuaFunction {
 }
 
 export class LuaTable implements ILuaSettable, ILuaGettable {
-  // To optimize the table implementation we use a combination of different data structures
   public metatable: LuaTable | null;
 
-  // When tables are used as maps, the common case is that they are string keys, so we use a simple object for that
   private stringKeys: Record<string, any>;
-  // Other keys we can support using a Map as a fallback
   private otherKeys: Map<any, any> | null;
-  // When tables are used as arrays, we use a native JavaScript array for that
   private arrayPart: any[];
 
   // Numeric type metadata at storage boundaries (lazily allocated)
@@ -729,15 +710,12 @@ export class LuaTable implements ILuaSettable, ILuaGettable {
 
     const numVal = LuaTable.numKeyValue(key);
     if (numVal !== null) {
-      // Normalize -0 to +0
       if (isNegativeZero(numVal)) {
         return 0;
       }
-      // Integer-valued numbers normalize to integers
       if (Number.isInteger(numVal)) {
         return numVal;
       }
-      // Non-integer floats
       return numVal;
     }
     return key;
@@ -809,7 +787,6 @@ export class LuaTable implements ILuaSettable, ILuaGettable {
       return this.stringKeys[key] !== undefined;
     }
 
-    // Fast path for plain integer keys (common in for loops)
     if (typeof key === "number") {
       if (key >= 1 && (key | 0) === key) {
         if (this.arrayPart[key - 1] !== undefined) return true;
@@ -902,7 +879,6 @@ export class LuaTable implements ILuaSettable, ILuaGettable {
       return value.then((v) => this.rawSet(key, v, numType));
     }
 
-    // Fast path: string keys (the dominant case)
     if (typeof key === "string") {
       if (value === null || value === undefined) {
         delete this.stringKeys[key];
@@ -961,7 +937,6 @@ export class LuaTable implements ILuaSettable, ILuaGettable {
           this.promoteIntegerKeysFromHash();
         }
 
-        // Trailing nil shrink
         if (value === null || value === undefined) {
           let n = this.arrayPart.length;
           while (n > 0) {
@@ -981,7 +956,6 @@ export class LuaTable implements ILuaSettable, ILuaGettable {
         return;
       }
 
-      // Sparse numeric key
       if (!this.otherKeys) {
         this.otherKeys = new Map();
       }
@@ -1043,12 +1017,10 @@ export class LuaTable implements ILuaSettable, ILuaGettable {
       );
     }
 
-    // Fast path: no metatable — skip has() check and metamethod machinery
     if (this.metatable === null) {
       return this.rawSet(key, value, numType);
     }
 
-    // Key exists — rawSet directly, no metamethod needed
     if (this.has(key)) {
       return this.rawSet(key, value, numType);
     }
@@ -1059,7 +1031,6 @@ export class LuaTable implements ILuaSettable, ILuaGettable {
       return this.rawSet(key, value, numType);
     }
 
-    // Slow path: __newindex metamethod chain (rare)
     const errSf = sf || LuaStackFrame.lostFrame;
     const ctx = sf?.astCtx ?? EMPTY_CTX;
     const k: LuaValue = key;
@@ -1088,12 +1059,10 @@ export class LuaTable implements ILuaSettable, ILuaGettable {
           return t.rawSet(k, v, nt);
         }
 
-        // Function metamethod: call and stop
         if (typeof mm === "function" || isILuaFunction(mm)) {
           return luaCall(mm, [t, k, v], ctx, errSf);
         }
 
-        // Table/env metamethod: forward assignment
         if (mm instanceof LuaTable || mm instanceof LuaEnv) {
           target = mm;
           continue;
@@ -1123,7 +1092,6 @@ export class LuaTable implements ILuaSettable, ILuaGettable {
     if (typeof key === "string") {
       return this.stringKeyTypes ? this.stringKeyTypes.get(key) : undefined;
     }
-    // Fast path for plain integer keys
     if (typeof key === "number") {
       if (key >= 1 && (key | 0) === key) {
         return this.arrayTypes ? this.arrayTypes[key - 1] : undefined;
@@ -1146,7 +1114,6 @@ export class LuaTable implements ILuaSettable, ILuaGettable {
       return this.stringKeys[key];
     }
 
-    // Fast path for plain integer keys (common in for loops)
     if (typeof key === "number") {
       if (key >= 1 && (key | 0) === key) {
         const v = this.arrayPart[key - 1];
@@ -1154,7 +1121,6 @@ export class LuaTable implements ILuaSettable, ILuaGettable {
         if (this.otherKeys) return this.otherKeys.get(key);
         return undefined;
       }
-      // Non-integer or zero/negative number keys
       if (this.otherKeys) return this.otherKeys.get(key);
       return undefined;
     }
@@ -1188,7 +1154,6 @@ export class LuaTable implements ILuaSettable, ILuaGettable {
   }
 
   get(key: LuaValue, sf?: LuaStackFrame): LuaValue | Promise<LuaValue> | null {
-    // Fast path: no metatable means rawGet is the final answer (most tables in SilverBullet)
     if (this.metatable === null) {
       const raw = this.rawGet(key);
       return raw !== undefined ? raw : null;
@@ -1222,11 +1187,9 @@ export class LuaTable implements ILuaSettable, ILuaGettable {
         result[k] = luaValueToJS(this.stringKeys[k], sf);
       }
     }
-    // Include array part with 1-based keys
     for (let i = 0; i < this.arrayPart.length; i++) {
       result[i + 1] = luaValueToJS(this.arrayPart[i], sf);
     }
-    // Include other keys
     if (this.otherKeys) {
       for (const [key, val] of this.otherKeys) {
         result[key] = luaValueToJS(val, sf);
@@ -1309,14 +1272,12 @@ export function luaIndexValue(
   let t: LuaValue = value;
 
   for (let loop = 0; loop < MAX_TAG_LOOP; loop++) {
-    // Primitive get when table
     if (t instanceof LuaTable) {
       const raw = t.rawGet(key);
       if (raw !== undefined) {
         if (isSqlNull(raw)) return null;
         return raw;
       }
-      // If no metatable, raw miss => nil
       if (t.metatable === null) {
         return null;
       }
@@ -1338,18 +1299,15 @@ export function luaIndexValue(
       );
     }
 
-    // Function metamethod
     if (typeof mm === "function" || isILuaFunction(mm)) {
       return luaCall(mm, [t, key], ctx, errSf);
     }
 
-    // Table/metatable delegation: repeat with mm as new "t"
     if (mm instanceof LuaTable || mm instanceof LuaEnv) {
       t = mm;
       continue;
     }
 
-    // Bad metamethod type: make it a Lua-like type error
     const ty = luaTypeOf(mm) as any as string;
     throw new LuaRuntimeError(
       `attempt to index a ${ty} value`,
@@ -1423,11 +1381,9 @@ export function luaGet(
   if (isTaggedFloat(key)) {
     return (obj as any[])[key.value - 1] ?? null;
   }
-  // Native JS object
   const k = toNumKey(key);
   const val = (obj as Record<string | number, any>)[k];
   if (typeof val === "function") {
-    // Automatically bind the function to the object
     return val.bind(obj);
   }
   if (val === undefined) {
@@ -1448,7 +1404,6 @@ export function luaLen(
     return obj.length;
   }
   if (obj instanceof LuaTable) {
-    // Check __len metamethod unless raw access is requested
     if (!raw) {
       const mt = getMetatable(obj, sf || LuaStackFrame.lostFrame);
       const mm = mt ? mt.rawGet("__len") : null;
@@ -1483,7 +1438,6 @@ export function luaCall(
     );
   }
 
-  // Fast path: native JS function
   if (typeof callee === "function") {
     const baseSf = sf || LuaStackFrame.lostFrame;
     const len = args.length;
@@ -1504,7 +1458,6 @@ export function luaCall(
     return (callee as (...a: any[]) => any)(...args);
   }
 
-  // Lua table: may be callable via __call metamethod
   if (callee instanceof LuaTable) {
     const metatable = getMetatable(callee, sf);
 
@@ -1535,7 +1488,6 @@ export function luaCall(
     }
   }
 
-  // ILuaFunction (LuaFunction/LuaBuiltinFunction/LuaNativeJSFunction/etc.)
   if (isILuaFunction(callee)) {
     // Fast path for builtins: skip withFunction, defer withCtx
     if (callee instanceof LuaBuiltinFunction) {
@@ -1560,7 +1512,6 @@ export function luaCall(
 }
 
 export function luaEquals(a: any, b: any): boolean {
-  // Normalize nil variants (null, undefined, SQL NULL) to null
   const an =
     a === null || a === undefined || isSqlNull(a)
       ? null
@@ -1640,7 +1591,6 @@ export class LuaRuntimeError extends Error {
       if (!ctx || !ctx.from || !ctx.to) {
         break;
       }
-      // Find the line and column
       let line = 1;
       let column = 0;
       let lastNewline = -1;
@@ -1654,7 +1604,6 @@ export class LuaRuntimeError extends Error {
         }
       }
 
-      // Get the full line of code for context
       const lineStart = lastNewline + 1;
       const lineEnd = code.indexOf("\n", ctx.from);
       const codeLine = code.substring(
@@ -1662,7 +1611,6 @@ export class LuaRuntimeError extends Error {
         lineEnd === -1 ? undefined : lineEnd,
       );
 
-      // Add position indicator
       const pointer = `${" ".repeat(column)}^`;
 
       traceStr +=
@@ -1714,12 +1662,10 @@ export function luaToString(
     return luaFormatNumber(value);
   }
 
-  // Check for circular references
   if (typeof value === "object" && visited.has(value)) {
     return "<circular reference>";
   }
   if ((value as any).toStringAsync) {
-    // Add to visited before recursing
     visited.add(value);
     return (value as any).toStringAsync();
   }
@@ -1731,15 +1677,12 @@ export function luaToString(
     // Don't recurse into the function body, just show the function signature
     return `<lua-function (${value.body.parameters.join(", ")})>`;
   }
-  // Handle plain JavaScript objects in a Lua-like format
   if (typeof value === "object") {
-    // Add to visited before recursing
     visited.add(value);
     return (async () => {
       let result = "{";
       let first = true;
 
-      // Handle arrays
       if (Array.isArray(value)) {
         for (const val of value) {
           if (first) {
@@ -1747,14 +1690,12 @@ export function luaToString(
           } else {
             result += ", ";
           }
-          // Recursively stringify the value, passing the visited set
           const strVal = await luaToString(val, visited);
           result += strVal;
         }
         return `${result}}`;
       }
 
-      // Handle objects
       for (const [key, val] of Object.entries(value)) {
         if (first) {
           first = false;
@@ -1766,7 +1707,6 @@ export function luaToString(
         } else {
           result += `["${key}"] = `;
         }
-        // Recursively stringify the value, passing the visited set
         const strVal = await luaToString(val, visited);
         result += strVal;
       }
@@ -1787,7 +1727,6 @@ export function luaFormatNumber(n: number, kind?: "int" | "float"): string {
   if (n === 0) {
     return 1 / n === -Infinity ? "-0.0" : "0.0";
   }
-  // Delegate to luaFormat for `%.14g`
   const s = luaFormat("%.14g", n);
   // Guarantee `.01 suffix for integer-valued floats
   if (s.indexOf(".") === -1 && s.indexOf("e") === -1) {
@@ -1844,7 +1783,6 @@ export function jsToLuaValue(value: any): any {
     return value;
   }
   if (Array.isArray(value) && "index" in value && "input" in value) {
-    // This is a RegExpMatchArray
     const regexMatch = value as RegExpMatchArray;
     const regexMatchTable = new LuaTable();
     for (let i = 0; i < regexMatch.length; i++) {
@@ -1875,7 +1813,6 @@ export function jsToLuaValue(value: any): any {
   return value;
 }
 
-// Inverse of jsToLuaValue
 export function luaValueToJS(value: any, sf: LuaStackFrame): any {
   if (isPromise(value)) {
     return (value as Promise<any>).then((v) => luaValueToJS(v, sf));

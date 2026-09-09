@@ -1,5 +1,3 @@
-// Lua Optimized Pattern Matching Engine Implementation
-
 const CH_ESC = 37; // '%'
 const CH_OPEN = 40; // '('
 const CH_CLOSE = 41; // ')'
@@ -434,8 +432,6 @@ function noSpecials(p: string): boolean {
   return true;
 }
 
-// Public API
-
 export type CaptureResult = { s: string } | { position: number };
 
 interface RawCapture {
@@ -615,7 +611,6 @@ function expandReplacementString(
         throw new Error("invalid use of '%' in replacement string");
       }
     } else {
-      // Collect consecutive literal characters
       let j = i + 1;
       while (j < repl.length && repl.charCodeAt(j) !== CH_ESC) j++;
       parts.push(repl.substring(i, j));

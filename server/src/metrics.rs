@@ -112,7 +112,6 @@ mod tests {
 
     #[test]
     fn two_instances_do_not_conflict() {
-        // Per-instance registry → constructing twice must not panic.
         let _a = Metrics::new();
         let _b = Metrics::new();
     }

@@ -40,7 +40,6 @@ bench("[Lua] String to number tests", async () => {
 
 bench("[Lua] String tests", async () => {
   await runLuaTest("../client/space_lua/stdlib/string_test.lua");
-  // await runLuaTest("../client/space_lua/stdlib/string_test2.lua");
 });
 
 bench("[Lua] Space Lua tests", async () => {

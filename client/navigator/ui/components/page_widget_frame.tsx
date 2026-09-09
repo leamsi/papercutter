@@ -119,17 +119,11 @@ export function useCollapsed(
     collapsed,
     () => {
       const { next, persist } = toggleCollapsed(collapsed);
-      // Persisted *before* the flip, the way `closeView` and the dock menu
-      // persist before their own UI moves. Flipping first and writing in the
-      // background loses the write outright if the user navigates in the same
-      // breath -- the page tears down the in-flight write, and the widget
-      // comes back expanded with nothing to say why.
+      // Persist before collapsing: navigation can tear down a background write.
       void setViewCollapsed(name, persist)
         .then(() => setCollapsed(next))
-        // A datastore that won't take the write is not a reason to eat the
-        // click: flip anyway so the toggle stays responsive, and say why the
-        // state won't survive a reload rather than raising an unhandled
-        // rejection nobody sees.
+        // Allow toggling when persistence fails, but report that it will not survive
+        // a reload.
         .catch((e) => {
           console.error("navigator: could not persist collapse state", e);
           setCollapsed(next);

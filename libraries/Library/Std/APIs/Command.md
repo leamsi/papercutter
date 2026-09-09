@@ -81,7 +81,7 @@ Most of the heavy lifting happens in SB itself. These are just wrappers around t
 command = command or {}
 slashCommand = slashCommand or {}
 
--- DEPRECATED: old name of API
+-- Deprecated: use command.define.
 slashcommand = slashCommand
 
 function command.define(def)

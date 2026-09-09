@@ -24,7 +24,6 @@ globalThis.silverbullet.syscall = (name, ...args) => {
 globalThis.addEventListener("message", (message) => {
   const response = message.data, data = message.data.data;
 
-  // Passthrough non internal events
   if (!response.internal) {
     globalThis.silverbullet.dispatchEvent(new CustomEvent(response.type, { detail: data }));
     return;
@@ -64,7 +63,6 @@ globalThis.silverbullet.sendMessage = (type, data) => {
 // and only if it doesn't have defaultPrevented set, we send it further
 // down.
 globalThis.addEventListener("keydown", (event) => {
-  // This is really hacky... open to other solutions
   const keyEvent = new KeyboardEvent("keydown", event);
 
   Object.defineProperty(keyEvent, "target", {

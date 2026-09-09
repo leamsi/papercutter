@@ -19,21 +19,18 @@ export async function allTests(db: KvPrimitives) {
   expect(result[1]).toEqual("Hello2");
   expect(result[2]).toEqual(undefined);
   let counter = 0;
-  // Query all
   for await (const _entry of db.query({})) {
     counter++;
   }
   expect(counter).toEqual(3);
 
   counter = 0;
-  // Query prefix
   for await (const _entry of db.query({ prefix: ["kv"] })) {
     counter++;
     console.log(_entry);
   }
   expect(counter).toEqual(2);
 
-  // Delete a few keys
   await db.batchDelete([
     ["kv", "test1"],
     ["other", "random"],
@@ -48,12 +45,10 @@ export async function allTests(db: KvPrimitives) {
   expect(result2[1]).toEqual("Hello2");
   expect(result2[2]).toEqual(undefined);
 
-  // Update a key
   await db.batchSet([{ key: ["kv", "test2"], value: "Hello2.1" }]);
   const [val] = await db.batchGet([["kv", "test2"]]);
   expect(val).toEqual("Hello2.1");
 
-  // Set a large batch
   const largeBatch: KV[] = [];
   for (let i = 0; i < 50; i++) {
     largeBatch.push({ key: ["test", `test${i}`], value: "Hello" });
@@ -65,10 +60,8 @@ export async function allTests(db: KvPrimitives) {
   }
   expect(largeBatchResult.length).toEqual(50);
 
-  // Delete the large batch
   await db.batchDelete(largeBatch.map((e) => e.key));
 
-  // Make sure they're gone
   for await (const _entry of db.query({ prefix: ["test"] })) {
     throw new Error("This should not happen");
   }

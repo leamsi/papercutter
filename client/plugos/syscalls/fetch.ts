@@ -22,7 +22,6 @@ export function sandboxFetchSyscalls(client: Client): SysCallMapping {
         options: ProxyFetchRequest = {},
       ): Promise<ProxyFetchResponse> => {
         console.warn("Deprecated: use net.proxyFetch() instead");
-        // JSONify any non-serializable body
         if (
           options?.body &&
           typeof options.body !== "string" &&
@@ -44,7 +43,6 @@ export function sandboxFetchSyscalls(client: Client): SysCallMapping {
           buildProxyUrl(client, url),
           fetchOptions,
         );
-        // Do sensible things with the body based on the content type
         // Read as ArrayBuffer first to safely handle empty responses (e.g.
         // PUT/DELETE returning 204 with Content-Type: application/json).
         // resp.arrayBuffer() never throws on an empty body, whereas
@@ -100,7 +98,6 @@ export function sandboxFetchSyscalls(client: Client): SysCallMapping {
         url: string,
         options?: ProxyFetchRequest64,
       ): Promise<ProxyFetchResponse64> => {
-        // console.log("Got sandbox fetch ", url, op);
         const fetchOptions = options
           ? {
               method: options.method,
@@ -147,7 +144,6 @@ export function sandboxFetchSyscalls(client: Client): SysCallMapping {
 
 function buildProxyUrl(client: Client, url: string) {
   url = url.replace(/^https?:\/\//, "");
-  // Strip off the /.fs and replace with /.proxy
   return (
     client.httpSpacePrimitives.url.slice(0, -fsEndpoint.length) +
     "/.proxy/" +

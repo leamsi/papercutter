@@ -22,7 +22,6 @@ export class ServiceRegistry {
 
   public define(spec: ServiceSpec): void {
     const id = globalThis.crypto.randomUUID();
-    // Register with discover:* event
     this.config.insert(
       ["eventListeners", `discover:${spec.selector}`],
       async (e: any) => {
@@ -38,7 +37,6 @@ export class ServiceRegistry {
         }
       },
     );
-    // Register callback when invoked
     this.config.insert(["eventListeners", `service:${id}`], (e: any) => {
       return spec.run(e.data);
     });

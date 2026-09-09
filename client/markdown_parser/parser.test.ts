@@ -29,31 +29,23 @@ Supper`;
 
 test("Test parser", () => {
   let tree = parseMarkdown(sample1);
-  // console.log("tree", JSON.stringify(tree, null, 2));
-  // Check if rendering back to text works
   expect(renderToText(tree)).toEqual(sample1);
 
   const tree2 = parseMarkdown(sample1, 3);
-  // console.log("tree", JSON.stringify(tree, null, 2));
-  // Check if rendering back to text works
   expect(renderToText(tree2)).toEqual(sample1);
 
-  // Find wiki link and wiki link alias
   const links = collectNodesOfType(tree, "WikiLink");
   expect(links.length).toEqual(2);
   const nameNode = findNodeOfType(links[0], "WikiLinkPage");
   expect(nameNode!.children![0].text).toEqual("wiki link");
 
-  // Check if alias is parsed properly
   const aliasNode = findNodeOfType(links[1], "WikiLinkAlias");
   expect(aliasNode!.children![0].text).toEqual("alias");
 
-  // Find frontmatter
   let node = findNodeOfType(tree, "FrontMatter");
   expect(node).not.toBeNull();
   tree = parseMarkdown(sampleInvalid1);
   node = findNodeOfType(tree, "FrontMatter");
-  // console.log("Invalid node", node);
   expect(node).toBeNull();
 });
 
@@ -69,7 +61,6 @@ And one with nested brackets: [array: [1, 2, 3]]
 
 test("Test inline attribute syntax", () => {
   const tree = parseMarkdown(inlineAttributeSample);
-  // console.log("Attribute parsed", JSON.stringify(tree, null, 2));
   const attributes = collectNodesOfType(tree, "Attribute");
   let nameNode = findNodeOfType(attributes[0], "AttributeName");
   expect(nameNode!.children![0].text).toEqual("age");
@@ -95,10 +86,8 @@ const multiStatusTaskExample = `
 
 test("Test multi-status tasks", () => {
   const tree = parseMarkdown(multiStatusTaskExample);
-  // console.log("Tasks parsed", JSON.stringify(tree, null, 2));
   const tasks = collectNodesOfType(tree, "Task");
   expect(tasks.length).toEqual(3);
-  // Check " " checkbox state parsing
   expect(tasks[0].children![0].children![1].text).toEqual(" ");
   expect(tasks[1].children![0].children![1].text).toEqual("x");
   expect(tasks[2].children![0].children![1].text).toEqual("TODO");
@@ -136,7 +125,6 @@ test("Test hashtag parser", () => {
   expect(hashtags[5].children![0].text).toEqual("#exclamation");
   expect(hashtags[6].children![0].text).toEqual("#question");
   expect(hashtags[7].children![0].text).toEqual("#<tag with spaces>");
-  // multiple lines not allowed
   expect(hashtags[8].children![0].text).toEqual("#no");
   expect(hashtags[9].children![0].text).toEqual("#spacing");
   expect(hashtags[10].children![0].text).toEqual("#3dprint");
@@ -157,7 +145,6 @@ test("Test hashtag helper functions", () => {
   expect(renderHashtag("123-content")).toEqual("#123-content");
   expect(renderHashtag("with spaces")).toEqual("#<with spaces>");
   expect(renderHashtag("single'quote")).toEqual("#single'quote");
-  // should behave like this for all characters in tagRegex
   expect(renderHashtag("exclamation!")).toEqual("#<exclamation!>");
 });
 
@@ -212,7 +199,6 @@ test("Test table parser", () => {
   expect(wikiAlias!.children![0].text).toEqual("Alias");
 });
 
-// Table parsing: bracket-depth pipe protection
 const tableEdgeCases = `
 | Col A | Col B | Col C |
 |-------|-------|-------|
@@ -230,7 +216,6 @@ test("Test table parser with bracket-depth pipe protection", () => {
   const rows = collectNodesOfType(tree, "TableRow");
   expect(rows.length).toBe(7);
 
-  // Row 1: [[page|alias]] | **bold** | plain
   const row1Cells = collectNodesOfType(rows[0], "TableCell");
   expect(row1Cells.length).toBe(3);
 
@@ -244,7 +229,6 @@ test("Test table parser with bracket-depth pipe protection", () => {
 
   expect(renderToText(row1Cells[2]).trim()).toBe("plain");
 
-  // Row 2: [[page]] | #tag | [attr: val]
   const row2Cells = collectNodesOfType(rows[1], "TableCell");
   expect(row2Cells.length).toBe(3);
   expect(findNodeOfType(row2Cells[0], "WikiLink")).not.toBeUndefined();
@@ -255,7 +239,6 @@ test("Test table parser with bracket-depth pipe protection", () => {
   const av = findNodeOfType(row2Cells[2], "AttributeValue");
   expect(av!.children![0].text).toBe("val");
 
-  // Row 3: [attr: a|b] | [[w|x]] | text
   const row3Cells = collectNodesOfType(rows[2], "TableCell");
   expect(row3Cells.length).toBe(3);
   const attr3 = findNodeOfType(row3Cells[0], "Attribute");
@@ -267,7 +250,6 @@ test("Test table parser with bracket-depth pipe protection", () => {
   expect(wl3).not.toBeUndefined();
   expect(findNodeOfType(wl3!, "WikiLinkAlias")!.children![0].text).toBe("x");
 
-  // Row 4: [arr: [1, 2|3]] | normal | end
   const row4Cells = collectNodesOfType(rows[3], "TableCell");
   expect(row4Cells.length).toBe(3);
   const attr4 = findNodeOfType(row4Cells[0], "Attribute");
@@ -276,18 +258,15 @@ test("Test table parser with bracket-depth pipe protection", () => {
     "[1, 2|3]",
   );
 
-  // Row 5: \| escaped | col2 | col3
   const row5Cells = collectNodesOfType(rows[4], "TableCell");
   expect(row5Cells.length).toBe(3);
   expect(renderToText(row5Cells[0])).toContain("|");
 
-  // Row 6: mixed [[l|a]] and [x: y|z] | last | cell
   const row6Cells = collectNodesOfType(rows[5], "TableCell");
   expect(row6Cells.length).toBe(3);
   expect(findNodeOfType(row6Cells[0], "WikiLink")).not.toBeUndefined();
   expect(findNodeOfType(row6Cells[0], "Attribute")).not.toBeUndefined();
 
-  // Row 7: **b** *i* ~s~ | `code\|pipe` | end
   const row7Cells = collectNodesOfType(rows[6], "TableCell");
   expect(row7Cells.length).toBe(3);
   expect(findNodeOfType(row7Cells[0], "StrongEmphasis")).not.toBeUndefined();
@@ -311,25 +290,20 @@ test("Test table parser does not treat {[...]} specially", () => {
   expect(row1Cells.length).toBe(2);
 });
 
-// Links with escaped square brackets
 test("Test markdown links with escaped square brackets", () => {
-  // Parser should produce a Link node for escaped brackets
   const tree = parseMarkdown(`[\\[link\\]](address)`);
   const links = collectNodesOfType(tree, "Link");
   expect(links.length).toBe(1);
 
-  // Should contain Escape nodes for the brackets
   const escapes = collectNodesOfType(links[0], "Escape");
   expect(escapes.length).toBe(2);
   expect(escapes[0].children![0].text).toBe("\\[");
   expect(escapes[1].children![0].text).toBe("\\]");
 
-  // Should have a URL node
   const urlNode = findNodeOfType(links[0], "URL");
   expect(urlNode).not.toBeUndefined();
   expect(urlNode!.children![0].text).toBe("address");
 
-  // Full roundtrip
   expect(renderToText(tree)).toBe(`[\\[link\\]](address)`);
 });
 
@@ -369,28 +343,23 @@ test("AtMention parsing", () => {
   expect(renderToText(mentions[1])).toBe("@ops-team");
   expect(mentions[0].children![0].type).toBe("AtMentionMark");
 
-  // Emails and glued @ do not parse as mentions
   tree = parseMarkdown("Mail pete@example.com or x@@y");
   expect(collectNodesOfType(tree, "AtMention").length).toBe(0);
 
-  // Mentions parse in tasks and inside comment blocks
   tree = parseMarkdown(
     "* [ ] Review @PeteSmith\n\n<!--\n\nPing @petra\n\n-->\n",
   );
   mentions = collectNodesOfType(tree, "AtMention");
   expect(mentions.length).toBe(2);
 
-  // Start-of-line mention
   tree = parseMarkdown("@petra look at this");
   expect(collectNodesOfType(tree, "AtMention").length).toBe(1);
 
-  // Bare @ is not a mention
   tree = parseMarkdown("email me @ home");
   expect(collectNodesOfType(tree, "AtMention").length).toBe(0);
 });
 
 test("Test mdLinkRegex with escaped square brackets", () => {
-  // Normal link
   mdLinkRegex.lastIndex = 0;
   let match = mdLinkRegex.exec("[link](address)");
   expect(match).not.toBeNull();
@@ -404,34 +373,29 @@ test("Test mdLinkRegex with escaped square brackets", () => {
   expect(match!.groups!.title).toBe("\\[link\\]");
   expect(match!.groups!.url).toBe("address");
 
-  // Escaped brackets with other text
   mdLinkRegex.lastIndex = 0;
   match = mdLinkRegex.exec("[see \\[ref\\] here](http://example.com)");
   expect(match).not.toBeNull();
   expect(match!.groups!.title).toBe("see \\[ref\\] here");
   expect(match!.groups!.url).toBe("http://example.com");
 
-  // Image with escaped brackets
   mdLinkRegex.lastIndex = 0;
   match = mdLinkRegex.exec("![\\[img\\]](image.png)");
   expect(match).not.toBeNull();
   expect(match!.groups!.title).toBe("\\[img\\]");
   expect(match!.groups!.url).toBe("image.png");
 
-  // Other escaped characters (backslash itself)
   mdLinkRegex.lastIndex = 0;
   match = mdLinkRegex.exec("[a\\\\b](url)");
   expect(match).not.toBeNull();
   expect(match!.groups!.title).toBe("a\\\\b");
   expect(match!.groups!.url).toBe("url");
 
-  // Normal link still works (no regressions)
   mdLinkRegex.lastIndex = 0;
   match = mdLinkRegex.exec("[simple text](http://example.com)");
   expect(match).not.toBeNull();
   expect(match!.groups!.title).toBe("simple text");
 
-  // Empty title still works
   mdLinkRegex.lastIndex = 0;
   match = mdLinkRegex.exec("[](url)");
   expect(match).not.toBeNull();
@@ -505,17 +469,14 @@ Text right below`;
 });
 
 test("Non-SB conflict-like lines keep their markdown meaning", () => {
-  // A plain git marker (no `SB sha256:`) stays a blockquote
   const gitMarker = parseMarkdown(">>>>>>> HEAD\n");
   expect(collectNodesOfType(gitMarker, "ConflictMarker").length).toEqual(0);
   expect(findNodeOfType(gitMarker, "Blockquote")).not.toBeNull();
 
-  // `=======` outside a conflict block is still a setext underline
   const setext = parseMarkdown("A heading\n=======\n\nBody");
   expect(collectNodesOfType(setext, "ConflictMarker").length).toEqual(0);
   expect(findNodeOfType(setext, "SetextHeading1")).not.toBeNull();
 
-  // ...and that stays true after a conflict block has been closed
   const afterHunk = parseMarkdown(
     `<<<<<<< SB sha256:${hashA}\nMine\n||||||| SB BASE sha256:${hashB}\nBase\n=======\nTheirs\n>>>>>>> SB sha256:${hashC}\n\nA heading\n=======\n`,
   );
@@ -524,7 +485,6 @@ test("Non-SB conflict-like lines keep their markdown meaning", () => {
 });
 
 test("AtMention names may contain dots but never end on one", () => {
-  // Usernames are commonly dotted, so a mention has to carry them whole.
   const mention = (md: string) => {
     const found = collectNodesOfType(parseMarkdown(md), "AtMention");
     return found.length ? renderToText(found[0]) : null;
@@ -532,15 +492,12 @@ test("AtMention names may contain dots but never end on one", () => {
 
   expect(mention("Ping @pete.smith about it")).toBe("@pete.smith");
 
-  // A sentence-ending period is punctuation, not part of the name.
   expect(mention("Talked to @pete.")).toBe("@pete");
   expect(mention("Talked to @pete.smith.")).toBe("@pete.smith");
   expect(mention("Talked to @pete.smith. And more.")).toBe("@pete.smith");
 
-  // A dot has to be followed by more name, so a run of them ends it.
   expect(mention("Wait @pete..smith")).toBe("@pete");
 
-  // Still not an email address.
   expect(mention("Mail pete@example.com")).toBe(null);
 });
 
@@ -561,40 +518,33 @@ test("AtMentionSignature parses a block-terminating signature", () => {
   expect(renderToText(sigs[0])).toBe("-- @zef");
   expect(sigs[0].children![0].type).toBe("AtMentionSignatureMark");
 
-  // The mention stays nested, so existing AtMention consumers still see it.
   const nested = collectNodesOfType(sigs[0], "AtMention");
   expect(nested.length).toBe(1);
   expect(renderToText(nested[0])).toBe("@zef");
   expect(nested[0].children![0].type).toBe("AtMentionMark");
 
-  // Em dash and en dash are aliases.
   for (const marker of ["—", "–"]) {
     tree = parseMarkdown(`Why not? ${marker} @zef`);
     expect(collectNodesOfType(tree, "AtMentionSignature").length).toBe(1);
   }
 
-  // A single hyphen is not a marker.
   tree = parseMarkdown("Ship it - @zef");
   expect(collectNodesOfType(tree, "AtMentionSignature").length).toBe(0);
   expect(collectNodesOfType(tree, "AtMention").length).toBe(1);
 
-  // Parentheses are not a marker.
   tree = parseMarkdown("ask the maintainer (@zef)");
   expect(collectNodesOfType(tree, "AtMentionSignature").length).toBe(0);
   expect(collectNodesOfType(tree, "AtMention").length).toBe(1);
 });
 
 test("AtMentionSignature must terminate its block", () => {
-  // Mid-paragraph is punctuation, not a signature.
   let tree = parseMarkdown("Why not? -- @zef thinks otherwise");
   expect(collectNodesOfType(tree, "AtMentionSignature").length).toBe(0);
   expect(collectNodesOfType(tree, "AtMention").length).toBe(1);
 
-  // The last line of a multi-line paragraph is the block's end.
   tree = parseMarkdown("Why not?\nReally, why not?\n-- @zef");
   expect(collectNodesOfType(tree, "AtMentionSignature").length).toBe(1);
 
-  // Glued to a word is not a signature.
   tree = parseMarkdown("re--@zef");
   expect(collectNodesOfType(tree, "AtMentionSignature").length).toBe(0);
 });

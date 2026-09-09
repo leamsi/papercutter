@@ -53,8 +53,6 @@ fn synthesize(config: &Config, shell_env: ShellConfig) -> SpaceConfig {
             enabled: !config.read_only && shell_env.enabled,
             whitelist: shell_env.whitelist,
         },
-        // The Chrome runtime factory still decides availability via
-        // `ChromeConfig::from_env` (SB_RUNTIME_API), exactly as before.
         runtime_api: true,
         index_page: config.index_page.clone(),
         description: config.space_description.clone(),
@@ -94,22 +92,11 @@ pub(crate) async fn run_single(
     shutdown: crate::server::Shutdown,
 ) -> Result<(), String> {
     let root = PathBuf::from(&config.space_folder);
-    // Note: this is a deliberate behavior change from the old single-space
-    // binary, not parity — the old binary errored on a missing space folder
-    // (`DiskSpacePrimitives::new` failed and `build_state` propagated that as
-    // a startup error). Auto-creating it here is owner-accepted: `run_single`
-    // is only reached via `--single` or a legacy `SB_*` env var, both of which
-    // take precedence over folder inspection in `boot::detect` — so
-    // `--single ./new-dir` and Docker-style `SB_USER=... /space` on a fresh
-    // mount still get instant single-space mode with the folder created for
-    // them, even though a missing folder with no flag/env now goes to setup.
     std::fs::create_dir_all(&root)
         .map_err(|e| format!("could not create space folder {}: {e}", root.display()))?;
 
     let space = synthesize_config(&config);
 
-    // Seed an index page into a brand-new empty space. The space folder is the
-    // server root (folder ".").
     seed_index(
         &root,
         &space.index_page,
@@ -117,7 +104,6 @@ pub(crate) async fn run_single(
         &config.gitignore,
     );
 
-    // `SB_USER` set => inherit the admin (env) credentials; absent => open.
     let auth = silverbullet_server::auth::AuthConfig::from_env().map_err(|e| e.0)?;
 
     let metrics = config.metrics_port.map(|_| Arc::new(Metrics::new()));
@@ -147,7 +133,6 @@ pub(crate) async fn run_single(
     spaces.insert(SINGLE_SPACE_ID.to_string(), space);
     let manager = MultiManager::boot_in_memory(root, MultiConfig { spaces }, deps)?;
 
-    // Optional Prometheus metrics on a separate port (aggregated in `metrics`).
     if let (Some(mport), Some(metrics)) = (config.metrics_port, metrics.clone()) {
         let maddr = format!("{}:{}", config.bind_host, mport);
         let listener = tokio::net::TcpListener::bind(&maddr)
@@ -257,7 +242,6 @@ mod tests {
     fn read_only_propagates_and_disables_shell() {
         let mut c = config_fixture();
         c.read_only = true;
-        // Even if the env parser reported shell enabled, read-only wins.
         let s = synthesize(&c, shell_on());
         assert!(s.read_only);
         assert!(!s.shell.enabled);

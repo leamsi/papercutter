@@ -323,11 +323,8 @@ test("forced reload applies a pending disk change instead of clobbering the merg
   page,
   sbServer,
 }) => {
-  // Block push entirely so only the explicit reload below can discover the
-  // disk change -- isolates loadPage()'s own merge-base handling (the bug
-  // Task 5's review found and fixed) from the live SSE/poll path this
-  // feature also adds, which would otherwise apply the change first and
-  // mask a regression here.
+  // Block push so only the explicit reload can discover the disk change,
+  // isolating loadPage merge-base handling from live updates.
   await page.route("**/.events", (route) => route.fulfill({ status: 404 }));
   await gotoSilverBulletPage(page, sbServer);
 
@@ -343,11 +340,8 @@ test("forced reload applies a pending disk change instead of clobbering the merg
   // poll window, nothing should have applied yet.
   await expect(editor).not.toContainText("External line", { timeout: 500 });
 
-  // The exact method a page-reload command invokes under the hood
-  // (ContentManager.reloadEditor -> same-page loadPage()). Previously this
-  // set lastKnownDiskText to the freshly-read disk text *before* diffing
-  // against it, so the diff -- and the merge -- was always empty even
-  // though disk content had actually changed.
+  // ContentManager.reloadEditor invokes same-page loadPage; its merge must
+  // compare against the stored base before recording the newly read text.
   await page.evaluate(() => (globalThis as any).client.reloadEditor());
 
   await expect(editor).toContainText("External line");

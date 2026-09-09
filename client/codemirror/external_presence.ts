@@ -16,7 +16,6 @@ import {
   WidgetType,
 } from "@codemirror/view";
 
-// How long the presence cursor will appear
 const PRESENCE_TTL_MS = 5000;
 
 /** Source label of an externally-applied change */
@@ -113,20 +112,11 @@ function invertOf(tr: Transaction): ChangeSet {
 }
 
 /**
- * Tracks external edits through undo/redo so a revert of one of them can
- * keep the user's current cursor instead of CodeMirror's default of
- * restoring the selection recorded before the edit landed -- for an edit
- * applied before the user has touched the page, that's wherever the cursor
- * happened to sit on load (see externalUndoCursorFix below). Local edits are
- * untouched: their own pre-edit selection is exactly what undo should
- * restore, so only transactions carrying externalSource are tracked here.
+ * Tracks external undo/redo so it preserves the current cursor; local undo
+ * retains CodeMirror's usual pre-edit selection restoration.
  *
- * pendingUndo/pendingRedo mirror the same two ChangeSet, kept mapped
- * forward through every doc change exactly like CodeMirror's own history
- * does internally (see mapEvent), so that by the time a real undo/redo of
- * a tracked edit arrives, its tr.changes is structurally identical to our
- * stored entry -- that structural match is how "this undo/redo is reverting
- * an external edit" is recognized.
+ * Map pending changes through every edit like CodeMirror's history (mapEvent),
+ * then match tr.changes structurally to recognize an external undo/redo.
  */
 export const externalUndoField = StateField.define<ExternalUndoState>({
   create: () => emptyExternalUndoState,
@@ -205,15 +195,10 @@ export const externalUndoField = StateField.define<ExternalUndoState>({
   },
 });
 
-// CodeMirror's undo/redo transactions are dispatched with `filter: false`
-// (see HistoryState.pop in @codemirror/commands), which skips the
-// EditorState.transactionFilter facet entirely, so there's no way to rewrite
-// their selection in place. Instead, externalUndoField above recognizes a
-// matching undo/redo as it happens, and this listener issues a follow-up,
-// non-historical, selection-only transaction right after. EditorView resets
-// updateState to Idle before running update listeners (see
-// EditorView.update), so dispatching here is safe and lands within the same
-// synchronous flush as the undo/redo -- no visible flicker.
+// HistoryState.pop uses filter:false, so undo/redo selections cannot be
+// rewritten by transactionFilter. Correct them in a follow-up transaction.
+// EditorView is Idle during update listeners, allowing dispatch in the same
+// synchronous flush without flicker.
 const externalUndoCursorFix = EditorView.updateListener.of((update) => {
   const { correction } = update.state.field(externalUndoField);
   if (!correction) {
@@ -230,9 +215,6 @@ export function buildGhostCaretElement(source: string): HTMLElement {
   const el = document.createElement("span");
   el.className = "sb-external-caret";
   el.setAttribute("data-source", source);
-  // A real child element rather than CSS `content: attr(data-source)`,
-  // so tests can assert the label and styling bugs (like the inherited
-  // text-indent one fixed in editor.scss) stay debuggable in the DOM.
   const label = document.createElement("span");
   label.className = "sb-external-caret-label";
   label.textContent = source;
@@ -319,9 +301,7 @@ function buildDecorations(state: EditorState): DecorationSet {
       Decoration.widget({ widget: deletionMarkerWidget, side: -1 }).range(from),
     );
   }
-  // An anonymous write gets the highlight only: a caret labeled "external"
-  // says nothing worth the visual noise. The caret appears when there is an
-  // actual name to show.
+  // Anonymous writes need only a highlight; their caret label adds no information.
   if (newest && newest.source !== "external") {
     decos.push(
       Decoration.widget({
@@ -333,10 +313,8 @@ function buildDecorations(state: EditorState): DecorationSet {
   return Decoration.set(decos, true);
 }
 
-// Runs once per relevant update rather than off a single owned interval;
-// redundant sweeps are cheap and idempotent, and the empty-field early
-// return means nothing is scheduled once hunks drain -- no per-view
-// instance state is needed to dedupe overlapping timers.
+// Sweeps are idempotent, so overlapping timers need no per-view bookkeeping.
+// Stop scheduling when no hunks remain.
 const presenceExpiry = EditorView.updateListener.of((update) => {
   const { hunks } = update.state.field(externalPresenceField);
   if (hunks.length === 0) {

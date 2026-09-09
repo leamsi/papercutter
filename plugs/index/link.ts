@@ -1,7 +1,7 @@
 import { encodeRef } from "@silverbulletmd/silverbullet/lib/ref";
 import type { ObjectValue } from "@silverbulletmd/silverbullet/type/index";
 
-// The legacy `link` indexer has been retired in favor of `relation`.
+// The link collection is projected from relation records.
 
 // For projection only
 export type LinkObject = ObjectValue<{

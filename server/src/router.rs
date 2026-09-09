@@ -99,7 +99,6 @@ pub(crate) fn cross_origin_refused(
     method: &Method,
     path: &str,
 ) -> bool {
-    // Only the sensitive set is guarded.
     if required_level(method, path) != AccessLevel::Write {
         return false;
     }
@@ -207,8 +206,6 @@ fn actor_from(profile: crate::auth::UserProfile, level: AccessLevel) -> crate::a
     }
 }
 
-/// Increment the HTTP request counter when metrics are enabled, then continue.
-/// A no-op (apart from the cheap `Option` check) when metrics are off.
 async fn count_requests(
     axum::extract::State(state): axum::extract::State<Arc<ServerState>>,
     req: Request,
@@ -223,14 +220,10 @@ async fn count_requests(
 /// Build the HTTP router for the file/config/bundle endpoints. Protected routes
 /// require authorization when an authorizer is configured.
 pub fn build_router(state: Arc<ServerState>) -> Router {
-    // Protected: require authorization (when an authorizer is configured).
     let protected = Router::new()
         .route("/.config", get(control::handle_config))
         .route("/.accounts", get(accounts::handle_accounts))
-        // Gzip/brotli-compress file reads (Accept-Encoding aware). Big text
-        // assets like a self-hosted mermaid.min.js (~3.3 MB) transfer at
-        // ~0.9 MB. Scoped to GET so writes are untouched. The `x-content-length`
-        // metadata header still reflects the real (uncompressed) size.
+        // x-content-length must retain the uncompressed file size.
         .route(
             "/.fs",
             get(fs::handle_fs_list).layer(CompressionLayer::new()),
@@ -456,14 +449,12 @@ mod auth_tests {
         let authz = JwtAuthorizer::new(auth, "tok".into());
         let st = state_with(Some(Arc::new(authz)));
 
-        // No credential:  401.
         let r = crate::build_router(st.clone())
             .oneshot(Request::builder().uri("/.fs").body(Body::empty()).unwrap())
             .await
             .unwrap();
         assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 
-        // Valid bearer: 200.
         let r = crate::build_router(st.clone())
             .oneshot(
                 Request::builder()
@@ -476,7 +467,6 @@ mod auth_tests {
             .unwrap();
         assert_eq!(r.status(), StatusCode::OK);
 
-        // Valid session cookie: 200.
         let r = crate::build_router(st)
             .oneshot(
                 Request::builder()
@@ -656,8 +646,6 @@ mod auth_tests {
         }
     }
 
-    /// `/.shell` and `/.proxy` are sensitive and must sit behind auth too
-    /// (ported from the App's `shell_requires_auth` / `proxy_requires_auth`).
     #[tokio::test]
     async fn shell_and_proxy_require_authorization() {
         let st = state_with(Some(Arc::new(Always(false))));
@@ -892,11 +880,7 @@ mod auth_tests {
         assert!(response.headers().get("location").is_some());
     }
 
-    /// `Always(true)` yields `AuthOutcome::anonymous()` -- the authorizer
-    /// approved the request but verified no identity -- so this is graded
-    /// through `access_policy`, unlike an outright denial above. This is the
-    /// path `AnonymousFallbackAuthorizer` (Task 5) turns into the common case
-    /// for anonymous visitors.
+    /// Accepted anonymous identities still need an access-policy check.
     #[tokio::test]
     async fn approved_anonymous_below_required_level_is_401_with_location() {
         let mut s = test_state();
@@ -936,14 +920,12 @@ mod auth_tests {
         let get = &Method::GET;
         let cookie = ("cookie", "auth_localhost_4137=jwt");
 
-        // Non-sensitive route (a plain GET): never guarded, even cross-site + cookie.
         assert!(!super::cross_origin_refused(
             &h(&[cookie, ("sec-fetch-site", "cross-site")]),
             get,
             read
         ));
 
-        // Bearer token present: skipped even on a sensitive cross-site POST.
         assert!(!super::cross_origin_refused(
             &h(&[
                 ("authorization", "Bearer abc"),
@@ -953,7 +935,6 @@ mod auth_tests {
             sensitive
         ));
 
-        // No session cookie (and no bearer): skipped.
         assert!(!super::cross_origin_refused(
             &h(&[("sec-fetch-site", "cross-site")]),
             post,
@@ -970,7 +951,6 @@ mod auth_tests {
             sensitive
         ));
 
-        // Cookie-authed sensitive POST, cross-site / same-site -> REFUSE.
         assert!(super::cross_origin_refused(
             &h(&[cookie, ("sec-fetch-site", "cross-site")]),
             post,
@@ -982,7 +962,6 @@ mod auth_tests {
             sensitive
         ));
 
-        // Cookie-authed sensitive POST, same-origin / none -> allow.
         assert!(!super::cross_origin_refused(
             &h(&[cookie, ("sec-fetch-site", "same-origin")]),
             post,
@@ -1056,7 +1035,6 @@ mod auth_tests {
             ))
             .with_state(st);
 
-        // Cookie-authed, cross-site: refused by the guard, not the inner handler.
         let resp = probe_router
             .clone()
             .oneshot(
@@ -1073,7 +1051,6 @@ mod auth_tests {
             .unwrap();
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
-        // Cookie-authed, same-origin: passes the guard, reaches the handler.
         let resp = probe_router
             .clone()
             .oneshot(
@@ -1090,7 +1067,6 @@ mod auth_tests {
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        // Bearer, cross-site: bearer skips the guard entirely.
         let resp = probe_router
             .oneshot(
                 Request::builder()
@@ -1127,7 +1103,6 @@ mod metrics_tests {
     #[tokio::test]
     async fn counting_middleware_increments_http_requests() {
         let (state, metrics) = state_with_metrics();
-        // Seed a bundle asset so the request is a clean 200.
         state
             .client_bundle
             .write_file(".client/a.js", b"x", None)
@@ -1147,7 +1122,6 @@ mod metrics_tests {
 
     #[tokio::test]
     async fn no_metrics_means_no_counting_and_no_panic() {
-        // Default test_state has metrics = None; a request must still succeed.
         let state = test_state();
         let resp = crate::build_router(Arc::new(state))
             .oneshot(
@@ -1316,7 +1290,6 @@ mod metrics_tests {
         let state = Arc::new(s);
 
         let before = metrics.runtime_api_requests.get();
-        // An eval request ticks the counter.
         let _ = crate::build_router(state.clone())
             .oneshot(
                 Request::builder()
@@ -1329,7 +1302,6 @@ mod metrics_tests {
             .unwrap();
         assert_eq!(metrics.runtime_api_requests.get(), before + 1);
 
-        // A logs request does NOT.
         let _ = crate::build_router(state)
             .oneshot(
                 Request::builder()

@@ -87,11 +87,7 @@ async function aspiringRows(): Promise<PageObj[]> {
     select: { type: "Variable", name: "name", ctx: {} } as any,
     distinct: true,
   } as any);
-  // `ref` is otherwise the one thing that would set an aspiring row apart
-  // from a real `ObjectValue`: an aspiring page's reference is exactly the
-  // name it would be created under, so this is the honest value for it, not
-  // a workaround -- `pagePicker`'s own `onSelect` already reads `obj.ref ??
-  // obj.name`, so this changes nothing about what it resolves to.
+  // Aspiring pages use the reference they would be created under.
   return names.map((name) => ({
     name,
     ref: name,
@@ -183,7 +179,6 @@ export const pagePicker: BuiltinView<PageObj> = {
     label: "Open",
     supportedDocks: ["modal", "lhs", "rhs"],
     hasCreate: true,
-    // The create row makes a page, and says so before it says the name.
     createIcon: "file-text",
     refreshOn: INDEX_REFRESH_EVENTS,
     refreshOnOpen: true,
@@ -252,7 +247,6 @@ export const pagePicker: BuiltinView<PageObj> = {
       if (obj.isAspiring) return "sb-nav-aspiring";
       const classes = obj.pageDecoration?.cssClasses;
       if (!Array.isArray(classes)) return undefined;
-      // This ends up in a class attribute.
       return classes.join(" ").replaceAll(/[^a-zA-Z0-9-_ ]/g, "");
     },
     icon: spaceIcon,

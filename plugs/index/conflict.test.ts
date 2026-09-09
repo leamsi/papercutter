@@ -39,8 +39,7 @@ test("containsConflictMarkers: true for SB markers", () => {
   expect(containsConflictMarkers(oneHunk)).toBe(true);
 });
 
-// A complete git-conflict hunk (two-way, no diff3 base) is now recognized
-// alongside SB's own grammar — spaces kept in git can carry these too.
+// Complete two-way git conflict hunks must be recognized without a diff3 base.
 test("containsConflictMarkers: true for a complete git-style hunk", () => {
   const gitStyle = [
     "<<<<<<< HEAD",
@@ -93,9 +92,7 @@ test("containsConflictMarkers: false for a fenced code block with a full git exa
   expect(containsConflictMarkers(fenced)).toBe(false);
 });
 
-// SB's grammar can't false-positive, so fence-masking must never suppress
-// it — mirrors the same rule (and regression) fixed in the widget's
-// findConflictHunks.
+// Fenced code must not hide SilverBullet conflict markers; match the widget grammar.
 test("containsConflictMarkers: true for an SB hunk whose sides contain fence openers", () => {
   const text = [
     "<<<<<<< SB sha256:aaaa1111",

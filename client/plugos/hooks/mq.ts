@@ -48,7 +48,6 @@ export class MQHook implements Hook<MQHookT> {
 
   reloadQueues() {
     this.stop();
-    // Plug based subscriptions
     for (const plug of this.system.loadedPlugs.values()) {
       if (!plug.manifest) {
         continue;
@@ -96,14 +95,12 @@ export class MQHook implements Hook<MQHookT> {
         }
       }
     }
-    // Space Lua based subscriptions
     const configListeners: Record<string, MQListenerSpec[]> = this.config.get(
       "mqSubscriptions",
       {},
     );
     for (const [queue, listeners] of Object.entries(configListeners)) {
       for (const listener of listeners) {
-        // console.log("Subscribing to", queue, listener);
         this.subscriptions.push(
           this.mq.subscribe(
             queue,

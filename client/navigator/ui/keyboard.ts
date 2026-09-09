@@ -71,12 +71,8 @@ export function handleKeyDown(e: KeyboardEvent, ctx: KeyContext) {
       cmd.completeNextSegment();
       return;
     }
-    // Plain Space on an empty phrase, where it would otherwise insert a
-    // leading space nobody wants. The interaction mode is not a property of
-    // this gesture -- it is how it yields to a `keymap` that claims `" "`:
-    // in such a view a Space while navigating is that view's action, and
-    // only a Space while typing completes the folder. A view that claims
-    // nothing has nothing to yield to, so it completes in either mode.
+    // Space completes an empty phrase unless a view claims it as a navigation
+    // action; in typing mode it still completes the folder.
     if (
       !e.altKey &&
       !e.ctrlKey &&
@@ -172,11 +168,8 @@ function tryKeymap(e: KeyboardEvent, ctx: KeyContext): boolean {
 function cycleSegment(e: KeyboardEvent, ctx: KeyContext): boolean {
   const { derived, cmd, segmentIndex } = ctx;
   const count = derived.segments?.length ?? 0;
-  // Tab is the panel's, always. Focus lives in the filter input for the
-  // whole life of the panel -- that is the entire keyboard contract -- so
-  // letting Tab walk the browser's focus order would drop the user
-  // somewhere they can't type, in a UI with nowhere else to go. With
-  // segments it steps through them; without, it does nothing at all.
+  // Keep focus in the filter input: Tab cycles segments, or does nothing
+  // when there are none.
   if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
     if (count < 2) return true;

@@ -34,9 +34,7 @@ export type ItemObject = ObjectValue<
 >;
 
 export type TaskObject = ObjectValue<
-  // "Inherit" everyting from item
   ItemObject & {
-    // And add a few more attributes
     done: boolean;
     state: string;
   } & Record<string, any>
@@ -52,7 +50,6 @@ export async function indexItems(
   const shouldIndexAllItems = await system.getConfig("index.item.all", true);
   const shouldIndexAllTasks = await system.getConfig("index.task.all", true);
 
-  // Build complete list of "done" states
   const taskStates = await system.getConfig("taskStates", {});
   const allCompleteStates = completeStates.concat(
     Object.values(taskStates)
@@ -72,7 +69,6 @@ export async function indexItems(
       }
 
       if (!n.children) {
-        // Weird, let's jump out
         return true;
       }
 
@@ -88,7 +84,6 @@ export async function indexItems(
         ),
       );
 
-      // Traversal continue into child items (potentially)
       return false;
     },
     true,
@@ -113,7 +108,6 @@ export function extractItemFromNode(
   itemCache: Map<number, ItemObject | TaskObject> | undefined,
   pageLastModified: string,
 ): ItemObject | TaskObject {
-  // Check cache first to avoid redundant extraction
   if (itemCache?.has(itemNode.from!)) {
     return itemCache.get(itemNode.from!)!;
   }
@@ -132,7 +126,6 @@ export function extractItemFromNode(
   // This will only be valid for items, not task
   let nameNode = itemNode.children!.find((n) => n.type === "Paragraph");
 
-  // Is this a task?
   const taskNode = itemNode.children!.find((n) => n.type === "Task");
   if (taskNode) {
     item.tag = "task";
@@ -146,7 +139,6 @@ export function extractItemFromNode(
   // child sublist anchors don't bleed into the parent item's ref.
   const anchor = nameNode ? collectAnchor(nameNode) : null;
 
-  // Now let's extract tags and attributes
   const tags = collectTags(itemNode);
   const attributes = collectAttributes(itemNode);
   const links = collectPageLinks(itemNode);
@@ -197,7 +189,6 @@ export function extractItemFromNode(
     );
   }
 
-  // Store in cache after full extraction (including parent enrichment)
   if (itemCache) {
     itemCache.set(itemNode.from!, item);
   }
@@ -230,7 +221,6 @@ export function enrichItemFromParents(
       item.parent = parentItem.ref;
       directParent = false;
     }
-    // Merge tags
     item.itags = [
       ...new Set([
         ...(item.itags || []),
@@ -238,7 +228,6 @@ export function enrichItemFromParents(
       ]),
     ];
 
-    // And links
     const ilinks = [
       ...new Set([...(item.ilinks || []), ...(parentItem.ilinks || [])]),
     ];

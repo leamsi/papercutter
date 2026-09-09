@@ -88,12 +88,8 @@ export class MainUI {
         } else if (
           target.closest('input, textarea, select, [contenteditable="true"]')
         ) {
-          // Focus is in a native form field (e.g. the top-bar page-name
-          // editor). Let the field own keys it handles natively — typing,
-          // caret navigation, and the standard clipboard/undo/select-all
-          // combos — but still forward genuine command shortcuts (e.g. Cmd-K)
-          // so they keep working from the field, like they did in the old
-          // CodeMirror mini-editor.
+          // Let native fields handle typing, navigation, and editing shortcuts while
+          // forwarding command shortcuts such as Cmd-K.
           const cmd = ev.metaKey || ev.ctrlKey;
           const key = ev.key.toLowerCase();
           const fieldHandlesNatively =
@@ -407,10 +403,8 @@ export class MainUI {
       [profile],
     );
 
-    // One modal at a time, last open wins: a navigator modal taking the slot
-    // closes the plug panel that had it, the way the keyed-panel reducer case
-    // used to. Both on screen means two stacked backdrops, with the
-    // navigator's (and the focus it took) hidden under the plug's.
+    // Only one modal may occupy the slot; close the plug panel before the
+    // navigator takes its backdrop and focus.
     const plugModalMode = viewState.panels.modal.mode;
     useEffect(() => {
       if (navSlots.modal && plugModalMode !== undefined) {

@@ -1,6 +1,5 @@
-// Regression guard for #1985: arrow keys / clicks below a tall block
-// widget (e.g. a `${query[[…]]}` rendering as a table) used to drift by
-// a line or two when content was scrolled past the widget.
+// Arrow keys and clicks below a tall block widget must retain accurate
+// line positions after scrolling past it. See #1985.
 
 import { expect, gotoSilverBulletPage, test } from "./fixtures.ts";
 

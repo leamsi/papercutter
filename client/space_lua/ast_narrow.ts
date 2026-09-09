@@ -2,13 +2,11 @@
 
 import type { ASTCtx, LuaExpression, LuaLValue, LuaStatement } from "./ast.ts";
 
-// Extract by `type` discriminant
 type NarrowByType<
   U,
   K extends U extends { type: infer T } ? T : never,
 > = Extract<U, { type: K }>;
 
-// Expressions
 export const asStringExpr = (e: LuaExpression) =>
   e as NarrowByType<LuaExpression, "String">;
 export const asNumberExpr = (e: LuaExpression) =>
@@ -38,7 +36,6 @@ export const asFunctionDef = (e: LuaExpression) =>
 export const asQueryExpr = (e: LuaExpression) =>
   e as NarrowByType<LuaExpression, "Query">;
 
-// L-values
 export const asLValueVariable = (l: LuaLValue) =>
   l as Extract<LuaLValue, { type: "Variable" }>;
 export const asLValueTableAccess = (l: LuaLValue) =>
@@ -46,7 +43,6 @@ export const asLValueTableAccess = (l: LuaLValue) =>
 export const asLValuePropertyAccess = (l: LuaLValue) =>
   l as Extract<LuaLValue, { type: "PropertyAccess" }>;
 
-// Statements
 export const asAssignment = (s: LuaStatement) =>
   s as NarrowByType<LuaStatement, "Assignment">;
 export const asLocal = (s: LuaStatement) =>
@@ -79,5 +75,4 @@ export const asGoto = (s: LuaStatement) =>
 export const asSemicolon = (s: LuaStatement) =>
   s as NarrowByType<LuaStatement, "Semicolon">;
 
-// Pull ctx with a single shape
 export const ctxOf = (node: { ctx: ASTCtx }): ASTCtx => node.ctx;

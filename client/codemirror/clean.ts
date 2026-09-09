@@ -58,7 +58,6 @@ export function cleanModePlugins(client: Client) {
           metaKey: false,
           pos: pos,
         };
-        // Propagate click event from checkbox
         void client.dispatchClickEvent(clickEvent);
       },
       getView: () => client.editorView,

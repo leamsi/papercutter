@@ -759,9 +759,8 @@ fn sample(paths: &[String]) -> String {
     }
 }
 
-/// How long to sleep before the earliest deadline that could produce a
-/// commit. Replaces a fixed tick: an idle space sleeps a whole sweep
-/// interval, and `record` notifies when a mark pulls a deadline earlier.
+/// Time until the next commit, sweep, or sync deadline. Marks that move the
+/// deadline earlier wake the waiting thread.
 fn next_deadline(
     state: &EngineState,
     quiet: Duration,

@@ -216,7 +216,6 @@ function PageNameEditor({
   // Guards against the blur that fires when a successful rename refocuses the
   // editor, which would otherwise trigger a second (same-name) commit.
   const committing = useRef(false);
-  // Re-sync when navigating to a different page.
   useEffect(() => setName(pageName ?? ""), [pageName]);
 
   const commit = (newName: string) => {
@@ -225,7 +224,6 @@ function PageNameEditor({
     }
     if (newName !== pageName) {
       committing.current = true;
-      // On failure, restore the previous name
       Promise.resolve(onRename(newName))
         .catch(() => setName(pageName ?? ""))
         .finally(() => {

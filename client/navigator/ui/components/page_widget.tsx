@@ -175,8 +175,6 @@ function PageWidget({
       void handle({
         view: name,
         hook: "rows",
-        // `slot` is this view's resolved dock -- it only renders here because
-        // `pageSlotViews` resolved it to this slot.
         args: { ctx: { phrase: "", dock: slot } },
       })
         .then(async (result) => {
@@ -359,7 +357,6 @@ export function PageSlotWidgets({
             meta={v.meta}
             slot={slot}
             client={client}
-            // Already resolved by `pageSlotViews`, alongside dock and open.
             initialCollapsed={v.collapsed}
             onSettled={onSettled}
           />

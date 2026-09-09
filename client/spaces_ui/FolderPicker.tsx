@@ -95,7 +95,6 @@ export function FolderPicker({
     onChange(path);
   }
 
-  // Debounced status line for the typed value.
   useEffect(() => {
     if (!value) {
       setStatus(null);
@@ -107,7 +106,6 @@ export function FolderPicker({
     return () => clearTimeout(t);
   }, [value, apiBase]);
 
-  // Listing for the browse panel: subdirectories of `browsePath`.
   useEffect(() => {
     if (!browsing) return;
     let cancelled = false;

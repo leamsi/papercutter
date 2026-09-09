@@ -1,8 +1,5 @@
-// Regression guard: arrow keys must enter multi-line block widgets
-// (queries, tables) one line at a time. The widget hides intermediate
-// source lines with `display: none`, collapsing their geometry, which
-// previously caused vertical motion to skip several document lines —
-// ArrowDown landed on the last hidden line, ArrowUp on the first.
+// Arrow keys must traverse hidden source lines one at a time even when
+// a block widget collapses their geometry with display: none.
 
 import { expect, gotoSilverBulletPage, test } from "./fixtures.ts";
 

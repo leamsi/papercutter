@@ -117,8 +117,6 @@ function SectionBanners({
   );
 }
 
-// ---------- Confirm button ----------
-
 function ConfirmIconButton({
   icon,
   title,
@@ -154,8 +152,6 @@ function ConfirmIconButton({
     </Button>
   );
 }
-
-// ---------- Installed ----------
 
 function InstalledRow({
   lib,
@@ -378,8 +374,6 @@ function UpdateAllButton() {
   );
 }
 
-// ---------- Available ----------
-
 function MarkdownDescription({ text }: { text: string }) {
   const [html, setHtml] = useState("");
   useEffect(() => {
@@ -534,8 +528,6 @@ function RepoGroup({
   );
 }
 
-// ---------- Repositories ----------
-
 function RepoRow({ repo }: { repo: RepositoryInfo }) {
   const libs = useLibraries();
   const key = `repo:${repo.name}`;
@@ -682,8 +674,6 @@ function RepositoriesSection() {
     </div>
   );
 }
-
-// ---------- Tab root ----------
 
 export function LibrariesTab() {
   const { cfg } = useCfg();

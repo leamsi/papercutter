@@ -166,7 +166,7 @@ export function RevisionPreviewModal() {
           height the scrolling body needs. */}
       <div class="sb-modal sb-revision-preview" style={{ inset: "100px" }}>
         {/* Keyed so a new preview remounts rather than inheriting the previous
-            one's fetch state -- what the old iframe needed a render-id guard for. */}
+            one's fetch state. */}
         <PreviewBody key={preview.token} preview={preview} />
       </div>
     </div>

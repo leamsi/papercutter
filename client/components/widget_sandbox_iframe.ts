@@ -7,9 +7,7 @@ import type { CodeWidgetContent } from "@silverbulletmd/silverbullet/type/client
  */
 
 type PreloadedIFrame = {
-  // The wrapped iframe element
   iframe: HTMLIFrameElement;
-  // Has the iframe been used yet?
   used: boolean;
   // Is it ready (that is: has the initial load happened)
   ready: Promise<void>;
@@ -22,36 +20,29 @@ updatePool();
 
 function updatePool(exclude?: PreloadedIFrame) {
   let availableFrames = 0;
-  // Iterate over all iframes
   for (const preloadedIframe of iframePool) {
     if (preloadedIframe === exclude) {
       continue;
     }
     if (
-      // Is this iframe in use, but has it since been removed from the DOM?
       preloadedIframe.used &&
       !document.body.contains(preloadedIframe.iframe)
     ) {
-      // Ditch it
-      // console.log("Garbage collecting iframe", preloadedIframe);
       iframePool.delete(preloadedIframe);
     }
     if (!preloadedIframe.used) {
       availableFrames++;
     }
   }
-  // And after, add more iframes if needed
   for (let i = 0; i < desiredPoolSize - availableFrames; i++) {
     iframePool.add(prepareSandboxIFrame());
   }
 }
 
 export function prepareSandboxIFrame(): PreloadedIFrame {
-  // console.log("Preloading iframe");
   const iframe = document.createElement("iframe");
 
-  // Empty page with current origin. Handled this differently before, but "dock apps" in Safari (PWA implementation) seem to have various restrictions
-  // This one works in all browsers, although it's probably less secure
+  // Use a same-origin empty page compatible with Safari’s installed PWAs.
   iframe.src = "about:blank";
   iframe.style.visibility = "hidden";
   iframe.allow =
@@ -61,7 +52,6 @@ export function prepareSandboxIFrame(): PreloadedIFrame {
     iframe.onload = () => {
       iframe.contentDocument!.write(panelHtml);
       iframe.style.visibility = "visible";
-      // Now ready to use
       resolve();
     };
   });
@@ -75,13 +65,11 @@ export function prepareSandboxIFrame(): PreloadedIFrame {
 function claimIFrame(): PreloadedIFrame {
   for (const preloadedIframe of iframePool) {
     if (!preloadedIframe.used) {
-      // console.log("Took iframe from pool");
       preloadedIframe.used = true;
       updatePool(preloadedIframe);
       return preloadedIframe;
     }
   }
-  // Nothing available in the pool, let's spin up a new one and add it to the pool
   console.warn("Had to create a new iframe on the fly, this shouldn't happen");
   const newPreloadedIFrame = prepareSandboxIFrame();
   newPreloadedIFrame.used = true;
@@ -92,7 +80,6 @@ function claimIFrame(): PreloadedIFrame {
 export function broadcastReload() {
   for (const preloadedIframe of iframePool) {
     if (preloadedIframe.used && preloadedIframe.iframe?.contentWindow) {
-      // Send a message to the global object, which the iframe is listening to
       globalThis.dispatchEvent(
         new MessageEvent("message", {
           source: preloadedIframe.iframe.contentWindow,
@@ -156,7 +143,6 @@ export function mountIFrame(
               break;
             }
             case "setHeight":
-              // iframe.height = data.height + "px";
               iframe.style.height = `${data.height}px`;
               if (widgetHeightCacheKey) {
                 client.widgetCache.setCachedWidgetMeta(widgetHeightCacheKey, {
@@ -175,9 +161,7 @@ export function mountIFrame(
         });
       };
 
-      // Subscribe to message event on global object (to receive messages from iframe)
       globalThis.addEventListener("message", messageListener);
-      // Only run this code once
       iframe.onload = null;
       const resolvedContent = await Promise.resolve(content);
       if (!iframe.contentWindow) {
@@ -218,7 +202,6 @@ export function createWidgetSandboxIFrame(
   content: CodeWidgetContent | null | Promise<CodeWidgetContent | null>,
   onMessage?: (message: any) => void,
 ) {
-  // console.log("Claiming iframe");
   const preloadedIFrame = claimIFrame();
   mountIFrame(
     preloadedIFrame,

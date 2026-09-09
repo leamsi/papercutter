@@ -174,7 +174,6 @@ export class SyncEngine extends EventEmitter<SyncEngineEvents> {
       },
     });
 
-    // Start the sync loop
     void this.run();
   }
 
@@ -270,15 +269,12 @@ export class SyncEngine extends EventEmitter<SyncEngineEvents> {
   }
 
   isSyncCandidate(path: string): boolean {
-    // ALWAYS sync plugs
     if (path.endsWith(".plug.js")) {
       return true;
     }
-    // Follow SB_SYNC_IGNORE rules
     if (!this.syncAccepts(path)) {
       return false;
     }
-    // Either sync all files, or only .md files if syncDocuments is false
     return this.syncConfig.syncDocuments || path.endsWith(".md");
   }
 
@@ -290,7 +286,6 @@ export class SyncEngine extends EventEmitter<SyncEngineEvents> {
         await this.baseStore.pruneBases(
           new Set(this.snapshot.baseHashes.values()),
         );
-        // emit successful sync event (not when operations === -1, because that means another sync was ongoing)
         void this.emit("spaceSyncComplete", operations);
       }
       return operations;
@@ -365,7 +360,6 @@ export class SyncEngine extends EventEmitter<SyncEngineEvents> {
       );
 
       if (operations > 0) {
-        // Something happened -> conflict copy generated, let's report it
         void this.emit("syncConflict", name);
       }
 
@@ -377,11 +371,8 @@ export class SyncEngine extends EventEmitter<SyncEngineEvents> {
       name,
       "will pick the version from secondary and be done with it.",
     );
-    // Read file from secondary
     const { data, meta } = await secondary.readFile(name);
-    // Write file to primary
     const newMeta = await primary.writeFile(name, data, meta);
-    // Update snapshot
     snapshot.files.set(name, [newMeta.lastModified, meta.lastModified]);
 
     return 1;

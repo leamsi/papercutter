@@ -36,10 +36,8 @@ test("ArrayQueryCollection", async () => {
     rootEnv,
     LuaStackFrame.lostFrame,
   );
-  // console.log(result);
   expect(result.length === 2).toBeTruthy();
 
-  // Test limit
   const result2 = await collection.query(
     {
       objectVariable: "p",
@@ -51,7 +49,6 @@ test("ArrayQueryCollection", async () => {
   expect(result2.length === 1).toBeTruthy();
   expect(result2[0].x === 1).toBeTruthy();
 
-  // Test offset
   const result3 = await collection.query(
     {
       objectVariable: "p",
@@ -63,7 +60,6 @@ test("ArrayQueryCollection", async () => {
   expect(result3.length === 2).toBeTruthy();
   expect(result3[0].x === 2).toBeTruthy();
 
-  // Test order by
   const result4 = await collection.query(
     {
       objectVariable: "p",
@@ -77,7 +73,6 @@ test("ArrayQueryCollection", async () => {
   expect(result4[1].x === 2).toBeTruthy();
   expect(result4[2].x === 3).toBeTruthy();
 
-  // Test order by desc
   const result5 = await collection.query(
     {
       objectVariable: "p",
@@ -91,7 +86,6 @@ test("ArrayQueryCollection", async () => {
   expect(result5[1].x === 2).toBeTruthy();
   expect(result5[2].x === 1).toBeTruthy();
 
-  // Test order by multiple fields
   const collection2 = new ArrayQueryCollection([
     { firstName: "John", lastName: "Doe" },
     { firstName: "Alice", lastName: "Johnson" },
@@ -118,7 +112,6 @@ test("ArrayQueryCollection", async () => {
   expect(result6[3].firstName).toEqual("Alice");
   expect(result6[3].lastName).toEqual("Johnson");
 
-  // Test select with expression
   const result8 = await collection2.query(
     {
       objectVariable: "p",
@@ -132,7 +125,6 @@ test("ArrayQueryCollection", async () => {
   expect(result8[2]).toEqual("Jane Doe");
   expect(result8[3]).toEqual("Bob Johnson");
 
-  // Test select with native function and implicit object variable
   const result9 = await collection2.query(
     {
       select: parseExpressionString("build_name(firstName, lastName)"),
@@ -145,7 +137,6 @@ test("ArrayQueryCollection", async () => {
   expect(result9[2]).toEqual("Jane Doe");
   expect(result9[3]).toEqual("Bob Johnson");
 
-  // Test distinct
   const collectionWithDuplicates = new ArrayQueryCollection([
     { category: "fruit", name: "apple" },
     { category: "vegetable", name: "carrot" },
@@ -155,7 +146,6 @@ test("ArrayQueryCollection", async () => {
     { category: "fruit", name: "banana" }, // Duplicate
   ]);
 
-  // Test distinct with select
   const distinctResult = await collectionWithDuplicates.query(
     {
       objectVariable: "item",
@@ -169,7 +159,6 @@ test("ArrayQueryCollection", async () => {
   expect(distinctResult.includes("fruit")).toEqual(true);
   expect(distinctResult.includes("vegetable")).toEqual(true);
 
-  // Test distinct with objects
   const distinctObjectsResult = await collectionWithDuplicates.query(
     {
       objectVariable: "item",
@@ -183,7 +172,6 @@ test("ArrayQueryCollection", async () => {
   );
   expect(distinctObjectsResult.length).toEqual(4);
 
-  // Test string sorting (collation) with example from MDN
   const letterCollection = new ArrayQueryCollection([
     { letter: "Z" },
     { letter: "z" },
@@ -191,7 +179,6 @@ test("ArrayQueryCollection", async () => {
     { letter: "a" },
   ]);
 
-  // Default ordering by codepoint
   const resultCodepoint = await letterCollection.query(
     {
       objectVariable: "item",
@@ -206,7 +193,6 @@ test("ArrayQueryCollection", async () => {
   expect(resultCodepoint[2].letter).toEqual("z");
   expect(resultCodepoint[3].letter).toEqual("ä");
 
-  // Defaults for German
   const resultGerman = await letterCollection.query(
     {
       objectVariable: "item",
@@ -221,7 +207,6 @@ test("ArrayQueryCollection", async () => {
   expect(resultGerman[2].letter).toEqual("z");
   expect(resultGerman[3].letter).toEqual("Z");
 
-  // Defaults for Swedish
   const resultSwedish = await letterCollection.query(
     {
       objectVariable: "item",
@@ -236,7 +221,6 @@ test("ArrayQueryCollection", async () => {
   expect(resultSwedish[2].letter).toEqual("Z");
   expect(resultSwedish[3].letter).toEqual("ä");
 
-  // Uppercase first
   const resultUpper = await letterCollection.query(
     {
       objectVariable: "item",
@@ -267,7 +251,6 @@ test("ArrayQueryCollection - nulls ordering", async () => {
     { name: "eve", priority: 1 },
   ]);
 
-  // Default: asc nulls last
   const r1 = await collection.query(
     {
       objectVariable: "p",
@@ -282,7 +265,6 @@ test("ArrayQueryCollection - nulls ordering", async () => {
   expect(r1[3].priority).toBeUndefined();
   expect(r1[4].priority).toBeUndefined();
 
-  // Default: desc nulls first
   const r2 = await collection.query(
     {
       objectVariable: "p",
@@ -297,7 +279,6 @@ test("ArrayQueryCollection - nulls ordering", async () => {
   expect(r2[3].name).toBe("alice");
   expect(r2[4].name).toBe("eve");
 
-  // Explicit: desc nulls last
   const r3 = await collection.query(
     {
       objectVariable: "p",
@@ -318,7 +299,6 @@ test("ArrayQueryCollection - nulls ordering", async () => {
   expect(r3[3].priority).toBeUndefined();
   expect(r3[4].priority).toBeUndefined();
 
-  // Explicit: asc nulls first
   const r4 = await collection.query(
     {
       objectVariable: "p",

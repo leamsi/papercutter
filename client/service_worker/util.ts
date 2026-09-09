@@ -21,7 +21,6 @@ export function flushCachesAndUnregisterServiceWorker() {
     navigator.serviceWorker.addEventListener("message", (event) => {
       if (event.data.type === "cacheFlushed") {
         console.log("Cache flushed");
-        // Then unregister all service workers
         navigator.serviceWorker.getRegistrations().then((registrations) => {
           for (const registration of registrations) {
             registration.unregister();
@@ -32,7 +31,6 @@ export function flushCachesAndUnregisterServiceWorker() {
       }
     });
 
-    // First flush active cache
     navigator.serviceWorker.ready.then((registration) => {
       console.log("Sending request to flush cache");
       registration.active!.postMessage({ type: "flush-cache" });

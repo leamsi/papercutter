@@ -1,6 +1,3 @@
-// The revision preview: a diff-rendering *view body*, not navigator chrome.
-// Lives beside the panel styles because `revision_preview.tsx` renders it into
-// a navigator view, but it shares no rules with the panel itself.
 
 .sb-revision-preview {
   background: var(--ui-surface-background-color);

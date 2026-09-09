@@ -289,7 +289,6 @@ fn spaces_json_with_single_flag_refuses_to_boot() {
 fn fresh_folder_serves_setup_and_hot_swaps_into_multi() {
     let root = tempfile::tempdir().unwrap();
     let port = free_port();
-    // No env switch, no --single, empty folder: `boot::detect` picks setup mode.
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_silverbullet"));
     cmd.arg(root.path())
         .arg("-p")
@@ -311,7 +310,6 @@ fn fresh_folder_serves_setup_and_hot_swaps_into_multi() {
         .build()
         .unwrap();
 
-    // Wait for the setup wizard to come up: the root redirects to /.setup/.
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
         if let Ok(resp) = no_redirect.get(format!("{base}/")).send() {
@@ -340,7 +338,6 @@ fn fresh_folder_serves_setup_and_hot_swaps_into_multi() {
         .unwrap();
     assert_eq!(resp.status().as_u16(), 307, "admin API absent pre-setup");
 
-    // Complete setup: admin account + a root-bound first space.
     let client = reqwest::blocking::Client::new();
     let resp = client
         .post(format!("{base}/.setup/api/complete"))
@@ -352,7 +349,6 @@ fn fresh_folder_serves_setup_and_hot_swaps_into_multi() {
         .unwrap();
     assert!(resp.status().is_success(), "{}", resp.text().unwrap());
 
-    // Provisioning wrote the config to disk.
     assert!(root.path().join("users.json").exists());
     assert!(root.path().join("spaces.json").exists());
 
@@ -381,7 +377,6 @@ fn create_spaces_and_verify_routing_and_auth_isolation() {
     let (_srv, root, base) = start_multi(&[]);
     let admin = admin_client(&base);
 
-    // Open (public) space at /open.
     let resp = admin
         .post(format!("{base}/.spaces/api/admin/spaces"))
         .json(&serde_json::json!({ "name": "Open", "binding": { "prefix": "/open" }, "public": true }))
@@ -398,7 +393,6 @@ fn create_spaces_and_verify_routing_and_auth_isolation() {
         .unwrap();
 
     let anon = reqwest::blocking::Client::new();
-    // Open space serves reads and writes.
     assert!(anon
         .get(format!("{base}/open/.ping"))
         .send()
@@ -420,7 +414,6 @@ fn create_spaces_and_verify_routing_and_auth_isolation() {
         .unwrap()
         .contains("hello"));
 
-    // Locked space 401s anonymously.
     assert_eq!(
         anon.get(format!("{base}/locked/.fs"))
             .send()
@@ -463,9 +456,7 @@ fn create_spaces_and_verify_routing_and_auth_isolation() {
         .status()
         .is_success());
 
-    // Config persisted under the root.
     assert!(root.path().join("spaces.json").exists());
-    // Index seeded in the default folder.
     let spaces_dir = std::fs::read_dir(root.path().join("spaces"))
         .unwrap()
         .count();
@@ -533,10 +524,8 @@ fn login_in_one_prefix_is_shared_and_password_change_revokes_only_that_user() {
         .unwrap()
         .status()
         .is_success());
-    // 403, not 401: alice holds a valid session (she just reached /b/.fs with
-    // it), she simply isn't an administrator. The admin API distinguishes the
-    // two so a client can tell "log in again" from "this account can't do this"
-    // — conflating them is what previously bounced non-admins into a login loop.
+    // Valid sessions lacking admin access receive 403; 401 would send
+    // the signed-in user through an unresolvable login loop.
     assert_eq!(
         alice
             .get(format!("{base}/.spaces/api/admin/spaces"))

@@ -50,20 +50,17 @@ end
 -- priority: 10
 function formatMarkdownTable(tree)
 
-  -- First find the desired length for each column
   local columnLengths = {}
   local columnAlignments = {}
   local tableHeader = nil
   local tableDelimiter = nil
   local tableRows = {}
 
-  -- Separate parsing from output generation and identify table parts
   for childIdx, child in ipairs(tree.children) do
     if child.type == "TableDelimiter" then
       tableDelimiter = child
       local column = 1
 
-      -- Extract delimiter text from children
       local delimiterText = ""
       for _, delimChild in ipairs(child.children or {}) do
         if delimChild.text and string.find(delimChild.text, "-") then
@@ -107,14 +104,12 @@ function formatMarkdownTable(tree)
       for i, cell in ipairs(child.children) do
         local cellType = cell and cell.type or "nil"
         if cell and cell.type == "TableCell" then
-          -- Found a TableCell directly - get its content
           local cellContent = ""
           for _, next_child in ipairs(cell.children) do
             cellContent = cellContent .. next_child.text
           end
           local trimmedContent = string.trim(cellContent)
 
-          -- Skip empty first cell only
           if trimmedContent ~= "" or not isFirstCell then
             isFirstCell = false
             local len = #trimmedContent
@@ -126,21 +121,18 @@ function formatMarkdownTable(tree)
           end
         end
       end
-      -- columnLengths now contains width of each header column
     elseif child.type == "TableRow" then
       table.insert(tableRows, child)
       local column = 1
       local isFirstCell = true
       for i, cell in ipairs(child.children) do
         if cell and cell.type == "TableCell" then
-          -- Get actual content length after trimming
           local cellContent = ""
           for _, next_child in ipairs(cell.children) do
             cellContent = cellContent .. next_child.text
           end
           local trimmedContent = string.trim(cellContent)
 
-          -- Skip empty first cell only
           if trimmedContent ~= "" or not isFirstCell then
             isFirstCell = false
             local len = #trimmedContent
@@ -155,14 +147,12 @@ function formatMarkdownTable(tree)
     end
   end
 
-  -- Helper function to format table row (one)
   local function formatTableRow(child)
     local rowOutput = "|"
     local column = 1
     local isFirstCell = true
     for i, cell in ipairs(child.children) do
       if cell and cell.type == "TableCell" then
-        -- Get cell content
         local cellContent = ""
         for _, next_child in ipairs(cell.children) do
           cellContent = cellContent .. next_child.text
@@ -170,7 +160,6 @@ function formatMarkdownTable(tree)
 
         cellContent = string.trim(cellContent)
 
-        -- Skip empty first cell only
         if cellContent ~= "" or not isFirstCell then
           isFirstCell = false
           local len = #cellContent
@@ -186,7 +175,6 @@ function formatMarkdownTable(tree)
   end
 
 
-  -- Output in order: Header -> Delimiter -> Rows
   local output = ""
 
   if tableHeader then
@@ -218,7 +206,6 @@ function formatMarkdownTable(tree)
   end
 
 
-  -- Replace the table node with the formatted content
   editor.replaceRange(tree.from, tree.to, output)
 end
 ```

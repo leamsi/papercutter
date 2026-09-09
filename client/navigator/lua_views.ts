@@ -306,8 +306,7 @@ function dropdownMeta(spec: ViewSpec): DropdownMeta | undefined {
   if (present(key) && luaType(key) !== "function") {
     throw new Error("view.define: dropdown.key must be a function");
   }
-  // `key` is the cheap form of `where`: one call per row instead of one per
-  // row per option. Either answers the same question, so a view needs one.
+  // `key` avoids a Lua call per option; `where` is the more general alternative.
   if (!present(key) && luaType(field(dropdown, "where")) !== "function") {
     throw new Error("view.define: dropdown.where must be a function");
   }
@@ -533,9 +532,7 @@ export function wireMeta(spec: ViewSpec): ViewMeta {
     expandAll: expandAll(spec),
     expansionScope: expansionScope(spec),
     filterFields: filterFields(spec),
-    // A content view has no rows to narrow, so the panel shows it no filter
-    // input at all -- the box stays as the panel's focus home (see `noFilter`
-    // in `ViewMeta`), which is what keeps Escape and the dock menu working.
+    // Content views hide the filter but retain its input as the keyboard focus home.
     noFilter: hasContent || noFilter(spec),
     followEditor: field(spec, "followEditor") === true,
     refreshOn: refreshOnEvents(spec),
@@ -659,7 +656,7 @@ const PICK_CONTENT_FIELDS = [
 
 let pickCounter = 0;
 
-// `pickCounter` alone would restart at 0 on a client reload while an old pending pick is still live, silently colliding names -- the random component is what actually guarantees uniqueness.
+// Randomize names so a reload cannot collide with an old pending pick.
 export function nextPickName(): string {
   pickCounter++;
   return `${RESERVED_PICK_PREFIX}${pickCounter}:${Math.random()}`;
@@ -901,8 +898,7 @@ async function dropdownState(
   const masks: boolean[][] = [];
   for (const obj of args.objs ?? []) {
     if (present(key)) {
-      // One call per row, then plain equality against each option — the whole
-      // point of `key` is not paying a Lua call per (row, option) pair.
+      // Compute keys once per row, then compare options without further Lua calls.
       let value: unknown;
       try {
         value = toJS(await callLua(sf, key as ILuaFunction, obj));

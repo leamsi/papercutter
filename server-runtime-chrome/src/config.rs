@@ -50,8 +50,6 @@ impl ChromeConfig {
             env("SB_CHROME_DATA_DIR"),
             server_root,
             env("SB_CHROME_SHOW").is_some(),
-            // On by default; disabled only with SB_CHROME_LOG_CONSOLE=0/false
-            // (matches the SB_RUNTIME_API opt-out convention).
             !matches!(
                 env("SB_CHROME_LOG_CONSOLE").as_deref(),
                 Some("0") | Some("false")
@@ -60,8 +58,7 @@ impl ChromeConfig {
         )
     }
 
-    /// Pure resolution (unit-tested). Seven parameters is exactly clippy's
-    /// `too_many_arguments` threshold, so no `allow` is needed — do not add one.
+    /// Resolve explicit configuration without reading the process environment.
     pub fn resolve(
         sb_chrome_path: Option<String>,
         chromium_path: Option<String>,
@@ -271,8 +268,6 @@ mod tests {
         assert_eq!(cfg.chrome_path, "/bin/chromium");
     }
 
-    // `unwrap_err`, not `assert_eq!` on the whole `Result`: `ChromeConfig`
-    // derives `Debug` but not `PartialEq`, so the Ok side is not comparable.
     #[test]
     fn disabled_runtime_api_reports_the_env_opt_out() {
         let err = ChromeConfig::resolve(

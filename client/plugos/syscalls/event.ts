@@ -38,11 +38,9 @@ export function eventSyscalls(
      */
     "event.listen": {
       callback: (_ctx, def: EventSubscription) => {
-        // console.log("Registering Lua event listener: ", def.name);
         client.config.insert(
           ["eventListeners", def.name],
           async (...args: any[]) => {
-            // Convert return value to JS
             const val = await def.run(...args);
             return luaValueToJS(val, LuaStackFrame.lostFrame);
           },

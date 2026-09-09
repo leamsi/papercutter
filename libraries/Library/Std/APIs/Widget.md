@@ -5,13 +5,10 @@ This implements the widget API. For a Lua Directive to be rendered as a widget, 
 ```space-lua
 -- priority: 50
 
--- Widget APIs
 widget = {}
 
--- Container for widgets
 widgets = {}
 
--- Widget schema for validation
 local widgetSchema = {
   type = "object",
   properties = {
@@ -44,12 +41,10 @@ local widgetSchema = {
 
 -- Creates a widget
 function widget.new(spec)
-  -- Validate spec
   local validationResult = jsonschema.validateObject(widgetSchema, spec)
   if validationResult then
     error(validationResult)
   end
-  -- Mark as a widget
   spec._isWidget = true
   return spec
 end

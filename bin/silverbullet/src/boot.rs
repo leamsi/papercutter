@@ -162,12 +162,8 @@ pub fn detect(
                     .into(),
             );
         }
-        // No users.json at all: the root is only half-configured (a hand-written
-        // spaces.json), so run the setup wizard to mint the admin account. It
-        // loads the existing spaces.json and adds to it, leaving those spaces
-        // intact. A users.json that exists but holds no admin can't be fixed
-        // that way — `run_setup` refuses once users.json is there — so say so
-        // rather than looping the operator through a wizard that will 400.
+        // Missing users.json can be repaired by setup, preserving existing spaces.
+        // An existing file without an admin cannot: run_setup refuses to overwrite it.
         match silverbullet_server::multi::users::UsersConfig::load(&folder.join("users.json"))? {
             None => {
                 tracing::info!(
@@ -200,7 +196,6 @@ pub fn detect(
             rd.flatten()
                 .any(|e| !e.file_name().to_string_lossy().starts_with('.'))
         })
-        // Missing folder: treat exactly like an existing empty folder.
         .unwrap_or(false);
     if non_empty {
         tracing::info!("boot mode: single-space (folder is not empty)");
@@ -234,9 +229,7 @@ mod tests {
         }
 
         let (handle, outer) = SwappableRouter::new(answering(418));
-        // Before the swap the outer service answers with the initial router.
         assert_eq!(status(&outer).await, 418);
-        // After swapping, the very same outer service answers with the new one.
         handle.swap(answering(200));
         assert_eq!(status(&outer).await, 200);
     }
@@ -334,12 +327,10 @@ mod tests {
     fn spaces_json_means_multi_and_users_json_gates_it() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("spaces.json"), "{}").unwrap();
-        // No users.json at all -> run setup to mint the admin account.
         assert!(matches!(
             detect(dir.path(), false, &env(&[])).unwrap(),
             BootMode::Setup
         ));
-        // A users.json holding an admin account -> serve multi-space.
         std::fs::write(
             dir.path().join("users.json"),
             r#"{"root":{"passwordHash":"$argon2id$x","admin":true}}"#,
@@ -358,11 +349,9 @@ mod tests {
     fn spaces_json_with_adminless_users_json_is_an_error() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("spaces.json"), "{}").unwrap();
-        // Empty users.json ({}): zero accounts, so zero admins.
         std::fs::write(dir.path().join("users.json"), "{}").unwrap();
         let err = detect(dir.path(), false, &env(&[])).expect_err("no admin must fail");
         assert!(err.contains("no admin account"), "{err}");
-        // Only non-admin accounts is the same story.
         std::fs::write(
             dir.path().join("users.json"),
             r#"{"bob":{"passwordHash":"$argon2id$x","admin":false}}"#,

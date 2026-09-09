@@ -83,8 +83,6 @@ const medianSpec = requireSpec("median");
 const sf = LuaStackFrame.lostFrame;
 const emptyConfig = new Config();
 
-// Unit tests per builtin
-
 test("aggregate: sum", async () => {
   const result = await executeAggregate(
     sumSpec,
@@ -2171,8 +2169,6 @@ test("aggregate: mode with numbers", async () => {
   );
   expect(result).toBe(3);
 });
-
-// first
 
 test("aggregate: first returns first non-null value", async () => {
   const result = await executeAggregate(

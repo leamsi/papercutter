@@ -111,7 +111,6 @@ mod tests {
         }
         let all = buf.query(usize::MAX, None);
         assert_eq!(all.len(), MAX_LOG_ENTRIES);
-        // The oldest 10 were evicted; the first remaining timestamp is 10.
         assert_eq!(all.first().unwrap().timestamp, 10);
     }
 

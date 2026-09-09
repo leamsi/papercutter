@@ -110,14 +110,8 @@ const WORDS = [
 ];
 const ADVERSARIAL_ALPHABET = "etaonrishdlucmfywgpbvkjxqz".split("");
 
-// 2-edit near-misses of tokens the tests below actually type through the
-// 7->8 length boundary (verified against the real `scoreToken`:
-// `scoreToken(token.slice(0,7), row) === 0` but
-// `scoreToken(token.slice(0,8), row) > 0` for the matching token below). Only
-// the widened max=2 typo tier that turns on at length 8 can reach these, so
-// they're what makes a wrong tier-bracket line show up as a wrong *ranked
-// row set* instead of surviving unnoticed in a corpus that only tiers 1-4
-// (or a merely-absent phrase) ever touch.
+// These two-edit near misses match only after a token reaches length 8,
+// exercising the expanded typo tier in the resulting row set.
 const NEAR_MISS_ROWS = [
   "Plarmning", // near-miss of "planning"
   "Item-detrfspe-x", // near-miss of "retrospe" (retrospectiveplanningdocument's 8-char prefix)
@@ -130,8 +124,7 @@ function buildCorpus(rng: () => number, n: number): Row[] {
     const depth = 1 + Math.floor(rng() * 3);
     const segs: string[] = [];
     for (let d = 0; d < depth; d++) segs.push(pick(rng, WORDS));
-    // A duplicate-tail tag so plenty of rows genuinely tie in score --
-    // the tie-break (orderId) is exactly what the ordering fix protects.
+    // Duplicate tails create tied scores, exercising orderId tie-breaking.
     segs.push(`Item ${i % 20}`);
     rows.push(
       makeRow(segs.join("/"), i % 5 === 0 ? "shared description" : undefined),
@@ -263,11 +256,8 @@ test("property: many random typing sequences (append + backspace) always match f
     }
     assertMatchesFullRankAtEveryStep(rows, steps, { trial });
   }
-  // The random walk above types over a 16-letter+space alphabet and virtually
-  // never spells out an 8+-char run that lands a typo-tier match -- so it
-  // exercises the append/backspace machinery but not tier 5 at the 7->8
-  // boundary. This deterministic run does: "abcdefgh" only matches
-  // NEAR_MISS_ROWS's "Item-dbcdffgh-x" from length 8 onward (see buildCorpus).
+  // Use a deterministic typo-tier match: the random walk rarely creates
+  // an 8-character token matching a two-edit near miss.
   const target = "abcdefgh";
   const steps = Array.from({ length: target.length }, (_, i) =>
     target.slice(0, i + 1),

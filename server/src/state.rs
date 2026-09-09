@@ -98,9 +98,7 @@ pub struct ServerState {
     /// Authentication strategy for protected routes. `None` means the server is
     /// open (no authentication).
     pub authorizer: Option<Arc<dyn RequestAuthorizer>>,
-    /// True when a visitor with no session may read this space. Drives the
-    /// crawlable server-rendered HTML path, which used to infer this from the
-    /// absence of an authorizer -- no longer true now that every space has one.
+    /// True when an unauthenticated visitor may read this space; used to gate SSR.
     pub anonymous_readable: bool,
     /// True when a visitor with no session may *write* to this space. Paired
     /// with `anonymous_readable` to gate server-side rendering: content a

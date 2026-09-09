@@ -58,15 +58,9 @@ async function doesFileExist(
 const urlRegexp =
   /^https?:\/\/[-a-zA-Z0-9@:%._+~#=]{1,256}([-a-zA-Z0-9()@:%_+.~#?&//=]*)/;
 
-// Safari/WebKit only: after a paste that triggers a decoration-driven DOM
-// rebuild (e.g. pasting a URL inside `[text]()` to complete a markdown link),
-// WebKit leaves the contentEditable typing caret at the *pre-paste* position.
-// `document.getSelection()` reports the correct post-paste position, so
-// CodeMirror thinks the DOM selection is already in sync and skips re-writing
-// it — and the next keystroke gets inserted at the stale caret. Forcing
-// CodeMirror to actually perform a DOM selection write makes WebKit re-resolve
-// its caret. We do that by briefly nudging the selection and restoring it once
-// the paste (and its decoration rebuild) has settled.
+// WebKit can retain the pre-paste typing caret after a decoration rebuild
+// even though getSelection reports the new position. Nudge and restore
+// the selection after paste to force a DOM selection write.
 const isWebKit =
   typeof navigator !== "undefined" && /Apple Computer/.test(navigator.vendor);
 
@@ -78,7 +72,6 @@ function fixupWebKitCaretAfterPaste(view: EditorView): void {
     const sel = view.state.selection;
     const head = sel.main.head;
     const docLen = view.state.doc.length;
-    // Pick a different position to force a real DOM selection write.
     const bump = head > 0 ? head - 1 : docLen > 0 ? head + 1 : head;
     if (bump === head) return; // empty document, nothing to re-resolve
     const noHistory = Transaction.addToHistory.of(false);
@@ -86,7 +79,6 @@ function fixupWebKitCaretAfterPaste(view: EditorView): void {
       selection: EditorSelection.cursor(bump),
       annotations: noHistory,
     });
-    // Restore the exact original selection (preserves multi-cursor ranges).
     view.dispatch({ selection: sel, annotations: noHistory });
   });
 }
@@ -134,9 +126,8 @@ export const pasteLinkExtension = ViewPlugin.fromClass(
 export function documentExtension(editor: Client) {
   let shiftDown = false;
 
-  // Public embedder API: dispatch a `silverbullet:upload-files` CustomEvent
-  // on `document` with `{ files: File[] }` in `detail` to hand the editor
-  // a list of files. A bit hacky but required for correct Tauri operation.
+  // Embedders (including Tauri) can dispatch silverbullet:upload-files on
+  // document with { files: File[] } in detail to upload through the editor.
   document.addEventListener("silverbullet:upload-files", (event) => {
     const files = (event as CustomEvent<{ files?: File[] }>).detail?.files;
     if (!files?.length) return;
@@ -186,9 +177,7 @@ export function documentExtension(editor: Client) {
       const payload = [...event.clipboardData!.items];
       const richText = event.clipboardData?.getData("text/html");
 
-      // Only do rich text paste if shift is NOT down
       if (richText && !shiftDown) {
-        // Are we in a fenced code block?
         const editorText = editor.editorView.state.sliceDoc();
         const tree = lezerToParseTree(
           editorText,
@@ -244,7 +233,6 @@ export function documentExtension(editor: Client) {
 
   async function processFileTransfer(payload: File[]) {
     const data = await payload[0].arrayBuffer();
-    // data.byteLength > maximumDocumentSize;
     const fileData: UploadFile = {
       name: payload[0].name,
       contentType: payload[0].type,
@@ -306,10 +294,6 @@ export function documentExtension(editor: Client) {
       return;
     }
 
-    // Check the given desired file path wont clobber an existing file. If it
-    // would, ask the user to confirm or provide another filename. Repeat this
-    // check for every new filename they give.
-    // Note: duplicate any modifications here to client/code_mirror/editor_paste.ts
     let finalFilePath = null;
     while (finalFilePath == null) {
       if (await doesFileExist(editor, desiredFilePath)) {
@@ -333,10 +317,8 @@ export function documentExtension(editor: Client) {
           return;
         }
         if (desiredFilePath === confirmedFilePath) {
-          // if we got back the same path, we're replacing and should accept the given name
           finalFilePath = desiredFilePath;
         } else {
-          // we got a new path, so we must repeat the check
           desiredFilePath = confirmedFilePath;
           confirmedFilePath = undefined;
         }

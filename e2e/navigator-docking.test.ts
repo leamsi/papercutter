@@ -34,10 +34,7 @@ test("dock menu moves the space tree to the right sidebar and persists", async (
 });
 
 test("dock menu is hidden for a single-dock view", async ({ sbPage }) => {
-  // std.commands (the Command Palette itself) is modal-only -- no
-  // supportedDocks, so there's nowhere else to move it and the dock menu
-  // stays hidden. std.toc (Navigate: Table of Contents) no longer fits this
-  // example: it's multi-dock now (`supportedDocks` in Widgets.md's `std.toc`).
+  // std.commands is modal-only: no supportedDocks means no dock menu.
   const frame = await openPicker(sbPage, `${mod}+/`, "Command");
   await expect(frame.locator(".sb-dock-button")).toHaveCount(0);
 });
@@ -64,8 +61,7 @@ test("Navigate: Table of Contents opens as a modal by default, pins to a sidebar
   // window dock.
   await expect(sbPage.locator(".sb-nav-root-modal")).toHaveCount(0);
 
-  // A plain page.reload() loses the `?headless=1` the fixture booted with;
-  // re-navigate through the fixture helper instead (Task 7's pattern).
+  // Use the fixture helper to preserve ?headless=1 across re-navigation.
   await gotoSilverBulletPage(sbPage, sbServer, "Projects/Alpha");
   await expect(sbPage.locator(".sb-nav-root-rhs")).toBeVisible();
   await expect(sbPage.locator(".sb-nav-root-rhs .sb-nav-title")).toHaveText(
@@ -87,30 +83,12 @@ test("the modal's close button hides it", async ({ sbPage }) => {
 // its `minHeaders` gate, the other two through an empty query.
 
 /**
- * Wait until a page slot has actually finished putting its widgets in the DOM.
- *
- * `expect(".sb-page-slot-page-top").toHaveCount(1)` looks like a readiness gate
- * and is not one: `postScriptPrefacePlugin` pushes the slot decoration
- * unconditionally, so the element exists long before any view has resolved. A
- * `toHaveCount(0)` that follows it is therefore unsynchronised and can pass
- * simply by running early.
- *
- * Nor is "wait for the reserved `min-height` to clear": that is only ever set
- * when a cached height exists and is greater than zero, so an empty slot never
- * carries it and the poll passes on its first evaluation. The slot stamps
- * `data-settled` in `NavPageSlotWidget.measure` instead, once every view in it
- * has reported -- that is the real signal, and it is asserted here.
+ * Wait for data-settled, stamped only after every view reports. Slot existence
+ * and min-height cannot prove readiness: both can precede async view resolution.
  */
 /**
- * Drop a page slot's settle stamp, so the wait that follows can only be
- * satisfied by a *fresh* one.
- *
- * Needed before any action that rebuilds the editor without navigating -- a
- * command, or a dock-menu move. `views/commands.ts` awaits `hide("modal")`
- * *before* running the command, so the test helper returns while `open()` is
- * still in its `resolveDock` -> `setOpen` -> `rebuildEditorState()` chain, and
- * until `setState` runs the outgoing slot div is still in the document wearing
- * the previous render's stamp. Waiting on that is waiting on nothing.
+ * Clear the old settle stamp before a command or dock move. The helper can
+ * return before the editor rebuild replaces the outgoing, already-settled slot.
  */
 async function clearSlotStamp(
   page: Page,
@@ -336,8 +314,7 @@ test.describe("minHeaders is read from config, not baked in", () => {
   });
 });
 
-// Item 4: a tree-mode view in a page dock draws through the shared `TreeView`,
-// so it nests and expands there as it does in a panel.
+// Page-docked trees use the shared TreeView nesting and expansion behavior.
 test.describe("a page-docked tree expands and collapses", () => {
   test.use({
     spaceFiles: {
@@ -457,11 +434,8 @@ test.describe("a page-docked tree expands and collapses", () => {
   });
 });
 
-// Round 3: the page-docked tree's horizontal geometry. Relationships, not
-// pixel values -- the numbers move with font and theme, the relationships must
-// not. Depth 2 is asserted deliberately: the bug this guards against was the
-// browser's default `<ul>` padding accumulating *per nesting level*, which
-// depth 0 and 1 alone would under-report.
+// Check two levels: default <ul> padding accumulates with depth. Bound the
+// relative geometry so font and theme changes do not invalidate the test.
 test.describe("page-docked tree geometry", () => {
   test.use({
     spaceFiles: {
@@ -557,14 +531,8 @@ test.describe("page-docked tree geometry", () => {
   });
 });
 
-// The three title-bar buttons are one set. Asserted in both containers,
-// because the panel's title bar has different typography and a centring that
-// only worked against the editor font would be wrong there.
-// A short panel used to clip its own dock menu: `.sb-nav-root` is
-// `overflow: hidden` and the menu was absolutely positioned inside it, so on a
-// one-header page four of the five items were cut off and un-clickable -- the
-// only gesture for moving a view, broken in the ToC's default container. Every
-// other test here uses a tall modal, which is why it went unnoticed.
+// Check title-bar alignment in both containers, whose typography differs.
+// A short panel must not clip the dock menu needed to move the view.
 test.describe("the dock menu is not clipped by a short panel", () => {
   test.use({
     spaceFiles: {
@@ -588,9 +556,7 @@ test.describe("the dock menu is not clipped by a short panel", () => {
     await expect(menu).toBeVisible();
     await expect(menu.locator(".sb-dock-menu-item")).toHaveCount(5);
 
-    // Hit-testing, not `toBeVisible()`: Playwright's visibility check ignores
-    // ancestor clipping, so it reported all five as visible even when four
-    // were clipped away. What matters is whether a click would land.
+    // Use hit-testing: Playwright visibility ignores ancestor clipping.
     const reachable = await page.evaluate(() =>
       [...document.querySelectorAll(".sb-dock-menu-item")].map((item) => {
         const r = item.getBoundingClientRect();
@@ -611,7 +577,6 @@ test.describe("the dock menu is not clipped by a short panel", () => {
   });
 });
 
-// Two behavioural fixes that shipped untested in the previous wave.
 test.describe("opening a page-docked view puts focus somewhere usable", () => {
   test.use({
     spaceFiles: {
@@ -790,12 +755,7 @@ test.describe("title-bar buttons read as one set", () => {
   });
 
   const geometry = async (page: any, root: string) => {
-    // Wait for all three buttons to exist before measuring. The panel root
-    // becoming visible is not enough: the Copy button is rendered only once
-    // the view's content has loaded (`content && !fatalError` in nav_root),
-    // so measuring on visibility alone raced it and read a one-button row --
-    // which is what made this flaky on WebKit, where the panel paints sooner
-    // relative to the content load.
+    // Copy appears only after content loads; panel visibility can precede it.
     await expect(
       page.locator(`${root} :is(.sb-nav-copy, .sb-dock-button, .sb-nav-close)`),
     ).toHaveCount(3);
@@ -855,8 +815,6 @@ test.describe("title-bar buttons read as one set", () => {
   });
 });
 
-// Round 4: the *wiring* of the no-op refresh skip, not just the comparison.
-// Both bugs that slipped through round 3 lived in the widget, not the helpers.
 test.describe("a refresh that changes nothing changes nothing", () => {
   test.use({
     spaceFiles: {
@@ -995,9 +953,7 @@ test.describe("linked mentions / linked tasks page widgets", () => {
     ).toBeVisible({ timeout: 30_000 });
   });
 
-  // Task 12: linked mentions/tasks are *content* views -- they render real
-  // markdown through the same pipeline an inline Lua widget does, rather than
-  // a list of rows.
+  // Linked mentions/tasks render Markdown through the inline-widget pipeline.
   test("the mentions widget renders real markdown, with a wiki link that navigates", async ({
     page,
     sbServer,
@@ -1054,12 +1010,7 @@ test.describe("linked mentions / linked tasks page widgets", () => {
       .toContain("* [x] Do the thing");
   });
 
-  // Two tests, deliberately. What the user asked for is "copy the markdown
-  // source, like an inline Lua widget does" -- that is the *wiring*, and it is
-  // verified on every browser below by intercepting the clipboard API the
-  // product actually calls. The real end-to-end read is chromium-only purely
-  // because of a harness limit (see its skip), so keeping only that one would
-  // have left the behaviour unverified on two of the three engines.
+  // Intercept clipboard writes on all browsers; real clipboard reads require Chromium.
   test("the Copy button hands the markdown source to the clipboard API", async ({
     page,
     sbServer,
@@ -1433,11 +1384,8 @@ test.describe("navigator.docks config fallback", () => {
   });
 });
 
-// `resolveSpaceDocks` (client_system.ts) isn't reachable from a unit test in
-// isolation: importing client_system.ts pulls in client_code_widget.ts ->
-// widget_sandbox_iframe.ts, which creates a DOM iframe at module load time
-// (`document is not defined` under vitest's node environment) -- so this is
-// the e2e case the round-3 brief allows in that situation.
+// Importing client_system.ts creates a DOM iframe, so resolveSpaceDocks
+// needs browser coverage.
 test.describe("view.docks config (the canonical key)", () => {
   test.use({
     spaceFiles: {
@@ -1548,12 +1496,8 @@ test.describe("the command reveals a page-bottom widget beyond the viewport", ()
   });
 });
 
-// The regression behind this: docs/"Space Lua.md" transcludes the API page
-// (`![[API]]`), so the mention snippet stored for that link was itself a
-// transclusion -- and the content pipeline, which deliberately expands
-// transclusions, inlined the entire API page (raw frontmatter first) into
-// API's own Linked Mentions widget. Snippets now neutralise `![[` to `[[`
-// at index time, and a transcluded page's frontmatter is stripped on splice.
+// A transclusion in a mention snippet must stay a link; expanding it would
+// embed the target page inside its own Linked Mentions widget.
 test.describe("a mention that transcludes the page stays a link in the widget", () => {
   test.use({
     spaceFiles: {

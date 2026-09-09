@@ -79,9 +79,7 @@ function spliceWikilink(
   // the indexer already filters by `to == oldName`, but if the index
   // is stale and a record points at something else, we leave it.)
   const basename = detail ? body.slice(0, -detail.length) : body;
-  // Strip a trailing `.md` if the user wrote one — wikilinks
-  // conventionally omit the extension and the legacy refactor did
-  // this too (the `link.toPage` was always without `.md`).
+  // Wikilinks conventionally omit the .md extension.
   const stripped = basename.endsWith(".md") ? basename.slice(0, -3) : basename;
   // The link may be written bare while the index records the resolved path, so
   // a bare name matching the old target's basename counts as a match too.

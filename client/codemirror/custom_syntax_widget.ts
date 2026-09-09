@@ -10,7 +10,6 @@ import type { Client } from "../client.ts";
 import { LuaWidget, type LuaWidgetContent } from "./lua_widget.ts";
 import type { CustomSyntaxSpec } from "../markdown_parser/custom_syntax.ts";
 
-// Extends the parser spec with editor-specific fields
 export type CustomSyntaxExtension = CustomSyntaxSpec & {
   // CSS class applied to the start delimiter in the editor
   startMarkerClass?: string;
@@ -59,7 +58,6 @@ export function customSyntaxPlugin(client: Client) {
           return;
         }
 
-        // Apply per-part CSS class decorations
         const markName = `${spec.name}Mark`;
         const bodyName = `${spec.name}Body`;
         const bodyNode = node.node.getChild(bodyName);
@@ -93,7 +91,6 @@ export function customSyntaxPlugin(client: Client) {
           );
         }
 
-        // When cursor is outside and a render callback exists, show widget
         const widgetRenderFn = spec.renderWidget ?? spec.render;
         if (widgetRenderFn && !isCursorInRange(state, [node.from, node.to])) {
           const bodyText = bodyNode
@@ -111,7 +108,6 @@ export function customSyntaxPlugin(client: Client) {
                 callback: async (body, pageName) => {
                   try {
                     const result = await widgetRenderFn(body, pageName);
-                    // Inject renderClass into widget content if configured
                     if (
                       spec.renderClass &&
                       result &&

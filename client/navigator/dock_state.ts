@@ -66,10 +66,8 @@ export function createDockState(deps: DockStateDeps) {
   }
 
   /**
-   * Whether a sidebar view opens at boot. Deliberately blind to
-   * `meta.defaultOpen`, which has always been page-dock-only: a view
-   * declaring it alongside `dock = "lhs"` must not start auto-opening now that
-   * sidebars have a default-open level at all.
+   * Whether a sidebar opens at boot. `meta.defaultOpen` applies only to page docks;
+   * sidebars use their persisted or configured open state.
    */
   async function sidebarDefaultOpen(name: string): Promise<boolean> {
     const saved = await deps.store.get(openKey(name));

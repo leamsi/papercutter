@@ -14,12 +14,10 @@ export class MemoryKvPrimitives implements KvPrimitives {
     protected filePath?: string,
     options: { throttleMs?: number } = {},
   ) {
-    // Set up throttled persistence if throttleMs is provided or default to 1000ms
     if (this.filePath) {
       const throttleMs =
         options.throttleMs !== undefined ? options.throttleMs : 1000;
 
-      // If throttleMs is 0, persistence will happen immediately without throttling
       if (throttleMs > 0) {
         this.throttledPersist = throttle(() => {
           this.persistToDisk().catch((err) =>
@@ -73,13 +71,10 @@ export class MemoryKvPrimitives implements KvPrimitives {
         this.store.set(key, jsonData[key]);
       }
     } catch (error) {
-      // Handle specific errors more gracefully
       if ((error as any).code === "ENOENT") {
-        // File doesn't exist yet, nothing to load
         return;
       }
 
-      // Other errors (like invalid JSON) should be logged
       console.warn(`Failed to load KV store from ${this.filePath}:`, error);
     }
   }
@@ -95,11 +90,9 @@ export class MemoryKvPrimitives implements KvPrimitives {
       this.store.set(key.join(memoryKeySeparator), value);
     }
 
-    // Trigger persistence
     if (this.throttledPersist) {
       this.throttledPersist();
     } else if (this.filePath) {
-      // If no throttling is set up but we have a filePath, persist immediately
       await this.persistToDisk();
     }
 
@@ -111,11 +104,9 @@ export class MemoryKvPrimitives implements KvPrimitives {
       this.store.delete(key.join(memoryKeySeparator));
     }
 
-    // Trigger persistence
     if (this.throttledPersist) {
       this.throttledPersist();
     } else if (this.filePath) {
-      // If no throttling is set up but we have a filePath, persist immediately
       await this.persistToDisk();
     }
 
@@ -153,7 +144,6 @@ export class MemoryKvPrimitives implements KvPrimitives {
   }
 
   async close(): Promise<void> {
-    // Force immediate persistence when closing
     if (this.filePath) {
       await this.persistToDisk();
     }

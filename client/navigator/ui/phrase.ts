@@ -23,9 +23,7 @@ export type PhraseParts = {
 };
 
 /**
- * Splits `meeting #work` into the tags it filters by and the phrase that
- * ranks -- matching the old page picker, where a `#tag` in the phrase is a
- * filter rather than something to fuzzy-match against a page name.
+ * Splits `meeting #work` into tag filters and the phrase to fuzzy-match.
  */
 export function splitHashtags(phrase: string): PhraseParts {
   const matches = phrase.match(tagRegex);

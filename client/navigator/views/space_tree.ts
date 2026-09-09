@@ -168,8 +168,6 @@ function isDeletable(obj: TreeObj): boolean {
 export const spaceTreeView: BuiltinView<TreeObj> = {
   meta: baseMeta({
     title: "Space",
-    // Matches the modal pickers' chrome: a short verb where the title goes,
-    // with the segment naming what it picks in the input's placeholder.
     label: "Open",
     dock: "lhs",
     supportedDocks: ["lhs", "rhs", "modal"],

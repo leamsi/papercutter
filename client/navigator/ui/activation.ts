@@ -185,11 +185,8 @@ export function createActivate(deps: ActivationDeps) {
             );
           });
         }
-        // A remount showing cached rows: this panel wasn't there to hear
-        // whatever changed while it was closed, so the source runs once, in
-        // place, under what's already on screen. A panel that stayed up did
-        // hear it, so a hop into a view it has cached re-runs the source only
-        // if the view asked for that.
+        // Refresh cached rows on remount: the closed panel missed change events.
+        // A panel that stayed mounted refreshes cached views only when requested.
         if (cached && !passive && (remounted || state.meta.refreshOnOpen)) {
           refreshOnce();
         }
@@ -234,12 +231,8 @@ export function createActivate(deps: ActivationDeps) {
         if (index >= 0) setSegmentIndex(index);
       });
     }
-    // A carried dropdown value overrides the remembered one for this one
-    // activation only -- never persisted, so the next open that doesn't
-    // carry one goes back to the remembered (hand-picked) selection or All
-    // (the `dropdownForced` reset below). Applied whether or not the value
-    // is among the loaded options yet: an absent value filters as "All"
-    // until a refresh brings its option in.
+    // A carried dropdown value overrides remembered state for this activation
+    // only. Until options include it, an absent value filters as All.
     if (wantedDropdown !== undefined && active?.meta.dropdown) {
       dropdownDirty.current = true;
       dropdownForced.current = true;

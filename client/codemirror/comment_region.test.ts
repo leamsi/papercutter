@@ -165,7 +165,6 @@ describe("comment region styling", () => {
 
   test("the region has no horizontal gutter of its own", () => {
     const rule = editorCss.match(/\.sb-comment-block \{[^}]*\}/)?.[0] ?? "";
-    // A hairline, not the two-column indent the region used to carry.
     expect(rule).toMatch(/border-left-width:\s*1px/);
     // The bar was painted as a background gradient over the border box.
     expect(rule).not.toMatch(/linear-gradient/);

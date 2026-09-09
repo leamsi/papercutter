@@ -196,17 +196,8 @@ mod tests {
         assert_eq!(mode, 0o600);
     }
 
-    // Frozen cross-impl fixture: a literal `base64(iv):base64(tag):base64(ct)`
-    // string as emitted by the historical reference implementations (the App's
-    // former `src/auth_config.rs` and `sb`'s former `crypto.rs`). AES-256-GCM
-    // is fully deterministic given a fixed key+nonce, and the on-disk format
-    // has a fixed byte layout (12-byte IV, 16-byte tag stored separately,
-    // STANDARD base64), so this literal is reproducible by any conforming
-    // impl. Decrypting it here proves our byte layout matches without needing
-    // to run them.
-    //
-    // Fixture parameters: key = [0x01; 32], iv = [0x02; 12],
-    // plaintext = "hello world".
+    // Cross-implementation fixture: key = [0x01; 32], IV = [0x02; 12],
+    // plaintext = "hello world". Pins base64(iv):base64(tag):base64(ciphertext).
     const FIXTURE_KEY: [u8; 32] = [1u8; 32];
     const FIXTURE: &str = "AgICAgICAgICAgIC:UHsi9GfW1lrkYcA+fUy0Jw==:b7OlJSV3tpKhoNg=";
 

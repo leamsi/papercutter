@@ -50,7 +50,6 @@ name: something
 test("Test parsing", () => {
   const mdTree = parse(extendedMarkdownLanguage, mdTest1);
   addParentPointers(mdTree);
-  // console.log(JSON.stringify(mdTree, null, 2));
   const wikiLink = nodeAtPos(mdTree, mdTest1.indexOf("Wiki Page"))!;
   expect(wikiLink.type).toEqual("WikiLinkPage");
   expect(
@@ -60,7 +59,6 @@ test("Test parsing", () => {
   const allTodos = collectNodesMatching(mdTree, (n) => n.type === "Task");
   expect(allTodos.length).toEqual(2);
 
-  // Render back into markdown should be equivalent
   expect(renderToText(mdTree)).toEqual(mdTest1);
 
   removeParentPointers(mdTree);
@@ -71,9 +69,7 @@ test("Test parsing", () => {
       };
     }
   });
-  // console.log(JSON.stringify(mdTree, null, 2));
   parse(extendedMarkdownLanguage, mdTest3);
-  // console.log(JSON.stringify(mdTree3, null, 2));
 });
 
 test("traverseTree stops traversal when callback returns true", () => {
@@ -104,7 +100,6 @@ test("traverseTree visits all nodes when callback returns false", () => {
     return false;
   });
 
-  // Should have visited deep into the tree
   expect(types.has("Document")).toBe(true);
   expect(types.has("WikiLinkPage")).toBe(true);
   expect(types.has("ATXHeading1")).toBe(true);
@@ -194,7 +189,6 @@ test("collectNodesOfType collects all nodes of given type", () => {
   const wikiLinks = collectNodesOfType(mdTree, "WikiLink");
   expect(wikiLinks.length).toBe(2);
 
-  // Non-existent type returns empty
   expect(collectNodesOfType(mdTree, "NonExistent")).toEqual([]);
 });
 
@@ -205,7 +199,6 @@ test("findNodeOfType finds first node of given type", () => {
   expect(heading).toBeDefined();
   expect(heading!.type).toBe("ATXHeading1");
 
-  // Returns null for non-existent type
   expect(findNodeOfType(mdTree, "NonExistent")).toBeNull();
 });
 
@@ -216,7 +209,6 @@ test("findNodeMatching finds first matching node", () => {
   expect(found).not.toBeNull();
   expect(found!.type).toBe("ATXHeading2");
 
-  // Returns null when nothing matches
   expect(findNodeMatching(mdTree, () => false)).toBeNull();
 });
 
@@ -226,19 +218,15 @@ test("cloneTree creates independent deep copy without parent pointers", () => {
 
   const cloned = cloneTree(mdTree);
 
-  // Content should be identical
   expect(renderToText(cloned)).toEqual(renderToText(mdTree));
 
-  // Should be a different object
   expect(cloned).not.toBe(mdTree);
   expect(cloned.children![0]).not.toBe(mdTree.children![0]);
 
-  // Root has no parent
   expect(cloned.parent).toBeUndefined();
   // deepClone with ignoreKeys: ["parent"] shallow-copies parent refs (they point to original tree)
   // This is expected behavior — cloneTree is used for trees without parent pointers set
 
-  // Mutating clone should not affect original
   cloned.children![0] = { type: "Modified", children: [] };
   expect(mdTree.children![0].type).not.toBe("Modified");
 });
@@ -248,11 +236,9 @@ test("cleanTree removes comments and trimmable whitespace", () => {
 
   const cleaned = cleanTree(mdTree);
 
-  // Should not contain Comment nodes
   const comments = collectNodesOfType(cleaned, "Comment");
   expect(comments.length).toBe(0);
 
-  // Should still have structure
   expect(cleaned.type).toBe("Document");
   expect(cleaned.children!.length).toBeGreaterThan(0);
 });
@@ -303,11 +289,9 @@ test("normalizeTableRow pads to match column count", () => {
 test("replaceNodesMatching can delete nodes (return null)", () => {
   const mdTree = parse(extendedMarkdownLanguage, mdTest1);
 
-  // Count tasks before
   const tasksBefore = collectNodesOfType(mdTree, "Task");
   expect(tasksBefore.length).toBe(2);
 
-  // Delete all Task nodes
   replaceNodesMatching(mdTree, (n) => {
     if (n.type === "Task") {
       return null;

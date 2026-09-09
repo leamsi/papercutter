@@ -168,7 +168,6 @@ mod tests {
     #[test]
     fn host_match_is_case_insensitive() {
         let t = table();
-        // Mixed-case Host header still resolves to the lowercase-bound space.
         let (i, p) = t.resolve_main("Notes.Example.COM:3000", "/x").unwrap();
         assert_eq!(i.id, "hosted");
         assert_eq!(p, "");
@@ -186,7 +185,6 @@ mod tests {
             "work"
         );
         assert_eq!(t.resolve_main("localhost", "/work").unwrap().0.id, "work");
-        // /workother must NOT match /work (boundary check).
         assert_eq!(
             t.resolve_main("localhost", "/workother").unwrap().0.id,
             "root"

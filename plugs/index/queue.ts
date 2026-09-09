@@ -15,8 +15,6 @@ import type {
 } from "@silverbulletmd/silverbullet/type/datastore";
 import type { IndexTreeEvent } from "@silverbulletmd/silverbullet/type/event";
 
-/// QUEUE PROCESSING
-
 export async function processIndexQueue(messages: MQMessage[]) {
   // During a fresh install's initial index, defer files the sync engine
   // hasn't delivered yet: indexing them now would re-download them through
@@ -89,7 +87,6 @@ async function indexFile(path: string, alreadyCleared: boolean) {
     await index.clearFileIndex(path);
   }
   if (path.endsWith(".md")) {
-    // Page
     const name = path.slice(0, -3);
     let text: string, meta: any;
     try {
@@ -103,7 +100,6 @@ async function indexFile(path: string, alreadyCleared: boolean) {
     }
     const tree = await markdown.parseMarkdown(text);
 
-    // Emit the event which will be picked up by indexers
     await events.dispatchEvent("page:index", {
       name,
       meta,
@@ -115,8 +111,6 @@ async function indexFile(path: string, alreadyCleared: boolean) {
   }
 }
 
-/// UI PROGRESS UPDATE LOGIC
-
 const uiUpdateInterval = 5000;
 
 // There is no reliable way to know the total number of queue items, so we'll keep track of the maximum observed queue size
@@ -125,21 +119,18 @@ let maximumObservedQueueSize = 0;
 
 setTimeout(updateIndexProgressInUI, uiUpdateInterval);
 
-// Returns the total number of items queued, updating the maximum observed queue size if necessary
 async function totalItemsQueued() {
   const queueStats = await mq.getQueueStats();
   const total = queueStats.queued + queueStats.processing;
   if (total > maximumObservedQueueSize) {
     maximumObservedQueueSize = total;
   } else if (total === 0) {
-    // Empty queue, let's reset the maximum observed queue size
     maximumObservedQueueSize = 0;
   }
   return total;
 }
 
 async function updateIndexProgressInUI() {
-  // Let's see if there's anything in the index queue
   let totalQueued = await totalItemsQueued();
   let lastProgress = -1;
   let lastProgressAt = 0;
@@ -163,6 +154,5 @@ async function updateIndexProgressInUI() {
     totalQueued = await totalItemsQueued();
   }
   await editor.hideProgress("index");
-  // Schedule again
   setTimeout(updateIndexProgressInUI, uiUpdateInterval);
 }

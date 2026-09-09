@@ -9,11 +9,8 @@ export type WidgetMeta = {
 
 export class WidgetCache {
   private widgetMetaCache = new LimitedMap<WidgetMeta>(1000);
-  // Session-only cache of in-flight or completed widget callback results.
-  // Used to kick off widget queries before CodeMirror actually mounts the
-  // widget (e.g. when scrolling fast past widgets that haven't entered the
-  // viewport yet), so renderContent can synchronously await a result that's
-  // already been computed.
+  // Start widget callbacks before mounting so fast scrolling can reuse
+  // in-flight or completed results. This cache lasts only for the session.
   private pendingResults = new LimitedMap<Promise<any>>(1000);
 
   private debouncedWidgetMetaCacheFlush = throttle(() => {

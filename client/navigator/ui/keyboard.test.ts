@@ -136,9 +136,7 @@ describe("keyboard dispatch order", () => {
     const ctx = makeCtx(trace, { pathCompletion: true });
     handleKeyDown(press({ key: " ", code: "Space", altKey: true }).e, ctx);
     expect(trace).toEqual(["completeNextSegment"]);
-    // A chord is never text, so `updateInteraction` has nothing to say about
-    // it in either order -- which is why the stage-3-before-4 hinge is pinned
-    // by the case below rather than by this one.
+    // Chords do not affect interaction mode; plain Space below tests ordering.
     expect(ctx.interaction.current).toBe("typing");
     handleKeyDown(press({ key: "ArrowDown" }).e, ctx);
     expect(ctx.interaction.current).toBe("navigating");
@@ -147,11 +145,9 @@ describe("keyboard dispatch order", () => {
   });
 
   it("decides the interaction mode after path completion, never before", () => {
-    // A `pathCompletion` view that claims `" "`, navigating, with nothing
-    // under the selection: the keymap declines (no object), and the Space has
-    // to stay declined. Run `updateInteraction` first and this key reads as
-    // typing, which makes the plain-Space branch true and overwrites the
-    // user's empty phrase with the current folder.
+    // When a claimed Space has no selected object, it must remain unhandled.
+    // Updating interaction first would make it look like typing and complete
+    // the folder instead.
     const trace: Trace = [];
     const ctx = makeCtx(trace, {
       pathCompletion: true,
@@ -163,7 +159,6 @@ describe("keyboard dispatch order", () => {
     handleKeyDown(e, ctx);
     expect(trace).toEqual(["selectedObj"]);
     expect(prevented()).toBe(false);
-    // Stage 4 still ran -- on the key stage 3 declined to consume.
     expect(ctx.interaction.current).toBe("typing");
   });
 
@@ -204,12 +199,10 @@ describe("keyboard dispatch order", () => {
     expect(trace).toEqual([]);
     expect(prevented()).toBe(true);
 
-    // Navigation and selection still work...
     handleKeyDown(press({ key: "ArrowDown" }).e, ctx);
     handleKeyDown(press({ key: "Enter" }).e, ctx);
     expect(trace).toEqual(["setSelectedIndex(1)", "selectRow(0)"]);
 
-    // ...and a modifier chord is not text, so it still bubbles out.
     trace.length = 0;
     const chord = press({ key: "k", metaKey: true });
     handleKeyDown(chord.e, ctx);

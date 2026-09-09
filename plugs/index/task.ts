@@ -47,13 +47,10 @@ async function convertListItemToTask(node: ParseTree) {
   const listMark = node.children![0];
   const originalMark = renderToText(listMark);
 
-  // Determine the task marker based on the original list type
   let taskMarker: string;
   if (originalMark.match(/^\d+\./)) {
-    // Numbered list: preserve the number
     taskMarker = `${originalMark} [ ]`;
   } else {
-    // Bullet list: use standard bullet
     taskMarker = "* [ ]";
   }
 
@@ -79,7 +76,6 @@ async function removeTaskCheckbox(listItemNode: ParseTree) {
 
   const textContent = contentAfterCheckbox.map(renderToText).join("");
 
-  // Replace entire list item content
   await editor.dispatch({
     changes: {
       from: listItemNode.from!,
@@ -95,9 +91,7 @@ async function cycleTaskState(
 ) {
   const stateText = node.children![1].text!;
 
-  // If removeCheckbox is true and task is complete, remove checkbox entirely
   if (removeCheckbox && completeStates.includes(stateText)) {
-    // Convert back to regular list item
     const taskNode = node.parent!;
     const listItemNode = taskNode.parent!;
     await removeTaskCheckbox(listItemNode);
@@ -189,7 +183,6 @@ export async function updateTaskState(
   }
 
   if (ref.path === currentPath) {
-    // In current page, just update the task marker with dispatch
     const editorText = await editor.getText();
 
     const targetPos =
@@ -201,7 +194,6 @@ export async function updateTaskState(
             ref.details.column,
           );
 
-    // Check if the task state marker is still there
     const targetText = editorText.substring(
       targetPos + 3, // 3 because: "* ["
       targetPos + 3 + oldState.length,
@@ -247,7 +239,6 @@ export async function updateTaskState(
   }
 }
 
-// Prevent concurrent task cycling
 let taskCycleLock = false;
 
 export async function taskCycleAtPos(pos: number) {
@@ -327,13 +318,12 @@ export async function taskCycleCommand() {
   }
 }
 
-// Core logic extracted for testability. Mutates tree in place.
+// Mutates the tree in place.
 export function removeCompletedTasksFromTree(
   tree: ParseTree,
   allCompletedStates: string[],
 ) {
-  // Taking this ugly approach because the tree is modified in place
-  // Just finding and removing one task at a time and then repeating until nothing changes
+  // Restart traversal after each removal because it mutates the tree.
   while (true) {
     const completedTaskNode = findNodeMatching(tree, (node) => {
       return (
@@ -342,10 +332,8 @@ export function removeCompletedTasksFromTree(
       );
     });
     if (completedTaskNode) {
-      // Ok got one, let's remove it
       const listItemNode = completedTaskNode.parent!;
       const bulletListNode = listItemNode.parent!;
-      // Remove the list item
       const listItemIdx = bulletListNode.children!.indexOf(listItemNode);
       // Also remove the adjacent whitespace/newline separator text node.
       // Prefer the following separator; if none, remove the preceding one.
@@ -353,17 +341,14 @@ export function removeCompletedTasksFromTree(
       const prevChild =
         listItemIdx > 0 ? bulletListNode.children![listItemIdx - 1] : undefined;
       if (nextChild && !nextChild.type && nextChild.text?.startsWith("\n")) {
-        // Remove item and following separator
         bulletListNode.children!.splice(listItemIdx, 2);
       } else if (
         prevChild &&
         !prevChild.type &&
         prevChild.text?.startsWith("\n")
       ) {
-        // Remove preceding separator and item
         bulletListNode.children!.splice(listItemIdx - 1, 2);
       } else {
-        // No separator to remove, just remove the item
         bulletListNode.children!.splice(listItemIdx, 1);
       }
       // If the BulletList now has no ListItem children, remove it and any
@@ -378,17 +363,14 @@ export function removeCompletedTasksFromTree(
         const blNext = parentChildren[blIdx + 1];
         const blPrev = blIdx > 0 ? parentChildren[blIdx - 1] : undefined;
         if (blNext && !blNext.type && blNext.text?.startsWith("\n")) {
-          // Remove BulletList and following separator
           parentChildren.splice(blIdx, 2);
         } else if (blPrev && !blPrev.type && blPrev.text?.startsWith("\n")) {
-          // Remove preceding separator and BulletList
           parentChildren.splice(blIdx - 1, 2);
         } else {
           parentChildren.splice(blIdx, 1);
         }
       }
     } else {
-      // No completed tasks left, we're done
       break;
     }
   }

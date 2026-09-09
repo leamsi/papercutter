@@ -8,14 +8,10 @@
 // Bounded by `.cm-content`'s own horizontal padding, which is what it borrows.
 $comment-inset: 8px;
 
-// The hairline that draws that box, drawn within the inset above.
 $comment-border: 1px;
 
-// An unregistered custom property inherits as an unresolved token stream, so a
-// `ch` inside one re-resolves against every element that references it — 1.5x
-// wider on a heading line, tilting a quoted heading out of its own quote's
-// column. Registering them as lengths pins both to the font of the element
-// that declares them.
+// Register lengths so `ch` resolves against the declaring font, not each
+// child font; otherwise headings widen the quote indent.
 @property --editor-column {
   syntax: "<length>";
   inherits: true;
@@ -45,8 +41,6 @@ $comment-border: 1px;
     max-width: var(--#{"editor-width"});
     padding: 5px 20px;
 
-    // A column, the body size and a `> ` in the editor's own font, which is
-    // set on this element.
     --editor-column: 1ch;
     --editor-base-font: 1em;
     --blockquote-bar: 2px;
@@ -56,22 +50,14 @@ $comment-border: 1px;
   .cm-line {
     padding: 0;
 
-    // Indent contributions from several sources — a list's marker zone, a
-    // quote's markers, an inline comment — sum here rather than each writing
-    // `padding-left` and clobbering the others. The negative text-indent pulls
-    // the first row back over the markup that already occupies those columns,
-    // leaving wrapped rows hanging at the indent.
+    // Sum list, quote, and comment indents so they do not overwrite each other.
+    // The negative text-indent accounts for markup already on the first row.
     --sb-indent: calc(var(--sb-list-indent, 0px) + var(--sb-quote-indent, 0px) + var(--sb-inline-comment-indent, 0px));
 
-    // How far a line's *first* row hangs back beyond the indent above: the
-    // columns its own markup occupies there and nothing else does. Only a
-    // revealed heading's `#` run claims any, and it claims them in the
-    // heading's own font, which is the font its markers render in.
+    // Revealed heading markers hang back in their own font size.
     --sb-header-hang: 0px;
 
-    // The vertical padding a line adds, named so that what a line paints can
-    // span it: a background with a content-box origin stops at the content
-    // edge otherwise, and a quote's bar breaks at every padded line.
+    // Share vertical padding with quote bars so they span the full line.
     --sb-line-pad-y: 0px;
 
     padding-left: var(--sb-indent);
@@ -86,8 +72,6 @@ $comment-border: 1px;
     &.sb-line-h5,
     &.sb-line-h6 {
       font-weight: bold;
-      // Vertical breathing room above/below the heading without indenting
-      // the heading text away from the body column.
       --sb-line-pad-y: 2px;
     }
   }
@@ -147,7 +131,6 @@ $comment-border: 1px;
     }
   }
 
-  // Gutter styling
   .cm-gutters {
     background-color: transparent;
     border-right: none;
@@ -278,11 +261,7 @@ $comment-border: 1px;
     }
   }
 
-  // Hanging-indent for the leading `#`-markers in cursor-in mode. Contributed
-  // as the line's hang rather than written as a `text-indent` of its own: that
-  // would *replace* the negative indent `.cm-line` computes from `--sb-indent`
-  // and drop it, throwing a heading inside a blockquote or a list item a whole
-  // indent step sideways the moment the caret entered it.
+  // Add the heading hang without replacing the list/quote indent.
   .sb-header-inside.sb-line-h1 {
     --sb-header-hang: 2ch;
   }
@@ -307,15 +286,9 @@ $comment-border: 1px;
     --sb-header-hang: 7ch;
   }
 
-  // When the editor column itself narrows to ≤ the default editor-width --
-  // whether from a narrow viewport or a dock squeezing a wide one -- the
-  // gutter to the left of `.cm-content` is gone, so the hanging `#`-markers
-  // would slide off-screen. Render them inline instead — the heading text
-  // shifts right by `Nch + 1` but stays fully visible. A container query
-  // (keyed on #sb-editor, see main.scss) rather than a viewport media query,
-  // because a dock shrinks the editor column while the viewport stays wide.
-  // CSS variables don't work in container size queries either, so this
-  // threshold tracks the default `--editor-width` (800px).
+  // A dock can narrow the editor without narrowing the viewport, so use a
+  // container query. With no gutter, keep heading markers inline and visible.
+  // The threshold tracks the default --editor-width; query sizes cannot use vars.
   @container sb-editor-col (max-width: 800px) {
 
     .sb-header-inside.sb-line-h1,
@@ -324,8 +297,6 @@ $comment-border: 1px;
     .sb-header-inside.sb-line-h4,
     .sb-header-inside.sb-line-h5,
     .sb-header-inside.sb-line-h6 {
-      // Only the markers' own hang goes; whatever a quote or a list item
-      // indents the line by is still theirs.
       --sb-header-hang: 0px;
     }
   }
@@ -341,14 +312,8 @@ $comment-border: 1px;
     line-height: 1;
   }
 
-  // Replace the native <input type=checkbox> with a CSS-drawn box. Safari
-  // renders the native control at a fixed ~13px regardless of CSS `width`,
-  // leaving a wide visual gap between the glyph and the task text inside
-  // the 3ch column. A custom box fills the column predictably across
-  // engines and renders the same on Chrome, Firefox, and Safari. The rule
-  // matches both the editor's `.sb-checkbox` widget and any checkbox
-  // produced by `renderMarkdownToHtml` (query/table/html/footnote widgets),
-  // so rendered task lists look identical to source-mode tasks.
+  // Safari fixes native checkboxes at ~13px regardless of CSS width. Draw a
+  // consistent box for both editor tasks and rendered Markdown.
   input[type="checkbox"] {
     appearance: none;
     -webkit-appearance: none;
@@ -434,13 +399,10 @@ $comment-border: 1px;
 
   .sb-wiki-link {
     border-radius: 5px;
-    // Horizontal-only chip gutter that doesn't take layout width or add
-    // vertical box height: 5px of padding on each side is cancelled by
-    // -5px margin, so the background extends visually around the text but
-    // adjacent inline content isn't pushed away.
+    // Cancel padding with negative margins to extend the chip background
+    // without moving adjacent text or growing the line.
     padding: 0 5px;
     margin: 0 -5px;
-    // white-space: nowrap;
     text-decoration: none;
     cursor: pointer;
   }
@@ -524,18 +486,9 @@ $comment-border: 1px;
     color: transparent;
   }
 
-  // Each bar paints over the spacer of its own level, standing in for the `>`
-  // it replaced, so the run starts where the line's quote markup starts. From
-  // the content box, backing out the whole summed indent lands on the first
-  // row's own start; --sb-quote-bar-offset then steps in by whatever precedes
-  // the `>` there. That holds whatever the line sits inside — a list item, a
-  // comment region's inset, or nothing — without this rule having to know.
-  //
-  // Vertically the content box is the wrong span: a heading line pads itself
-  // for breathing room, and a bar ending at the content edge would stop short
-  // of the line at both ends, breaking the run into dashes. The origin stays
-  // content-box — that is what makes the horizontal reasoning above hold — and
-  // the band is grown back over the padding instead.
+  // Back out the summed indent, then offset to the first quote marker so bars
+  // align inside lists and comments too. Keep the content-box origin for this
+  // horizontal alignment, but extend the bars over heading padding vertically.
   .sb-line-blockquote {
     min-height: 1em;
     background-image: repeating-linear-gradient(to right,
@@ -553,9 +506,7 @@ $comment-border: 1px;
     display: inline;
   }
 
-  // A revealed marker is real text, so on a heading line it would be 1.5x the
-  // spacer it stands in for and shift the line as the caret arrives. Pinned to
-  // the body size it measures the same two columns either way.
+  // Pin revealed markers to body size so headings match their hidden spacers.
   .sb-quote-mark {
     font-size: var(--editor-base-font);
   }
@@ -622,7 +573,6 @@ $comment-border: 1px;
     white-space: nowrap;
   }
 
-  // Table alignment classes for justified tables
   .sb-table-align-left {
     text-align: left;
   }
@@ -662,8 +612,6 @@ $comment-border: 1px;
     background-color: transparent;
   }
 
-  // HTML comments (inline + block, incl. baked-section `<!--#lua … -->`
-  // markers) render slightly smaller, reinforcing the subtle comment styling.
   .sb-comment {
     font-size: 0.9em;
   }
@@ -693,15 +641,10 @@ $comment-border: 1px;
     }
   }
 
-  // For block directives only: the widget root is a `<span>` wrapping a
-  // `display: block` div, and inline-around-block adds a line-box
-  // descent (~one line-height) below the block — invisible to
-  // CodeMirror's height map (offsetHeight) but visible to layout, so
-  // the height map and the real position of following lines drift
-  // apart. `inline-block` + `vertical-align: top` removes the descent;
-  // `width: 100%` keeps the wrapper editor-width so wide block content
-  // (tables) gets its own scrollbar instead of expanding past the
-  // editor. Inline directives (`${10 + 2}`) must stay inline.
+  // An inline span around a block adds descent that CodeMirror offsetHeight
+  // misses. Use inline-block/top for block directives to keep its height map
+  // aligned with layout, and full width so wide tables scroll within the editor.
+  // Inline directives must stay inline.
   .sb-lua-wrapper:has(.sb-lua-directive-block) {
     display: inline-block;
     vertical-align: top;
@@ -787,9 +730,7 @@ $comment-border: 1px;
     }
   }
 
-  // The widget *frame*: the box an in-document widget draws around itself.
-  // A navigator page widget brings its own box (`.sb-page-widget`), so it is
-  // deliberately absent from this list and present in the typography one below.
+  // Navigator page widgets provide their own frame; share only the typography.
   .sb-markdown-widget,
   .sb-lua-directive-block,
   .sb-lua-directive-inline,
@@ -807,12 +748,10 @@ $comment-border: 1px;
 
     // Anchored to the frame's own `position: relative` above, which is why
     // these live here rather than with the typography below.
-    // Only show the button bar on hover on non-touch devices
     &:hover .button-bar {
       display: block;
     }
 
-    // Always show button bar on touch devices
     @media (hover: none) and (pointer: coarse) {
       .button-bar {
         display: block !important;
@@ -844,22 +783,10 @@ $comment-border: 1px;
     }
   }
 
-  // Rendered-markdown *typography*, shared by every in-document widget body.
-  // A **content** view's body opts in here so a navigator view docked page-top
-  // or page-bottom reads as part of the document it sits in -- the same
-  // bullets, task indent, heading rhythm and link chips as any other widget --
-  // rather than carrying the panel's UI vocabulary into the page. A view in a
-  // sidebar or the modal is styled by `.sb-nav-root .sb-nav-content` instead:
-  // the container decides, and this is the page-dock half of that.
-  //
-  // Deliberately `.sb-page-widget-content .sb-page-widget-body` and not
-  // `.sb-page-widget-body` alone. A *row* widget's body is not a document: its
-  // rows flatten their markdown to a single inline run
-  // (`.sb-page-widget-row :is(p, ul, ol, li, ...)` in _navigator.scss), and
-  // this block's `ul li::before { content: "\2022" }` -- at (1,2,3) with the
-  // `#sb-main` above -- would outrank that file's
-  // `.sb-page-widget-row li + li::before { content: " " }` at (0,1,3) and put
-  // a bullet where a separating space belongs.
+  // Page-docked content views share document typography; panel views use
+  // .sb-nav-root .sb-nav-content. Scope this to content bodies: row widgets
+  // flatten lists inline, and these higher-specificity bullets would override
+  // their list-item separators.
   .sb-markdown-widget,
   .sb-lua-directive-block,
   .sb-lua-directive-inline,
@@ -946,7 +873,6 @@ $comment-border: 1px;
       }
     }
 
-    // Same corner-label look as frontmatter/comment, pushed via flex auto-margin instead of their line-float since this bar is already the widget's top strip.
     .sb-comment-label {
       margin-left: auto;
       float: none;
@@ -1034,22 +960,16 @@ $comment-border: 1px;
   }
 
   .sb-admonition {
-    // The quote plugin sets --sb-quote-indent inline, which outranks a plain
-    // declaration here: the border stands in for the marker, so those columns
-    // have to be given back even against an inline value.
+    // Override the inline quote indent: the admonition border replaces its marker.
     --sb-quote-indent: 0px !important;
     border-left-width: 4px !important;
     border-left-style: solid;
-    // The 5px is the gap between the border and the text, on top of whatever
-    // the line is already indented by — a nested admonition keeps its list
-    // indent instead of snapping back to the margin.
+    // Add the border gap without losing a nested admonition’s list indent.
     padding-left: calc(var(--sb-indent) + 5px);
     background-image: none;
 
-    // The border stands in for the marker of the quote this is, so the spacer
-    // holding that marker's columns has nothing left to reserve: it would only
-    // push a line's first row a step right of the rows it wraps into. Narrowed
-    // rather than removed, so it keeps the inline box posAtCoords expects.
+    // The border replaces the quote spacer. Keep its inline box for posAtCoords,
+    // but remove its width so the first row stays aligned.
     >.sb-quote-spacer {
       padding-left: 0 !important;
     }
@@ -1076,14 +996,9 @@ $comment-border: 1px;
     border-right-width: $comment-border;
     border-left-style: solid;
     border-right-style: solid;
-    // The box bleeds outward into the content's own padding, and an equal
-    // inset puts the text back where it would have been: a caret in the
-    // first column gets room to show, without the region indenting itself out
-    // of column with the text around it. A negative margin alone would drag
-    // the content along with the border. The border sits inside that inset
-    // and is part of it, so the padding is the inset less the border — leaving
-    // it whole would push every line in the region a border-width right of the
-    // text around it.
+    // Bleed the box into content padding, then inset the text by the same amount
+    // to leave room for the caret. Subtract the border from that padding so the
+    // text stays aligned with surrounding lines.
     margin-left: -$comment-inset;
     margin-right: -$comment-inset;
     padding-left: calc(var(--sb-indent) + #{$comment-inset - $comment-border});
@@ -1144,7 +1059,6 @@ $comment-border: 1px;
   }
 
   .cm-scroller {
-    // Give some breathing space at the bottom of the screen
     padding-bottom: 20em;
   }
 }

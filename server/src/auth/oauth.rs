@@ -39,11 +39,8 @@ impl OAuthError {
 /// an ephemeral port. `localhost` is refused because it can resolve to a
 /// non-loopback address.
 pub fn validate_redirect_uri(uri: &str) -> bool {
-    // Reject control bytes, spaces, and non-ASCII up front: without this, a
-    // redirect_uri carrying e.g. CR/LF passes validation and later blows up
-    // building the `Location` header (an opaque 500) instead of the clean 400
-    // every other malformed input here gets. A legitimate loopback redirect
-    // URI is printable ASCII by construction.
+    // Reject non-printable redirect URIs here instead of failing later
+    // while building the Location header.
     if uri.bytes().any(|b| !(0x21..=0x7e).contains(&b)) {
         return false;
     }

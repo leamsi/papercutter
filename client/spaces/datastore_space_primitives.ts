@@ -12,7 +12,6 @@ export class DataStoreSpacePrimitives implements SpacePrimitives {
 
   async fetchFileList(): Promise<FileMeta[]> {
     const fileMetas: FileMeta[] = [];
-    // Iterate over all keys with the fileMetaPrefix
     for await (const meta of this.kv.query({ prefix: filesMetaPrefix })) {
       fileMetas.push(this.cleanFileMeta(meta.value as FileMeta));
     }
@@ -20,7 +19,6 @@ export class DataStoreSpacePrimitives implements SpacePrimitives {
   }
 
   async readFile(path: string): Promise<{ data: Uint8Array; meta: FileMeta }> {
-    // Fetch content and metadata in parallel
     const [fileMeta, fileContent] = await this.kv.batchGet([
       [...filesMetaPrefix, path],
       [...filesContentPrefix, path],
@@ -42,19 +40,16 @@ export class DataStoreSpacePrimitives implements SpacePrimitives {
   ): Promise<FileMeta> {
     let meta: FileMeta | undefined;
     try {
-      // Build off of the existing file meta, if file exists
       meta = await this.getFileMeta(path);
     } catch {
       // Not found, that's fine
     }
     if (!meta) {
-      // No existing meta data, let's set some defaults
       meta = {
         name: path,
         created: suggestedMeta?.created || Date.now(),
         perm: "rw",
         contentType: mime.getType(path) || "application/octet-stream",
-        // Overwritten in a sec
         lastModified: 0,
         size: 0,
       };

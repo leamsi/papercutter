@@ -156,7 +156,6 @@ export function htmlInlinePlugin(client: Client) {
       enter: (node) => {
         if (!inlineHostBlocks.has(node.name)) return;
 
-        // Collect HTMLTag children of this paragraph.
         const tagInfos: {
           from: number;
           to: number;
@@ -190,7 +189,6 @@ export function htmlInlinePlugin(client: Client) {
         const { pairs, voidElements } = matchHtmlTagPairs(tagInfos);
         if (pairs.length === 0 && voidElements.length === 0) return;
 
-        // Lazily compute the paragraph ParseTree once if any range qualifies.
         let paragraphTree: ParseTree | null = null;
         const getParagraphTree = (): ParseTree => {
           if (!paragraphTree) {

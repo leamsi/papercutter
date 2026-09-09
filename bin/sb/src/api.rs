@@ -11,10 +11,6 @@ use serde_json::Value;
 
 use crate::conn::{self, SpaceConnection};
 
-// ---------------------------------------------------------------------------
-// Shared types
-// ---------------------------------------------------------------------------
-
 /// A single console log entry from `/.runtime/logs`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LogEntry {
@@ -23,17 +19,12 @@ pub struct LogEntry {
     pub timestamp: i64,
 }
 
-// ---------------------------------------------------------------------------
-// Helper: interpret a non-2xx response from the Rust runtime endpoints.
-// ---------------------------------------------------------------------------
-
 fn runtime_error(status: StatusCode, body: &[u8]) -> String {
     if status == StatusCode::UNAUTHORIZED || (status.as_u16() >= 300 && status.as_u16() < 400) {
         return "authentication required; use --token, or configure a space with 'space add'"
             .to_string();
     }
 
-    // Try to extract {"error": "..."} from the body.
     if let Ok(text) = std::str::from_utf8(body) {
         if let Ok(v) = serde_json::from_str::<Value>(text) {
             if let Some(msg) = v.get("error").and_then(|e| e.as_str()) {
@@ -45,15 +36,7 @@ fn runtime_error(status: StatusCode, body: &[u8]) -> String {
     format!("server returned {}", status.as_u16())
 }
 
-// ---------------------------------------------------------------------------
-// impl SpaceConnection — API methods
-// ---------------------------------------------------------------------------
-
 impl SpaceConnection {
-    // -----------------------------------------------------------------------
-    // Internal: POST /.runtime/lua or /.runtime/lua_script
-    // -----------------------------------------------------------------------
-
     fn post_runtime(&self, path: &str, body: &str) -> Result<Value, String> {
         let url = format!("{}{path}", self.base_url);
         let req = self
@@ -83,10 +66,6 @@ impl SpaceConnection {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // eval_lua / eval_lua_script
-    // -----------------------------------------------------------------------
-
     /// Evaluate a Lua expression via `POST /.runtime/lua`.
     pub fn eval_lua(&self, expr: &str) -> Result<Value, String> {
         self.post_runtime("/.runtime/lua", expr)
@@ -96,10 +75,6 @@ impl SpaceConnection {
     pub fn eval_lua_script(&self, code: &str) -> Result<Value, String> {
         self.post_runtime("/.runtime/lua_script", code)
     }
-
-    // -----------------------------------------------------------------------
-    // logs
-    // -----------------------------------------------------------------------
 
     /// Fetch console logs via `GET /.runtime/logs`.
     pub fn logs(&self, limit: usize, since: Option<i64>) -> Result<Vec<LogEntry>, String> {
@@ -138,10 +113,6 @@ impl SpaceConnection {
             serde_json::from_slice(&bytes).map_err(|e| format!("parsing logs response: {e}"))?;
         Ok(data.logs)
     }
-
-    // -----------------------------------------------------------------------
-    // config / ping / probe / auth_check
-    // -----------------------------------------------------------------------
 
     /// GET `/.config` and return the parsed JSON body on 200.
     pub fn config(&self) -> Result<Value, String> {
@@ -204,10 +175,6 @@ impl SpaceConnection {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use crate::conn::{Auth, SpaceConnection};
@@ -218,10 +185,6 @@ mod tests {
         thread,
         time::Duration,
     };
-
-    // -----------------------------------------------------------------------
-    // Mock server (duplicated here to keep tests self-contained)
-    // -----------------------------------------------------------------------
 
     #[derive(Debug)]
     struct RecordedRequest {
@@ -307,10 +270,6 @@ mod tests {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // eval_lua — happy path (200, raw JSON)
-    // -----------------------------------------------------------------------
-
     #[test]
     fn eval_lua_200_returns_value() {
         let response = concat!(
@@ -343,10 +302,6 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------------
-    // eval_lua — 503 "Runtime API is not enabled"
-    // -----------------------------------------------------------------------
-
     #[test]
     fn eval_lua_503_runtime_not_enabled() {
         let body = r#"{"error":"Runtime API is not enabled"}"#;
@@ -368,10 +323,6 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------------
-    // eval_lua — 401 → auth error
-    // -----------------------------------------------------------------------
-
     #[test]
     fn eval_lua_401_auth_required() {
         let response = concat!(
@@ -389,10 +340,6 @@ mod tests {
             "expected auth error in: {err}"
         );
     }
-
-    // -----------------------------------------------------------------------
-    // logs — 200, parse LogEntry array
-    // -----------------------------------------------------------------------
 
     #[test]
     fn logs_200_parses_entries() {
@@ -413,10 +360,6 @@ mod tests {
         assert_eq!(entries[0].text, "hi");
         assert_eq!(entries[0].timestamp, 5);
     }
-
-    // -----------------------------------------------------------------------
-    // Cookie auth path
-    // -----------------------------------------------------------------------
 
     #[test]
     fn cookie_auth_sends_cookie_header() {

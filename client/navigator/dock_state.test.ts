@@ -59,12 +59,10 @@ test("collapsed defaults to expanded and persists under its own key", async () =
   const { store, data } = fakeStore();
   const ds = createDockState({ store, spaceDefaults: () => undefined });
 
-  // Never written: expanded.
   expect(await ds.isCollapsed("v")).toBe(false);
 
   await ds.setCollapsed("v", true);
   expect(await ds.isCollapsed("v")).toBe(true);
-  // The key the spec names, alongside "dock" and "open".
   expect(data.get('["navigator","v","collapsed"]')).toBe(true);
 
   await ds.setCollapsed("v", false);
@@ -132,7 +130,7 @@ test("sidebarDefaultOpen reads config and the datastore, never defaultOpen", asy
   const defaults: Record<string, { open?: boolean }> = {};
   const ds = createDockState({ store, spaceDefaults: (n) => defaults[n] });
 
-  // A declared defaultOpen has always been ignored on a sidebar; it stays that way.
+  // Sidebar declarations ignore defaultOpen.
   expect(await ds.sidebarDefaultOpen("v")).toBe(false);
   defaults["v"] = { open: true };
   expect(await ds.sidebarDefaultOpen("v")).toBe(true);

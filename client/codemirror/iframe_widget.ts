@@ -30,7 +30,6 @@ export class IFrameWidget extends WidgetType {
     const cachedHeight = this.client.widgetCache.getCachedWidgetHeight(
       this.bodyText,
     );
-    // console.log("Calling estimated height", this.bodyText, cachedHeight);
     return cachedHeight > 0 ? cachedHeight : 150;
   }
 
@@ -53,7 +52,6 @@ export class IFrameWidget extends WidgetType {
             break;
           }
           case "reload":
-            // Force-refresh: drop any prewarmed result and re-run.
             this.client.widgetCache.invalidatePrewarm(this.bodyText);
             void this.codeWidgetCallback(
               this.bodyText,

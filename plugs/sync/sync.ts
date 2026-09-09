@@ -22,7 +22,6 @@ export async function syncFileCommand() {
 
 export async function spaceSyncComplete(message: { operations: number }) {
   if (message.operations > 0) {
-    // Update the page list
     await space.listFiles();
   }
 
@@ -45,12 +44,10 @@ export async function updateSyncStatus(event: {
     totalFiles: number;
   };
 }) {
-  // Update the status in the UI
   const percentage = Math.round(
     (event.status.filesProcessed / event.status.totalFiles) * 100,
   );
   if (percentage >= 99) {
-    // Just hide it
     await editor.hideProgress("sync");
     lastProgressAt = 0;
   } else {

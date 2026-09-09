@@ -216,16 +216,13 @@ describe("Sync with no filtering", () => {
       encode("Hello"),
     );
 
-    // Should be a no-op
     let ops = await doSync(sync, snapshot);
     expect(ops).toEqual(0);
     expect(snapshot.nonSyncedFiles.size).toEqual(0);
 
-    // Now let's make a change on the secondary
     await secondary.writeFile("index.md", encode("Hello!!"));
     await secondary.writeFile("test.md", encode("Test page"));
 
-    // And sync it
     ops = await doSync(sync, snapshot);
     expect(ops).toEqual(2);
     expect(snapshot.nonSyncedFiles.size).toEqual(0);
@@ -237,7 +234,6 @@ describe("Sync with no filtering", () => {
       encode("Hello!!"),
     );
 
-    // Let's make some random edits on both ends
     await primary.writeFile("index.md", encode("1"));
     await primary.writeFile("index2.md", encode("2"));
     await secondary.writeFile("index3.md", encode("3"));
@@ -251,7 +247,6 @@ describe("Sync with no filtering", () => {
     expect(ops).toEqual(0);
 
     console.log("Deleting pages");
-    // Delete some pages
     await primary.deleteFile("index.md");
     await primary.deleteFile("index3.md");
 
@@ -260,7 +255,6 @@ describe("Sync with no filtering", () => {
     expect((await primary.fetchFileList()).length).toEqual(3);
     expect((await secondary.fetchFileList()).length).toEqual(3);
 
-    // No-op
     ops = await doSync(sync, snapshot);
     expect(ops).toEqual(0);
 
@@ -269,11 +263,9 @@ describe("Sync with no filtering", () => {
 
     await doSync(sync, snapshot);
 
-    // Just "test" left
     expect((await primary.fetchFileList()).length).toEqual(1);
     expect((await secondary.fetchFileList()).length).toEqual(1);
 
-    // No-op
     ops = await doSync(sync, snapshot);
     expect(ops).toEqual(0);
 
@@ -285,17 +277,14 @@ describe("Sync with no filtering", () => {
       encode("I'm back"),
     );
 
-    // Cause a conflict
     console.log("Introducing a conflict now");
     await primary.writeFile("index.md", encode("Hello 1"));
     await secondary.writeFile("index.md", encode("Hello 2"));
 
     await doSync(sync, snapshot);
 
-    // Sync conflicting copy back
     await doSync(sync, snapshot);
 
-    // Verify that primary won
     expect((await primary.readFile("index.md")).data).toEqual(
       encode("Hello 1"),
     );
@@ -303,18 +292,15 @@ describe("Sync with no filtering", () => {
       encode("Hello 1"),
     );
 
-    // test + index + index.conflicting copy
     expect((await primary.fetchFileList()).length).toEqual(3);
     expect((await secondary.fetchFileList()).length).toEqual(3);
 
-    // Introducing a fake conflict (same content, so not really conflicting)
     await primary.writeFile("index.md", encode("Hello 1"));
     await secondary.writeFile("index.md", encode("Hello 1"));
 
     await doSync(sync, snapshot);
     await doSync(sync, snapshot);
 
-    // test + index + index.md + previous index.conflicting copy but nothing more
     expect((await primary.fetchFileList()).length).toEqual(3);
   });
 });
@@ -388,12 +374,9 @@ describe("Sync with filtering", () => {
     expect(ops).toEqual(2);
     expect(snapshot.nonSyncedFiles.size).toEqual(2);
 
-    // Check file listings on both ends
     expect((await secondary.fetchFileList()).length).toEqual(3);
     expect((await primary.fetchFileList()).length).toEqual(1);
 
-    ////////////
-    // Now let's start another sync session, but now wanting to sync everything
     console.log("Going to switch to syncing everything now");
     sync = new SpaceSync(primary, secondary, {
       conflictResolver: SpaceSync.primaryConflictResolver,
@@ -401,7 +384,6 @@ describe("Sync with filtering", () => {
     });
 
     ops = await doSync(sync, snapshot);
-    // This should pull 2 files from remote to local
     expect(ops).toEqual(2);
     expect((await primary.fetchFileList()).length).toEqual(3);
     expect((await secondary.fetchFileList()).length).toEqual(3);
@@ -413,14 +395,10 @@ describe("Sync with filtering", () => {
     });
 
     ops = await doSync(sync, snapshot);
-    // This should delete 3 files from the primary
     expect(ops).toEqual(3);
-    // Leaving nothing on primary
     expect((await primary.fetchFileList()).length).toEqual(0);
-    // And everything unchanged on secondary
     expect((await secondary.fetchFileList()).length).toEqual(3);
 
-    // Ok, now we're going to sync everything again
     sync = new SpaceSync(primary, secondary, {
       conflictResolver: SpaceSync.primaryConflictResolver,
       isSyncCandidate: () => true,
@@ -505,7 +483,6 @@ describe("syncSingleFile", () => {
     const ops = await sync.syncSingleFile("test.md", snapshot);
     expect(ops).toBeGreaterThanOrEqual(0);
 
-    // File should be deleted from secondary
     try {
       await secondary.getFileMeta("test.md");
       expect.fail("Expected file to be deleted from secondary");
@@ -533,7 +510,6 @@ describe("syncSingleFile", () => {
   test("sync file only on secondary (not in snapshot)", async () => {
     const { primary, secondary, snapshot, sync } = createSyncSetup();
 
-    // File exists only on secondary, no snapshot entry
     await secondary.writeFile("remote-only.md", encode("Remote content"));
     await sleep(10);
 
@@ -545,10 +521,6 @@ describe("syncSingleFile", () => {
     );
   });
 });
-
-// =================================================================
-// nonSyncedFiles snapshot persistence
-// =================================================================
 
 describe("nonSyncedFiles snapshot persistence", () => {
   test("snapshotUpdated fires even when only nonSyncedFiles changed", async () => {
@@ -593,10 +565,6 @@ describe("nonSyncedFiles snapshot persistence", () => {
   });
 });
 
-// =================================================================
-// Mutex/concurrency
-// =================================================================
-
 describe("Sync mutex behavior", () => {
   test("concurrent syncFiles calls should be mutexed", async () => {
     const { primary, snapshot, sync } = createSyncSetup();
@@ -630,10 +598,6 @@ describe("Sync mutex behavior", () => {
     await fullSyncPromise;
   });
 });
-
-// =================================================================
-// Conflict resolution
-// =================================================================
 
 describe("Conflict resolution", () => {
   test("fake conflict (same content) should NOT create conflict copy", async () => {
@@ -769,10 +733,6 @@ describe("Conflict resolution", () => {
   });
 });
 
-// =================================================================
-// Deletion scenarios
-// =================================================================
-
 describe("Deletion scenarios", () => {
   test("primary deletion propagates to secondary", async () => {
     const { primary, secondary, snapshot, sync } = createSyncSetup();
@@ -833,27 +793,22 @@ describe("Deletion scenarios", () => {
     const secondary = new DataStoreSpacePrimitives(new MemoryKvPrimitives());
     const snapshot = new SyncSnapshot();
 
-    // Start with filtered sync so file is tracked as nonSynced
     let sync = new SpaceSync(primary, secondary, {
       conflictResolver: SpaceSync.primaryConflictResolver,
       isSyncCandidate: (path) => path.endsWith(".md"),
     });
 
-    // Create a non-sync-candidate file on both sides via primary push
     await primary.writeFile("data.json", encode('{"key":"value"}'));
     await doSync(sync, snapshot);
 
-    // Secondary should have the file, and it's tracked
     expect(decode((await secondary.readFile("data.json")).data)).toBe(
       '{"key":"value"}',
     );
 
-    // Now update on secondary so it becomes nonSynced
     await secondary.writeFile("data.json", encode('{"key":"updated"}'));
     await doSync(sync, snapshot);
     expect(snapshot.nonSyncedFiles.has("data.json")).toBe(true);
 
-    // Now switch to unfiltered sync (syncBack=true), but delete on secondary
     sync = new SpaceSync(primary, secondary, {
       conflictResolver: SpaceSync.primaryConflictResolver,
       isSyncCandidate: () => true,
@@ -878,24 +833,19 @@ describe("Deletion scenarios", () => {
       isSyncCandidate: (path) => path.endsWith(".md"),
     });
 
-    // Create file on primary (which always pushes regardless of filter)
     await primary.writeFile("config.txt", encode("config"));
     await doSync(sync, snapshot);
 
-    // File should be on secondary
     expect(decode((await secondary.readFile("config.txt")).data)).toBe(
       "config",
     );
 
-    // Now delete on secondary
     await secondary.deleteFile("config.txt");
     await doSync(sync, snapshot);
 
-    // Snapshot should be cleaned
     expect(snapshot.files.has("config.txt")).toBe(false);
     expect(snapshot.nonSyncedFiles.has("config.txt")).toBe(false);
 
-    // Primary copy should also be deleted (the !syncBack path attempts deletion)
     try {
       await primary.getFileMeta("config.txt");
       expect.fail("Expected file to be deleted from primary");
@@ -904,10 +854,6 @@ describe("Deletion scenarios", () => {
     }
   });
 });
-
-// =================================================================
-// Sync candidate filtering
-// =================================================================
 
 describe("Sync candidate filtering", () => {
   test("non-sync candidate on primary still syncs to secondary", async () => {
@@ -963,27 +909,19 @@ describe("Sync candidate filtering", () => {
   });
 });
 
-// =================================================================
-// Resync scenario (both sides have file, no snapshot entry)
-// =================================================================
-
 describe("Resync scenario", () => {
   test("both sides have file but no snapshot entry, same content", async () => {
     const { primary, secondary, snapshot, sync } = createSyncSetup();
 
-    // Write same content to both sides without syncing
     await primary.writeFile("resync.md", encode("Same content"));
     await secondary.writeFile("resync.md", encode("Same content"));
     await sleep(10);
 
-    // No snapshot entry exists — this is a resync scenario (sync.ts:454-458)
     const ops = await doSync(sync, snapshot);
 
-    // Should go through conflict resolver, detect same content, no conflict copy
     const files = await primary.fetchFileList();
     const conflictFiles = files.filter((f) => f.name.includes(".conflicted-"));
     expect(conflictFiles.length).toBe(0);
-    // Snapshot should now have the file
     expect(snapshot.files.has("resync.md")).toBe(true);
     expect(ops).toBe(0); // Same content = 0 ops from conflict resolver
   });
@@ -997,38 +935,29 @@ describe("Resync scenario", () => {
 
     await doSync(sync, snapshot);
 
-    // Primary should win
     expect(decode((await primary.readFile("resync.md")).data)).toBe(
       "Primary version",
     );
 
-    // Conflict copy should exist
     const files = await primary.fetchFileList();
     const conflictFile = files.find((f) => f.name.includes(".conflicted-"));
     expect(conflictFile).toBeDefined();
   });
 });
 
-// =================================================================
-// Size mismatch conflict
-// =================================================================
-
 describe("Size mismatch conflict", () => {
   test("matching timestamps but different sizes triggers conflict resolution", async () => {
     const { primary, secondary, snapshot, sync } = createSyncSetup();
 
-    // Initial sync
     await primary.writeFile("data.bin", encode("original"));
     await doSync(sync, snapshot);
 
     // Manually manipulate the snapshot to simulate matching timestamps
     // but the underlying files have different sizes
 
-    // Write different-sized content directly (bypass normal sync)
     await primary.writeFile("data.bin", encode("short"));
     await secondary.writeFile("data.bin", encode("much longer content here"));
 
-    // Set snapshot timestamps to match current files' timestamps
     const primaryMeta = await primary.getFileMeta("data.bin");
     const secondaryMeta = await secondary.getFileMeta("data.bin");
     snapshot.files.set("data.bin", [
@@ -1036,44 +965,33 @@ describe("Size mismatch conflict", () => {
       secondaryMeta.lastModified,
     ]);
 
-    // Now sync — sizes differ despite timestamps matching in snapshot
-    // This should trigger the size mismatch conflict path
     await doSync(sync, snapshot);
 
-    // Primary should win (primaryConflictResolver)
     expect(decode((await primary.readFile("data.bin")).data)).toBe("short");
     expect(decode((await secondary.readFile("data.bin")).data)).toBe("short");
 
-    // Conflict copy should exist
     const files = await primary.fetchFileList();
     const conflictFile = files.find((f) => f.name.includes(".conflicted-"));
     expect(conflictFile).toBeDefined();
   });
 });
 
-// =================================================================
-// Empty file sync
-// =================================================================
-
 describe("Empty file sync", () => {
   test("zero-byte files sync correctly in both directions", async () => {
     const { primary, secondary, snapshot, sync } = createSyncSetup();
 
-    // Empty file from primary to secondary
     await primary.writeFile("empty.md", encode(""));
     await doSync(sync, snapshot);
 
     const secondaryData = await secondary.readFile("empty.md");
     expect(secondaryData.data.byteLength).toBe(0);
 
-    // Empty file from secondary to primary
     await secondary.writeFile("empty2.md", encode(""));
     await doSync(sync, snapshot);
 
     const primaryData = await primary.readFile("empty2.md");
     expect(primaryData.data.byteLength).toBe(0);
 
-    // Update empty file to have content
     await primary.writeFile("empty.md", encode("now has content"));
     await doSync(sync, snapshot);
 
@@ -1081,17 +999,12 @@ describe("Empty file sync", () => {
       "now has content",
     );
 
-    // Update back to empty
     await primary.writeFile("empty.md", encode(""));
     await doSync(sync, snapshot);
 
     expect((await secondary.readFile("empty.md")).data.byteLength).toBe(0);
   });
 });
-
-// =================================================================
-// syncProgress event
-// =================================================================
 
 describe("syncProgress event", () => {
   test("fires during syncFiles with correct counts", async () => {
@@ -1115,7 +1028,6 @@ describe("syncProgress event", () => {
     // syncProgress only fires when fileOperations > 0
     expect(progressEvents.length).toBeGreaterThan(0);
 
-    // Each event should have valid counts
     for (const event of progressEvents) {
       expect(event.filesProcessed).toBeGreaterThan(0);
       expect(event.totalFiles).toBe(3);
@@ -1123,10 +1035,6 @@ describe("syncProgress event", () => {
     }
   });
 });
-
-// =================================================================
-// SyncSnapshot remoteHashes (de)serialization
-// =================================================================
 
 describe("SyncSnapshot remoteHashes", () => {
   test("toJSON/fromJSON roundtrip matches Rust wire format", () => {
@@ -1155,10 +1063,6 @@ describe("SyncSnapshot remoteHashes", () => {
     expect(restored.remoteHashes.size).toBe(0);
   });
 });
-
-// =================================================================
-// SyncSnapshot baseHashes (de)serialization
-// =================================================================
 
 describe("SyncSnapshot baseHashes", () => {
   test("fromJSON on the shared wire fixture populates baseHashes", () => {
@@ -1198,10 +1102,6 @@ describe("SyncSnapshot baseHashes", () => {
     expect(restored.baseHashes.size).toBe(0);
   });
 });
-
-// =================================================================
-// Precondition-aware pushes/pulls/deletes (revision-aware sync engine)
-// =================================================================
 
 describe("Precondition-aware sync", () => {
   test("push of new file on primary sends unconditional write when no hashes known yet", async () => {
@@ -1278,7 +1178,6 @@ describe("Precondition-aware sync", () => {
 
     await expect(doSync(sync, snapshot)).resolves.not.toThrow();
 
-    // Conflict copy should exist on primary (secondary's stale content preserved)
     const primaryFiles = await primary.fetchFileList();
     const conflictFile = primaryFiles.find((f) =>
       f.name.includes(".conflicted-"),
@@ -1308,13 +1207,11 @@ describe("Precondition-aware sync", () => {
     const ops = await doSync(sync, snapshot);
     expect(ops).toBeGreaterThan(0);
 
-    // The remote's edit wins: it's pulled back to primary.
     expect(decode((await primary.readFile("doc.md")).data)).toBe("v2");
     expect(snapshot.files.has("doc.md")).toBe(true);
     expect(snapshot.remoteHashes.get("doc.md")).toBe(serverHash(encode("v2")));
     expect(suppressedPaths).toEqual(["doc.md"]);
 
-    // Convergence: the next cycle is a no-op, delete isn't retried.
     const writeCallsBefore = secondary.writeCalls.length;
     const deleteCallsBefore = secondary.deleteCalls.length;
     const ops2 = await doSync(sync, snapshot);
@@ -1413,7 +1310,6 @@ describe("Precondition-aware sync", () => {
 
     await doSync(sync, snapshot);
 
-    // Byte-wise match means no conflict copy should be created.
     const files = await primary.fetchFileList();
     expect(files.some((f) => f.name.includes(".conflicted-"))).toBe(false);
 
@@ -1437,10 +1333,6 @@ describe("Precondition-aware sync", () => {
   });
 });
 
-// =================================================================
-// isMergeEligible
-// =================================================================
-
 describe("isMergeEligible", () => {
   test("truth table", () => {
     expect(isMergeEligible("note.md", 100)).toBe(true);
@@ -1459,10 +1351,6 @@ describe("isMergeEligible", () => {
     expect(isMergeEligible("note.md", 1_048_577)).toBe(false);
   });
 });
-
-// =================================================================
-// Three-way reconciliation
-// =================================================================
 
 describe("Three-way reconciliation", () => {
   test("base captured on push of new file", async () => {
@@ -1764,12 +1652,10 @@ describe("Three-way reconciliation", () => {
     expect(files.some((f) => f.name.includes(".conflicted-"))).toBe(true);
     expect(secondary.reconcileCalls.length).toBe(1);
 
-    // Trigger a second 412 in the same engine instance
     await primary.writeFile("doc.md", encode("primary edit 2"));
     secondary.failNextWrite = true;
     await doSync(sync, snapshot);
 
-    // Reconcile should not have been attempted again
     expect(secondary.reconcileCalls.length).toBe(1);
   });
 
@@ -2051,13 +1937,9 @@ describe("Three-way reconciliation", () => {
       await primary.deleteFile("doc.md");
     };
 
-    // Should not throw despite the post-response re-read of primary
-    // finding the file gone.
     const ops = await doSync(sync, snapshot);
     expect(ops).toBeGreaterThan(0);
 
-    // No local write happened: the file stays deleted (reconciliation
-    // result was not resurrected onto primary).
     await expect(primary.getFileMeta("doc.md")).rejects.toThrow();
 
     const proposedHash = await hashSHA256(encode("local edit"));
@@ -2070,10 +1952,8 @@ describe("Three-way reconciliation", () => {
   });
 });
 
-// =================================================================
 // A revision-capable remote is never mutated unconditionally just because
 // this replica happens to have no hash recorded for the path.
-// =================================================================
 
 describe("Missing revision fails closed", () => {
   test("push pre-reads the revision when the remote is capable but the entry is missing", async () => {
@@ -2184,10 +2064,8 @@ describe("Missing revision fails closed", () => {
   });
 });
 
-// =================================================================
 // The legacy (non-reconciling) resolver must be safe against a live remote:
 // idempotent per side, and never clobbering bytes it didn't inspect.
-// =================================================================
 
 describe("Legacy conflict resolver safety", () => {
   async function diverged() {
@@ -2410,7 +2288,6 @@ describe("Pull adoption safety", () => {
       "recreated locally",
     );
     expect(resyncedPaths).toContain("doc.md");
-    // Nothing was suppressed: the pull never happened.
     expect(suppressed).toEqual([]);
   });
 
@@ -2496,8 +2373,8 @@ describe("Pull adoption safety", () => {
     expect(await baseStore.listSafety()).toEqual([]);
   });
   test("a mid-pull write with repeated metadata is still caught", async () => {
-    // Finding #4: two writes in the same millisecond at the same size are
-    // indistinguishable by metadata. The guard must not depend on that.
+    // Same-millisecond, same-size writes are indistinguishable by metadata;
+    // the guard must compare content.
     const { primary, secondary, snapshot, sync, resyncedPaths } =
       createReconcileSyncSetup();
 
@@ -2659,9 +2536,8 @@ describe("Same-millisecond divergence", () => {
     expect(decode((await secondary.readFile("note.md")).data)).toBe(BASE);
   });
 
-  // Unsignalled traversal (the periodic scan) is deliberately left as it was:
-  // it can't afford a content check per file, so a collision nobody signalled
-  // stays invisible until something does signal it.
+  // Periodic scans cannot afford a content check per file; same-millisecond
+  // collisions remain invisible until a path is explicitly signalled.
   test("an unsignalled path is still classified by timestamps alone", async () => {
     const { secondary, snapshot, sync } = await colliding(
       LOCAL_EDIT,
@@ -2780,11 +2656,6 @@ describe("fileSynced events", () => {
 // content would make the next push look like the client *added* the remote's
 // own lines, and the server would conflict two people who edited opposite
 // ends of the page.
-//
-// These pin that invariant on the pull path. They passed on first write:
-// they were added to test a theory about the intermittent conflict in
-// e2e/collab-sync.test.ts's laggy-connection test and they refuted it, so
-// they document a rule that holds rather than a bug that was fixed.
 describe("base tracking keeps pace with pulled content", () => {
   const SEED = "Line1\nLine2\nLine3\n";
 

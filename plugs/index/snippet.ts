@@ -69,10 +69,8 @@ export function extractSnippet(
   const targetLine = lines[targetLineIndex];
   const targetIndent = getIndentationLevel(targetLine);
 
-  // Start with the target line
   const snippetLines = [targetLine.substring(targetIndent)];
 
-  // Add all subsequent lines that have greater indentation than the target line
   for (let i = targetLineIndex + 1; i < lines.length; i++) {
     let line = lines[i];
     const lineIndent = getIndentationLevel(line);
@@ -82,12 +80,10 @@ export function extractSnippet(
       break;
     }
 
-    // Stop if we hit an empty line
     if (line.trim() === "") {
       break;
     }
 
-    // Stop if we hit a line with indentation equal to or less than the target line
     if (lineIndent <= targetIndent) {
       break;
     }
@@ -106,11 +102,7 @@ export function extractSnippet(
   // Specific cases: because headers look bad in snippets, let's strip those leading `#`
   result = result.replace(/^(#+)\s+/, "");
 
-  // A `![[transclusion]]` must not survive into a snippet: consumers render
-  // snippets through pipelines that expand transclusions, which would inline
-  // the entire target page into what is meant to be a one-glance preview --
-  // for a linked-mentions snippet, that is the very page the widget is on.
-  // Show it as a plain link instead.
+  // Render transclusions as links so snippets cannot expand entire pages.
   result = result.replaceAll("![[", "[[");
 
   return result;

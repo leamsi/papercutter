@@ -354,7 +354,6 @@ fn debounce_loop(
     guard: &FsGuard,
     abandonment_check: Duration,
 ) {
-    // Pending space-relative paths, with the time they last fired
     let mut pending: HashMap<String, Instant> = HashMap::new();
     loop {
         let Some(sender) = out.upgrade() else {
@@ -409,7 +408,6 @@ fn debounce_loop(
         }
         for (event, meta) in resolved {
             let event = enrich_event(event, meta.as_ref(), guard, validator);
-            // Err just means no subscribers; fine
             let _ = sender.send(event);
         }
     }
@@ -736,13 +734,8 @@ mod tests {
         }
     }
 
-    /// Pins the ordering fix: enrichment (which hashes file contents via
-    /// `FsGuard::hash_for`) must run only on flushes that survive the flood
-    /// check, never on the flushed-away paths of a flood -- otherwise a bulk
-    /// import would read and hash every file only to discard it all for one
-    /// Resync. A handful of individual (non-flood) events may legitimately
-    /// precede the flood settling, and each of those does call `hash_for`
-    /// once; the call count must never approach the full 40 files.
+    /// Flooded paths must not be hashed before collapsing into Resync. A few
+    /// individual events may precede the flood, but not all 40 file reads.
     #[tokio::test]
     async fn flood_does_not_hash_files_before_collapsing_into_resync() {
         let dir = tempfile::tempdir().unwrap();
@@ -788,12 +781,10 @@ mod tests {
         for i in 0..5 {
             std::fs::write(dir.path().join("burst.md"), format!("v{i}")).unwrap();
         }
-        // First event arrives...
         tokio::time::timeout(Duration::from_secs(3), rx.recv())
             .await
             .unwrap()
             .unwrap();
-        // ...then silence within a coalescing window (few or no trailing events; must not be 5)
         let mut extra = 0;
         while tokio::time::timeout(Duration::from_millis(300), rx.recv())
             .await

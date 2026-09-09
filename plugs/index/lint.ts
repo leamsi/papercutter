@@ -181,7 +181,6 @@ export async function lintObjects({
 
   const frontmatter = extractFrontMatter(tree);
 
-  // Index the page
   const allObjects = (
     await Promise.all(
       allIndexers.map((indexer) => {
@@ -190,7 +189,6 @@ export async function lintObjects({
     )
   ).flat();
   const result = await index.validateObjects(name, allObjects);
-  // If validation failed, return the error
   if (result?.object?.range) {
     return [
       {
@@ -221,12 +219,10 @@ export async function lintAnchors({
 }: LintEvent): Promise<LintDiagnostic[]> {
   const diagnostics: LintDiagnostic[] = [];
 
-  // Map from anchor name to list of node positions
   const anchorNodesByName = new Map<
     string,
     Array<{ from: number; to: number }>
   >();
-  // All NamedAnchor nodes in document order
   const allAnchorNodes: Array<{ name: string; from: number; to: number }> = [];
 
   traverseTree(tree, (node) => {
@@ -259,7 +255,6 @@ export async function lintAnchors({
     anchorNodesByName.get(fmAnchor)!.push(fmRange);
   }
 
-  // Invalid anchor name
   for (const node of allAnchorNodes) {
     if (!isValidAnchorName(node.name)) {
       diagnostics.push({
@@ -271,7 +266,6 @@ export async function lintAnchors({
     }
   }
 
-  // Multiple anchors per host block
   const hostTypes = new Set([
     "Paragraph",
     "ListItem",
@@ -309,7 +303,6 @@ export async function lintAnchors({
       return false;
     });
 
-    // Flag every anchor after the first
     for (let i = 1; i < anchorsInHost.length; i++) {
       const extra = anchorsInHost[i];
       diagnostics.push({
@@ -323,12 +316,8 @@ export async function lintAnchors({
     return true;
   });
 
-  // Batch resolve all anchor names referenced on page
-
-  // Unique names defined on this page
   const definedAnchorNames = new Set(anchorNodesByName.keys());
 
-  // Unique anchor link targets from WikiLinks
   type AnchorLinkRef = {
     name: string;
     page?: string;
@@ -357,7 +346,6 @@ export async function lintAnchors({
     return false;
   });
 
-  // Build a set of unique lookup keys to resolve in parallel
   // Key format: "name" for bare anchors, "page\0name" for page-qualified
   type LookupKey = string;
   const toResolve = new Map<LookupKey, { name: string; page?: string }>();
@@ -377,7 +365,6 @@ export async function lintAnchors({
     }
   }
 
-  // Resolve all in parallel
   const resolved = new Map<LookupKey, ResolveAnchorResult>();
   await Promise.all(
     [...toResolve.entries()].map(async ([key, { name, page }]) => {
@@ -386,7 +373,6 @@ export async function lintAnchors({
     }),
   );
 
-  // Same-page duplicate
   // The index storage key collapses same-page same-name records, so rule C
   // (cross-page) can't catch this. Detect from the tree directly.
   for (const [anchorName, nodes] of anchorNodesByName) {
@@ -402,7 +388,6 @@ export async function lintAnchors({
     }
   }
 
-  // Duplicate anchor defined on this page
   for (const anchorName of definedAnchorNames) {
     const key: LookupKey = anchorName;
     const result = resolved.get(key);
@@ -422,7 +407,6 @@ export async function lintAnchors({
     }
   }
 
-  // Broken / ambiguous anchor links
   for (const link of anchorLinks) {
     const key: LookupKey = link.page ? `${link.page}\0${link.name}` : link.name;
     const result = resolved.get(key);
@@ -438,7 +422,6 @@ export async function lintAnchors({
         message: `Anchor not found: "$${link.name}"${link.page ? ` on page "${link.page}"` : ""}`,
       });
     } else if (result.reason === "duplicate") {
-      // Ambiguous (duplicate) anchor link
       const pages = result.hits.map((h) => h.page).join(", ");
       diagnostics.push({
         from: link.from,

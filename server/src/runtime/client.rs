@@ -42,10 +42,7 @@ impl<T: ClientTransport> RuntimeBackend for ClientRuntime<T> {
         arg: &str,
         timeout: Duration,
     ) -> Result<serde_json::Value, RuntimeError> {
-        // Single choke point for the Lua runtime API calls (evalLua and
-        // evalLuaScript), so a failure here — the runtime not coming up, a
-        // timeout, or a thrown error in the client (e.g. a Lua error) — always
-        // leaves a trace in the server log.
+        // Log all runtime API failures here, including client-side Lua errors.
         let result = self.transport.wait_ready(timeout).and_then(|()| {
             self.transport
                 .eval_js(&build_global_call_js(fn_name, arg), timeout)
@@ -57,10 +54,7 @@ impl<T: ClientTransport> RuntimeBackend for ClientRuntime<T> {
     }
 
     fn logs(&self, limit: usize, since: Option<i64>) -> Vec<LogEntry> {
-        // Reading logs counts as using the runtime: nudge a lazily-launched
-        // transport to boot so console output actually starts flowing. Without
-        // this, `sb logs` (especially `--follow`) against a freshly-started
-        // server that has had no eval yet would sit on an empty buffer forever.
+        // A log read must start a lazy runtime or sb logs --follow can wait forever.
         self.transport.ensure_started();
         self.logs.query(limit, since)
     }
@@ -82,7 +76,6 @@ mod tests {
             build_global_call_js("sbRuntime.evalLua", "1 + 1"),
             r#"sbRuntime.evalLua("1 + 1")"#
         );
-        // Quotes / newlines in the argument are JSON-escaped, not injected raw.
         assert_eq!(
             build_global_call_js("f", "print(\"hi\")\n"),
             r#"f("print(\"hi\")\n")"#
@@ -149,7 +142,6 @@ mod tests {
         let out = rt
             .eval_global("sbRuntime.evalLua", "1 + 1", Duration::from_secs(5))
             .unwrap();
-        // The transport's value is returned verbatim (no shaping at this layer).
         assert_eq!(out, envelope);
         let seen = rt.transport.seen_js.lock().unwrap();
         assert_eq!(seen[0], r#"sbRuntime.evalLua("1 + 1")"#);
@@ -165,7 +157,6 @@ mod tests {
             .eval_global("sbRuntime.evalLua", "x", Duration::from_secs(1))
             .unwrap_err();
         assert!(matches!(err, RuntimeError::NotReady));
-        // eval_js must NOT have been called.
         assert!(rt.transport.seen_js.lock().unwrap().is_empty());
     }
 
@@ -185,8 +176,7 @@ mod tests {
 
     #[test]
     fn logs_nudges_a_lazy_transport_to_start() {
-        // Reading logs must boot a lazily-launched runtime so console output
-        // starts flowing (the `sb logs`-on-a-fresh-server fix).
+        // Log reads must start a lazy runtime even before the first eval.
         let logs = LogBuffer::new();
         let rt = ClientRuntime::new(FakeTransport::ok(serde_json::json!(null)), logs);
         let _ = rt.logs(100, None);

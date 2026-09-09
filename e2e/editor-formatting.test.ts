@@ -6,24 +6,18 @@ test.describe("Editor formatting", () => {
     const editor = sbPage.locator("#sb-editor .cm-content");
     await expect(editor).toContainText("Welcome");
 
-    // Navigate to a fresh page
     await createPageViaPagePicker(sbPage, "Formatting Test");
     await expect(editor).toHaveText("");
 
-    // Type some text
     await editor.click();
     await sbPage.keyboard.type("make this bold");
 
-    // Select all
     await sbPage.keyboard.press(`${mod}+a`);
 
-    // Apply bold
     await sbPage.keyboard.press(`${mod}+b`);
 
-    // Verify bold markers appear
     await expect(editor).toContainText("**make this bold**");
 
-    // Verify saved to server
     const content = await waitForSaveAndReadFromServer(
       sbPage,
       sbServer,
@@ -61,7 +55,6 @@ test.describe("Editor formatting", () => {
     await createPageViaPagePicker(sbPage, "List Test");
     await expect(editor).toHaveText("");
 
-    // Type multiple lines
     await editor.click();
     await sbPage.keyboard.type("First item");
     await sbPage.keyboard.press("Enter");
@@ -69,16 +62,13 @@ test.describe("Editor formatting", () => {
     await sbPage.keyboard.press("Enter");
     await sbPage.keyboard.type("Third item");
 
-    // Select all and make it a bullet list
     await sbPage.keyboard.press(`${mod}+a`);
     await sbPage.keyboard.press(`${mod}+Shift+8`);
 
-    // Verify bullet markers
     await expect(editor).toContainText("* First item");
     await expect(editor).toContainText("* Second item");
     await expect(editor).toContainText("* Third item");
 
-    // Verify saved to server
     const content = await waitForSaveAndReadFromServer(
       sbPage,
       sbServer,

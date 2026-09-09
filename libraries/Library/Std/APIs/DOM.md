@@ -47,7 +47,6 @@ dom =  setmetatable({}, {
       local node = js.window.document.createElement(tag)
       for key, val in pairs(spec) do
         if type(key) == "string" then
-          -- This is an attribute
           if key == "__rawText" then
             node.appendChild(js.window.document.createTextNode(val))
           elseif key:startsWith("on") then
@@ -55,22 +54,16 @@ dom =  setmetatable({}, {
           else
             node.setAttribute(key, val)
           end
-        -- Handling body values
         elseif type(val) == "string" then
-          -- Text (markdown) body, process through markdown renderer before injecting
           appendHtmlNode(node, markdown.markdownToHtml(val, {expand=true}))
         else
           if val._isWidget then
-            -- It's a widget
             if type(val.html) == "string" then
-              -- HTML string widget
               appendHtmlNode(node, val.html)
             else
-              -- HTML DOM node, attach directly
               node.appendChild(val.html)
             end
           else
-            -- It's likely another dom.* returned node, just add directly
             node.appendChild(val)
           end
         end

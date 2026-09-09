@@ -35,9 +35,7 @@ class CheckboxWidget extends WidgetType {
     });
     checkbox.addEventListener("mouseup", (e) => {
       e.stopPropagation();
-      // Resolve the current document position at click time which
-      // prevents stale position corruption when the document has been
-      // edited since the decoration was created
+      // Resolve at click time: edits may have moved the decoration.
       let pos = this.fallbackPos;
       const view = this.getView();
       if (view && this.dom) {
@@ -50,7 +48,6 @@ class CheckboxWidget extends WidgetType {
       }
       this.clickCallback(pos);
     });
-    // Touch handling for mobile
     let touchCount = 0;
     checkbox.addEventListener("touchmove", () => {
       touchCount++;
@@ -140,7 +137,6 @@ export function taskListPlugin({
         if (type.name !== "Task") return;
         // true/false if this is a checkbox, undefined when it's a custom-status task
         let checkboxStatus: boolean | undefined;
-        // Track TaskState end position for strikethrough start
         let taskStateEnd = -1;
 
         node.toTree().iterate({
@@ -148,7 +144,6 @@ export function taskListPlugin({
         });
 
         if (checkboxStatus === true) {
-          // Skip whitespace after TaskState
           let strikeFrom = taskStateEnd !== -1 ? taskStateEnd : from;
           while (
             strikeFrom < to &&
@@ -180,13 +175,11 @@ export function taskListPlugin({
             if (doneStates?.has(stateText)) {
               checkboxStatus = true;
             }
-            // Mark only the inner state text, not the brackets
             widgets.push(
               Decoration.mark({
                 attributes: { "data-task-state": stateText },
               }).range(from + nfrom + 1, from + nto - 1),
             );
-            // Always show dropdown
             const absTo = from + nto;
             widgets.push(
               Decoration.widget({

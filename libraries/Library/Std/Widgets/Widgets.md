@@ -101,11 +101,7 @@ config.define("std.widgets.toc", {
   }
 })
 
--- Every ATX heading in `text` (defaulting to the page being edited), as
--- `{name, pos, level}`: the text to show, the position to navigate to, and the
--- nesting depth. The single header extractor -- the `std.toc` view is its one
--- caller today, and anything else wanting the page's headers should use it
--- rather than parsing them again.
+-- Returns ATX headings as {name, pos, level}; defaults to the current page.
 function widgets.tocHeaders(text)
   local parsedMarkdown = markdown.parseMarkdown(text or editor.getText())
   local headers = {}
@@ -273,11 +269,8 @@ view.define {
 ```space-lua
 -- priority: 10
 
--- The linked-task list as markdown, with no heading of its own -- the shared
--- builder behind `widgets.linkedTasks()` and the `std.linkedTasks` content
--- view. `templates.taskItem` renders each task with its `[[page@pos]]` ref,
--- which is what makes the rendered checkbox tick through to the page the task
--- actually lives on. Returns "" when nothing links here.
+-- Linked tasks as Markdown without a heading, or "" when empty.
+-- taskItem includes page@pos refs so checkboxes write back to their source.
 function widgets.linkedTasksMarkdown(pageName)
   pageName = pageName or editor.getCurrentPage()
   local tasks = query[[

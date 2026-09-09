@@ -24,22 +24,9 @@ pub async fn run(
     }
 }
 
-/// A process-wide shutdown event, fanned out two ways so every `axum::serve`
-/// call site and every live `/.events` SSE stream see the exact same signal:
-/// `future` is what `with_graceful_shutdown` awaits, and `rx` is cloned into
-/// every `ServerState` this process builds (via `InstanceDeps::shutdown`).
-/// `rx` firing is what lets an in-flight SSE response body end, so the
-/// graceful shutdown that `future` triggers can actually finish draining
-/// instead of waiting forever on a connection that never completes.
-///
-/// A `tokio::sync::watch` channel fits better than `broadcast` here: there is
-/// exactly one event, ever, and every receiver only needs "has it fired",
-/// not a queue of messages to drain.
-///
-/// Only one `with_graceful_shutdown` call site is ever live per process
-/// (`boot::detect` picks exactly one of single/setup/multi), so `install`
-/// registers the OS signal handler exactly once and every call site shares
-/// the one result rather than each running its own `ctrl_c`/`SIGTERM` select.
+/// Shares one OS shutdown signal with the server and its SSE streams.
+/// Streams must finish so graceful shutdown can drain their connections.
+/// A watch channel retains the signal for receivers that subscribe later.
 pub(crate) struct Shutdown {
     pub(crate) rx: tokio::sync::watch::Receiver<()>,
     pub(crate) future: Pin<Box<dyn Future<Output = ()> + Send>>,

@@ -12,11 +12,9 @@ test("PromiseQueue test", async () => {
   const r1 = q.runInQueue(async () => {
     await sleep(10);
     r1RanFirst = true;
-    // console.log("1");
     return 1;
   });
   const r2 = q.runInQueue(async () => {
-    // console.log("2");
     await sleep(4);
     return 2;
   });
@@ -61,7 +59,6 @@ test("processWithConcurrency test - maintains order", async () => {
     2,
   );
 
-  // Results should be in original order despite different processing times
   expect(results).toEqual(["item-1", "item-2", "item-3", "item-4", "item-5"]);
 });
 
@@ -83,7 +80,6 @@ test("processWithConcurrency test - concurrency limit", async () => {
   );
 
   expect(results).toEqual([1, 2, 3, 4, 5, 6]);
-  // Should never exceed concurrency limit of 3
   expect(maxActive.value <= 3).toEqual(true);
 });
 
@@ -166,7 +162,6 @@ test("processWithConcurrency test - performance with concurrency", async () => {
 });
 
 test("Batch test", async () => {
-  // Generate an array with numbers up to 100
   const elements = Array.from(Array(100).keys());
   const multiplied = await batchRequests(
     elements,

@@ -12,12 +12,8 @@ function tokenize(normalized: string): string[] {
   return normalized.split(/\s+/).filter((t) => t.length > 0);
 }
 
-// Mirrors plug-api/lib/fuzzy.ts's scoreToken tier gates: below length 3,
-// only prefix/boundary-substring tiers apply; length 3 additionally opens
-// non-boundary substring + subsequence; length 4 turns on the typo tier
-// (max=1); length 8 loosens it to max=2 (and it stays there for any longer
-// token). A token whose length crosses one of these boundaries can gain a
-// match it didn't have one character shorter.
+// Mirror scoreToken tier boundaries in plug-api/lib/fuzzy.ts: substring/
+// subsequence at 3, one typo at 4, two at 8. Crossing a boundary can add matches.
 function tierBracket(len: number): 0 | 1 | 2 | 3 {
   if (len <= 2) return 0;
   if (len === 3) return 1;

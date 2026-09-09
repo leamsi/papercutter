@@ -103,23 +103,17 @@ export function createPanelLifecycle(config: PanelLifecycleConfig) {
     return [NAMESPACE, "docked", slot];
   }
 
-  // Which view each slot was last asked to show, and the token identifying
-  // that activation call. The token is what tells a close or a paint-ready
-  // signal meant for this activation from one a newer activation has
-  // already overtaken.
+  // Activation tokens distinguish late close/paint signals from the current view.
   const pendingActivation = new Map<string, Activation>();
   let activationToken = 0;
 
-  // Slot -> view name currently visible in a sidebar dock, which is also
-  // what a width commit is filed under. Cleared by `hide`, so a drag tick
-  // that lands after the panel closed can't re-show it.
+  // Track the visible view for width commits; clearing on hide prevents a late
+  // drag tick from reopening the panel.
   const visibleSidebarView = new Map<string, string>();
 
   const displaced = new Map<string, string>();
 
-  // Slot -> the flex mode it is currently shown with, so a `replaceInSlot`
-  // hop takes over the slot at exactly the width it already had rather
-  // than at whatever width happens to be saved under its own name.
+  // Keep the current width across replaceInSlot hops.
   const slotMode = new Map<string, number | string>();
 
   function current(slot: string): Activation | undefined {
@@ -300,9 +294,7 @@ export function createPanelLifecycle(config: PanelLifecycleConfig) {
   }
 
   async function restoreDocks(): Promise<void> {
-    // A narrow screen always boots with its drawers closed: there a dock
-    // covers the editor whole, so restoring one would hide the page the
-    // user actually navigated to.
+    // Boot with narrow-screen drawers closed so they do not obscure the page.
     if (isNarrowScreen()) return;
 
     const forced = new Map<string, string>();
@@ -316,11 +308,7 @@ export function createPanelLifecycle(config: PanelLifecycleConfig) {
         const saved = await datastore.get(dockedKey(slot));
         if (typeof saved !== "string") continue;
         const meta = config.getMeta(saved);
-        // Skipped, not forgotten: a name that doesn't resolve right now is
-        // at least as likely to be a view that hasn't been indexed yet (a
-        // cold first boot, a space still syncing) as one that is really
-        // gone, and forgetting it there would silently close a dock the
-        // user never closed. It costs one lookup per boot to keep trying.
+        // Keep unresolved names: the view may not be indexed yet. Retry next boot.
         if (!meta) continue;
         const resolved = config.resolveDock
           ? await config.resolveDock(saved, meta)

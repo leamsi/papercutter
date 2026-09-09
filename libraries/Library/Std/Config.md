@@ -107,7 +107,6 @@ config.define("index", {
   additionalProperties = true
 })
 
--- Editor configuration options
 config.define("autoCloseBrackets", {
   description = "List of opening bracket characters to auto-close",
   type = "string",
@@ -293,7 +292,6 @@ config.define("vim", {
   additionalProperties = false
 })
 
--- Query specific configuration options
 config.define("queryCollation", {
   description = "Configure string ordering in queries",
   type = "object",
@@ -319,7 +317,6 @@ config.define("queryCollation", {
   additionalProperties = false
 })
 
--- Configuration for internal use mostly
 
 -- Don't use directly, use command.define instead
 config.define("commands", {
@@ -392,7 +389,6 @@ config.define("mqSubscriptions", {
   },
 })
 
--- Task states
 config.define("taskStates", {
   type = "object",
   default = {},
@@ -407,7 +403,6 @@ config.define("taskStates", {
   },
 })
 
--- Identities
 config.define("identities", {
   type = "object",
   default = {},

@@ -344,7 +344,6 @@ pub fn authenticate_blocking(
 
 /// Percent-encode a file path for use in URLs, matching TS `encodePageURI`.
 pub fn encode_page_uri(path: &str) -> String {
-    // Encode each path segment individually, preserving `/`
     path.split('/')
         .map(|segment| {
             percent_encoding::utf8_percent_encode(segment, percent_encoding::NON_ALPHANUMERIC)
@@ -602,16 +601,9 @@ mod tests {
 
     #[test]
     fn prefixed_url_also_sends_the_host_wide_cookie() {
-        // Account-managed multi-space servers mount each space under a path
-        // prefix but deliberately keep the session cookie host-wide (see
-        // `LoginManager::with_server_wide_session` and the empty `url_prefix`
-        // passed to `JwtAuthorizer` in the server's multi-space instance
-        // builder). Sending only the prefix-scoped name there authenticates
-        // cleanly and then 401s on every subsequent request, forever.
-        //
-        // The client can't tell the two scoping regimes apart from the URL, so
-        // it offers both names; the server matches whichever it expects and
-        // ignores the other.
+        // Account-managed servers use host-wide session cookies; classic prefixed
+        // deployments use prefix-scoped names. The URL cannot distinguish them,
+        // so send both names and let the server select the one it expects.
         let pairs = cookie_pairs(&auth_cookie_header("https://sb.zef.pub/test", "the.jwt"));
         assert!(
             pairs.contains(&("auth_sb_zef_pub_test".into(), "the.jwt".into())),

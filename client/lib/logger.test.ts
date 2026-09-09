@@ -2,7 +2,6 @@ import { expect, test } from "vitest";
 import { initLogger, Logger } from "./logger.ts";
 
 test("Logger prefix functionality", () => {
-  // Store original console methods
   const originalLog = console.log;
   const originalInfo = console.info;
   const originalWarn = console.warn;
@@ -10,7 +9,6 @@ test("Logger prefix functionality", () => {
 
   const capturedOutput: string[] = [];
 
-  // Mock console methods to capture output
   console.log = (...args: any[]) => {
     capturedOutput.push(args.join(" "));
   };
@@ -37,7 +35,6 @@ test("Logger prefix functionality", () => {
     expect(capturedOutput[2]).toEqual("[TEST] Warning message");
     expect(capturedOutput[3]).toEqual("[TEST] Error message");
   } finally {
-    // Restore original console methods
     console.log = originalLog;
     console.info = originalInfo;
     console.warn = originalWarn;
@@ -88,7 +85,6 @@ test("Logger log capture", () => {
   expect(capturedLogs[3].level).toEqual("error");
   expect(capturedLogs[3].message).toEqual("Fourth message");
 
-  // Check that all entries have timestamps
   capturedLogs.forEach((entry) => {
     expect(typeof entry.timestamp === "number").toBeTruthy();
     expect(entry.timestamp > 0).toBeTruthy();
@@ -98,7 +94,6 @@ test("Logger log capture", () => {
 test("Logger max capture size", () => {
   const logger = new Logger("[SIZE]", 3);
 
-  // Add more logs than the max size
   console.log("Message 1");
   console.log("Message 2");
   console.log("Message 3");
@@ -107,7 +102,6 @@ test("Logger max capture size", () => {
 
   const capturedLogs = logger.logBuffer;
 
-  // Should only keep the last 3 messages
   expect(capturedLogs.length).toEqual(3);
   expect(capturedLogs[0].message).toEqual("Message 3");
   expect(capturedLogs[1].message).toEqual("Message 4");
@@ -153,11 +147,9 @@ test("Logger handles complex objects", () => {
 
   expect(capturedLogs.length).toEqual(2);
 
-  // First log should handle complex object properly
   expect(capturedLogs[0].message).toEqual(
     `Complex object: {"name":"test","nested":{"value":42},"array":[1,2,3]}`,
   );
 
-  // Second log should handle circular reference gracefully
   expect(capturedLogs[1].message).toEqual(`Circular object: [object Object]`);
 });

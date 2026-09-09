@@ -93,7 +93,6 @@ export class EncryptedKvPrimitives implements KvPrimitives {
 
   async *query({ prefix }: KvQueryOptions): AsyncIterableIterator<KV> {
     const encryptedResults: KV[] = [];
-    // Collect all results first
     for await (const entry of this.wrapped.query({
       prefix: prefix ? await this.encryptKey(prefix) : undefined,
     })) {

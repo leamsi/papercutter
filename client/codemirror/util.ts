@@ -30,7 +30,6 @@ export class LinkWidget extends WidgetType {
     anchor.className = this.options.cssClass;
     anchor.textContent = this.options.text;
 
-    // Mouse handling
     anchor.addEventListener("click", (e) => {
       if (e.button !== 0) {
         return;
@@ -44,7 +43,6 @@ export class LinkWidget extends WidgetType {
       }
     });
 
-    // Touch handling
     let touchCount = 0;
     anchor.addEventListener("touchmove", () => {
       touchCount++;

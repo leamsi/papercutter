@@ -11,10 +11,7 @@ use crate::types::{FileMeta, SpaceError, SpacePrimitives};
 const BUILD_TIMESTAMP_MILLIS_STR: &str = env!("SB_BUILD_TIMESTAMP_MILLIS");
 
 fn build_timestamp_millis() -> i64 {
-    // The `unwrap_or(1)` is paranoia: build.rs always emits a valid integer.
-    // Crucially we must never return `0`, which Core's `EventedSpacePrimitives`
-    // historically treated as "no prior hash" and re-fired file:changed for
-    // on every listing — kicking off a reload loop.
+    // Zero means "no prior hash" to EventedSpacePrimitives and can trigger a reload loop.
     BUILD_TIMESTAMP_MILLIS_STR.parse().unwrap_or(1)
 }
 
@@ -219,11 +216,7 @@ impl SpacePrimitives for FallthroughSpacePrimitives {
         data: &[u8],
         meta: Option<&FileMeta>,
     ) -> Result<FileMeta, SpaceError> {
-        // Reject writes to paths that exist *only* in the read-only fallback
-        // (e.g. base_fs or meta layer). If the path also exists in primary —
-        // typically a stale shadow from before this guard landed, or a
-        // user-edited override — the write is allowed so it overwrites the
-        // shadow rather than getting permanently locked.
+        // Fallback-only paths are read-only; existing primary overrides remain writable.
         if self.primary.get_file_meta(path).is_err() && self.fallback.get_file_meta(path).is_ok() {
             return Err(SpaceError::ReadOnly(format!(
                 "Cannot write file {path}: read-only"
@@ -300,11 +293,8 @@ mod tests {
 
     #[test]
     fn read_only_dir_mtime_tracks_the_newest_file() {
-        // The bundle is regenerated independently of the binary that serves
-        // it, so the reported mtime has to follow the *content*. When it
-        // didn't, the client's sync compared an unchanged mtime against its
-        // snapshot and kept serving the previous bundle from its own cache --
-        // a rebuilt Space Lua library silently never reached the editor.
+        // Bundle rebuilds can happen without rebuilding the server, so sync needs
+        // a content-dependent mtime to invalidate cached files.
         let td = TempDir::new().unwrap();
         std::fs::write(td.path().join("page.md"), b"before").unwrap();
         let before = ReadOnlyDirSpacePrimitives::new(td.path())

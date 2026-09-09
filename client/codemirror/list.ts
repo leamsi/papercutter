@@ -15,14 +15,12 @@ export function listBulletPlugin() {
       enter: ({ type, from, to }) => {
         if (type.name === "ListMark") {
           if (isCursorInRange(state, [from, to])) {
-            // Cursor is in the list mark
             widgets.push(
               Decoration.mark({
                 class: "sb-li-cursor",
               }).range(from, to),
             );
           } else {
-            // Cursor is outside the list mark, render as a (silver) bullet
             const listMark = state.sliceDoc(from, to);
             if (bulletListMarkerRE.test(listMark)) {
               const dec = Decoration.replace({
@@ -30,7 +28,6 @@ export function listBulletPlugin() {
               });
               widgets.push(dec.range(from, to));
             } else {
-              // Ordered list, no special rendering
               widgets.push(
                 Decoration.mark({
                   class: "sb-li-cursor",

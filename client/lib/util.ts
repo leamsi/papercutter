@@ -24,7 +24,6 @@ export function headersToFileMeta(
   headers: Headers,
 ): FileMeta | undefined {
   if (headers.has("X-Last-Modified")) {
-    // If this header is set, we need to pull out the rest also
     return {
       name,
       // The server may set a custom X-Content-Length header in case a GET request was sent with X-Get-Meta, in which case the body may be omitted
@@ -38,7 +37,6 @@ export function headersToFileMeta(
       perm: (headers.get("X-Permission") as "rw" | "ro") || "ro",
     };
   } else {
-    // Otherwise: no file meta in headers
     return undefined;
   }
 }

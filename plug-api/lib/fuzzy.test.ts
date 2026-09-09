@@ -61,14 +61,8 @@ test("no exact match: the tie still falls back to orderId", () => {
   expect(r[0].name).toEqual("Outline Viewer");
 });
 
-// --- Equivalence proof: typoScore rewrite vs. pre-rewrite reference ---
-//
-// `typoScoreReference` and `boundedDamerauLevenshteinReference` below are a
-// verbatim copy of the implementation that shipped before the ranker
-// perf fix (fuzzy.ts, commit 65a937d7), kept only as a test oracle. The
-// property test that follows asserts the new `typoScore` (imported from
-// fuzzy.ts) returns the bit-identical score across thousands of randomized
-// and adversarial (phrase, candidate) pairs.
+// Independent reference implementation used as the oracle for randomized
+// and adversarial typoScore comparisons.
 
 function boundedDamerauLevenshteinReference(
   a: string,

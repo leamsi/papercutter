@@ -16,10 +16,8 @@ test.describe("Page navigation", () => {
     // top bar, and the picker closed behind it.
     await createPageViaPagePicker(sbPage, "My New Page");
 
-    // Editor should be empty (new page)
     await expect(editor).toHaveText("");
 
-    // Type content and verify it saves to server
     await editor.click();
     await sbPage.keyboard.type("New page content");
     await expect(editor).toContainText("New page content");
@@ -38,10 +36,8 @@ test.describe("Page navigation", () => {
       "Welcome to the wondrous world of SilverBullet",
     );
 
-    // First, create and navigate to a new page
     await createPageViaPagePicker(sbPage, "Temporary Page");
 
-    // Now navigate back to index
     await navigateViaPagePicker(sbPage, "index");
     await expect(editor).toContainText(
       "Welcome to the wondrous world of SilverBullet",
@@ -57,11 +53,9 @@ test.describe("Page navigation", () => {
       "Welcome to the wondrous world of SilverBullet",
     );
 
-    // Page name should show the full path
     await createPageViaPagePicker(sbPage, "Notes/My Subfolder Page");
     await expect(editor).toHaveText("");
 
-    // Type something and verify it saves to server
     await editor.click();
     await sbPage.keyboard.type("Content in a subfolder page");
     await expect(editor).toContainText("Content in a subfolder page");

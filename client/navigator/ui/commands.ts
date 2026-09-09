@@ -87,9 +87,7 @@ export function createCommands({
   });
 
   async function close(opts?: HideOpts) {
-    // A newer activation may already have taken this slot, in which case this
-    // close belongs to nothing: the token it was handed is what the lifecycle
-    // compares against the slot's current occupant before closing anything.
+    // The activation token prevents a late close from dismissing a newer view.
     if (
       view &&
       displayed.current !== undefined &&
@@ -101,9 +99,7 @@ export function createCommands({
     await editor.focus();
   }
 
-  // A mobile drawer covers the editor whole, so it dismisses on a selection
-  // exactly like the modal does -- leaving it up would hide what was just
-  // opened. A desktop sidebar stays, that being the point of a sidebar.
+  // Dismiss mobile drawers after selection so the opened page is visible.
   const closesOnSelect = slot === "modal" || mobile;
 
   // The drawer getting out of the way of what was just opened is not the
@@ -244,10 +240,8 @@ export function createCommands({
   async function runKeymap(key: string, obj: Record<string, any>) {
     if (!view) return;
     await engine.key(view.name, key, obj);
-    // The default contract is that the panel keeps focus: a handler that
-    // navigates goes through `client.navigate`, which focuses the editor on
-    // the way out. Take it back once the handler has settled -- an action
-    // that wants the editor focused calls `editor.focus()` itself, after us.
+    // Restore panel focus after the handler settles. Actions that want the
+    // editor focused call editor.focus() afterward.
     inputRef.current?.focus();
   }
 
@@ -257,9 +251,7 @@ export function createCommands({
     // Same contract as `runKeymap`: the panel keeps focus (a confirm dialog,
     // or an action that navigates, will have taken it in the meantime).
     inputRef.current?.focus();
-    // An action that renamed or deleted something leaves the view showing what
-    // used to be there; the file events would refresh us eventually, but this
-    // (debounced, like `moveNode`'s) makes it prompt.
+    // Refresh promptly after rename/delete instead of waiting for file events.
     refresh();
   }
 
@@ -317,9 +309,7 @@ export function createCommands({
   }
 
   function onTreeRowClick(node: TreeNode) {
-    // Tree rows are drag sources, exempt from the panel-wide mousedown
-    // suppression (see NavRoot), so the click blurred the input; take focus
-    // back before the selection possibly hands it on to the editor.
+    // Drag-source rows allow mousedown, so restore input focus before selection.
     inputRef.current?.focus();
     setSelectedPath(node.path);
     void selectTreeNode(node);

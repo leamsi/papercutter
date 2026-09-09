@@ -145,7 +145,6 @@ function getOption(
   }
 }
 
-// Compute alignment padding
 function getDetails(
   fmt: string,
   pos: number,
@@ -264,7 +263,6 @@ export const strPackFn = new LuaBuiltinFunction({
       let opt: ParsedOption;
       [opt, pos] = getDetails(fmt, pos, h, totalsize);
 
-      // alignment padding
       if (opt.ntoalign > 0) {
         parts.push(new Uint8Array(opt.ntoalign));
         totalsize += opt.ntoalign;
@@ -349,7 +347,6 @@ export const strPackFn = new LuaBuiltinFunction({
       }
     }
 
-    // Concatenate all parts into one binary string (latin-1 encoding)
     let total = 0;
     for (const p of parts) total += p.length;
     const out = new Uint8Array(total);

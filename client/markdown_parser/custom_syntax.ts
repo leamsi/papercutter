@@ -27,8 +27,6 @@ export function buildCustomInlineParser(
     return { defineNodes: [], parseInline: [] };
   }
 
-  // Pre-compute the first char code for fast rejection
-  // Generate a literal prefix from the regex source to get the first char
   const firstCharCode = literalPrefixCharCode(startMarker);
 
   return {
@@ -37,14 +35,12 @@ export function buildCustomInlineParser(
       {
         name,
         parse(cx, next, pos) {
-          // Fast rejection by first character
           if (firstCharCode !== null && next !== firstCharCode) {
             return -1;
           }
 
           const textFromPos = cx.slice(pos, cx.end);
 
-          // Match start marker at current position
           startRegex.lastIndex = 0;
           const startMatch = startRegex.exec(textFromPos);
           if (!startMatch) {
@@ -52,7 +48,6 @@ export function buildCustomInlineParser(
           }
           const startLen = startMatch[0].length;
 
-          // Search for end marker after start marker, skipping escaped occurrences
           endRegex.lastIndex = startLen;
           let endMatch: RegExpExecArray | null = null;
           while ((endMatch = endRegex.exec(textFromPos))) {
@@ -146,10 +141,8 @@ export function buildCustomBlockParser(spec: CustomSyntaxSpec): MarkdownConfig {
 
           // bodyEnd points past the last body line
           if (bodyStart < bodyEnd) {
-            // Remove trailing newline from body
             elts.push(cx.elt(`${name}Body`, bodyStart, bodyEnd - 1));
           } else {
-            // Empty body
             elts.push(cx.elt(`${name}Body`, bodyStart, bodyStart));
           }
 
@@ -196,7 +189,6 @@ export function buildCustomSyntaxExtensions(
 function literalPrefixCharCode(regexSource: string): number | null {
   if (!regexSource) return null;
   const first = regexSource[0];
-  // If it's an escape sequence, use the escaped char
   if (first === "\\") {
     if (regexSource.length < 2) return null;
     const escaped = regexSource[1];

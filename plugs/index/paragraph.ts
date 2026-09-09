@@ -48,7 +48,6 @@ export async function indexParagraphs(
 
       const fullText = renderToText(p);
 
-      // Collect tags
       const tags = collectTags(p);
       const anchor = collectAnchor(p);
 
@@ -57,7 +56,6 @@ export async function indexParagraphs(
         return true;
       }
 
-      // Extract attributes
       const attrs = collectAttributes(p);
 
       // Clean tree, just to check if it's effectively empty or not
@@ -68,7 +66,6 @@ export async function indexParagraphs(
       const cleanedText = renderToText(pClone);
 
       if (!cleanedText.trim() && !anchor) {
-        // Empty paragraph, just tags, attributes, and/or anchor maybe
         return true;
       }
 

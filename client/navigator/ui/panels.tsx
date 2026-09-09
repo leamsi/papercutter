@@ -39,10 +39,8 @@ export function NavigatorModal({
 }) {
   const token = state?.activation.token;
 
-  // The way out when the panel itself didn't get the keystroke, so the fixed
-  // backdrop can never trap the user. A layout effect, not a plain one: that
-  // is flushed after paint, leaving the modal on screen for a frame with no
-  // Escape handler attached.
+  // Handle Escape outside the panel too. Register before paint so the
+  // backdrop is never visible without a way to dismiss it.
   useLayoutEffect(() => {
     if (token === undefined) return;
     const onKeyDown = (ev: KeyboardEvent) => {

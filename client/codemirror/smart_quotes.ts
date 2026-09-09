@@ -33,7 +33,6 @@ function keyBindingForQuote(
       const cursorPos = target.state.selection.main.from;
       const chBefore = target.state.sliceDoc(cursorPos - 1, cursorPos);
 
-      // Figure out the context, if in some sort of code/comment fragment don't be smart
       let node = syntaxTree(target.state).resolveInner(cursorPos);
       while (node) {
         if (
@@ -59,7 +58,6 @@ function keyBindingForQuote(
         return false;
       }
 
-      // Ok, still here, let's use a smart quote
       const changes = target.state.changeByRange((range) => {
         if (!range.empty) {
           return {

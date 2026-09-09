@@ -160,24 +160,16 @@ export class HttpSpacePrimitives implements SpacePrimitives {
           "You are not authenticated, reloading to reauthenticate",
           "reload",
         );
-        // console.log("Unregistering service workers", redirectHeader);
-        // await unregisterServiceWorkers();
-        // location.reload();
-        // Let's throw to avoid any further processing
         throw Error("Not authenticated");
       }
-
-      // console.log("Got response", result.status, result.statusText, result.url);
 
       // Attempting to handle various authentication proxies
       if (result.status >= 300 && result.status < 400) {
         if (redirectHeader) {
-          // Got a redirect
           this.authErrorCallback(
             "Received an authentication redirect",
             redirectHeader,
           );
-          // location.href = redirectHeader;
           throw new Error("Redirected");
         } else {
           console.error("Got a redirect status but no location header", result);
@@ -379,8 +371,8 @@ export class HttpSpacePrimitives implements SpacePrimitives {
   async getFileMeta(path: string, observing?: boolean): Promise<FileMeta> {
     const res = await this.authenticatedFetch(
       `${this.url}/${encodePageURI(path)}`,
-      // This used to use HEAD, but it seems that Safari on iOS is blocking cookies/credentials to be sent along with HEAD requests
-      // so we'll use GET instead with a magic header which the server may or may not use to omit the body.
+      // Use GET with X-Get-Meta because iOS Safari omits credentials on HEAD.
+      // The server may omit the body when it recognizes this header.
       {
         method: "GET",
         headers: {

@@ -76,7 +76,6 @@ export function FilterList({
     }
 
     if (!deepEqual(matchingOptions, results)) {
-      // Only do this (=> rerender of UI) if the results have changed
       setMatchingOptions(results);
       setSelectionOption(0);
     }

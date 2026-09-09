@@ -1,5 +1,3 @@
-// client/lib/inline_safe.ts
-
 /** Content types the browser may render inline. Mirror of the server's
  * `is_inline_safe` (server/src/handlers/fs.rs) — keep the two tables identical.
  * `image/svg+xml` is excluded because a top-level SVG runs inline scripts. */

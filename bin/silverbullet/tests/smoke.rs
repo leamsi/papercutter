@@ -9,7 +9,6 @@ async fn boots_and_serves_ping_config_and_bundle() {
     let dir = tempfile::tempdir().unwrap();
     let port = free_port();
 
-    // Run the server in the background against a fresh temp space.
     let folder = dir.path().to_str().unwrap().to_string();
     std::env::set_var("SB_FOLDER", &folder);
     // Disable the headless-Chrome runtime so the test never launches a browser.
@@ -20,7 +19,6 @@ async fn boots_and_serves_ping_config_and_bundle() {
             .await;
     });
 
-    // Wait for the listener to come up.
     let base = format!("http://127.0.0.1:{port}");
     let client = reqwest::Client::new();
     let mut up = false;
@@ -33,7 +31,6 @@ async fn boots_and_serves_ping_config_and_bundle() {
     }
     assert!(up, "server did not start");
 
-    // /.config returns the BootConfig JSON.
     let cfg: serde_json::Value = client
         .get(format!("{base}/.config"))
         .send()
@@ -44,7 +41,6 @@ async fn boots_and_serves_ping_config_and_bundle() {
         .unwrap();
     assert_eq!(cfg["indexPage"], "index");
 
-    // The SPA shell is served (templated, no leftover placeholders).
     let html = client
         .get(format!("{base}/"))
         .send()
@@ -60,8 +56,7 @@ async fn boots_and_serves_ping_config_and_bundle() {
     );
     assert!(!html.contains("{{"), "unresolved placeholder in shell");
 
-    // The empty space was seeded with the rich index.md template (parity with
-    // the old single-space-only `DEFAULT_INDEX_MD`), not a bare placeholder.
+    // An empty space receives the rich index template.
     let index = client
         .get(format!("{base}/.fs/index.md"))
         .send()

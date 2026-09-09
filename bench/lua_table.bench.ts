@@ -11,13 +11,9 @@ import {
 
 const sf = LuaStackFrame.lostFrame;
 
-// --- Construction ---
-
 bench("LuaTable: construct empty", () => {
   new LuaTable();
 });
-
-// --- jsToLuaValue conversion ---
 
 const smallArray = Array.from({ length: 10 }, (_, i) => i);
 const medArray = Array.from({ length: 100 }, (_, i) => i);
@@ -59,8 +55,6 @@ bench("jsToLuaValue: nested array of objects (100)", () => {
   jsToLuaValue(nestedData);
 });
 
-// --- String key set/get ---
-
 bench("LuaTable: string key set+get (1k ops)", () => {
   const t = new LuaTable();
   for (let i = 0; i < 1000; i++) {
@@ -84,8 +78,6 @@ bench("LuaTable: string key rawSet+rawGet (1k ops)", () => {
   }
   return sum;
 });
-
-// --- Integer key set/get ---
 
 bench("LuaTable: integer key set+get (1k ops)", () => {
   const t = new LuaTable();
@@ -111,8 +103,6 @@ bench("LuaTable: integer key rawSet+rawGet (1k ops)", () => {
   return sum;
 });
 
-// --- has() ---
-
 const hasTable = new LuaTable();
 for (let i = 0; i < 100; i++) void hasTable.set(`k${i}`, i);
 for (let i = 1; i <= 100; i++) void hasTable.set(i, i);
@@ -133,8 +123,6 @@ bench("LuaTable: has() integer key (100 lookups)", () => {
   return count;
 });
 
-// --- keys() ---
-
 const keysTable10 = new LuaTable();
 for (let i = 0; i < 10; i++) void keysTable10.set(`k${i}`, i);
 
@@ -149,16 +137,12 @@ bench("LuaTable: keys() on 100-key table", () => {
   return keysTable100.keys();
 });
 
-// --- length getter ---
-
 const lenTable = new LuaTable();
 for (let i = 1; i <= 1000; i++) void lenTable.set(i, i);
 
 bench("LuaTable: length getter (1000-element array)", () => {
   return lenTable.length;
 });
-
-// --- Append pattern: t[#t+1] = v ---
 
 bench("LuaTable: append pattern t[#t+1]=v (1k)", () => {
   const t = new LuaTable();
@@ -167,8 +151,6 @@ bench("LuaTable: append pattern t[#t+1]=v (1k)", () => {
   }
   return t;
 });
-
-// --- toJS / toJSObject / toJSArray ---
 
 const convArrayTable = jsToLuaValue(medArray) as LuaTable;
 const convObjTable = jsToLuaValue(medObj) as LuaTable;
@@ -186,8 +168,6 @@ bench("LuaTable: toJS nested (100 objects)", () => {
   return convNestedTable.toJS(sf);
 });
 
-// --- luaValueToJS roundtrip ---
-
 bench("luaValueToJS: array table (100 elements)", () => {
   return luaValueToJS(convArrayTable, sf);
 });
@@ -195,8 +175,6 @@ bench("luaValueToJS: array table (100 elements)", () => {
 bench("luaValueToJS: object table (100 keys)", () => {
   return luaValueToJS(convObjTable, sf);
 });
-
-// --- Iteration pattern (pairs-like) ---
 
 bench("LuaTable: iteration keys()+get() (100 string keys)", () => {
   const keys = keysTable100.keys();

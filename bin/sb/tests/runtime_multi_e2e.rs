@@ -29,16 +29,9 @@ const ADMIN_PASSWORD: &str = "adminpw1";
 mod common;
 use common::{chrome_available_or_skip, free_port};
 
-/// Wraps the spawned server and kills it (plus the shared Chrome it owns) on
-/// drop, so nothing leaks even if an assertion panics.
-///
-/// stdout/stderr are drained continuously by background threads into `log`,
-/// rather than read once at the end. Two headless clients (root + notes) each
-/// forward their full `console.*` output into the server's log at INFO level
-/// (see `ChromeConfig::log_console`), which is enough volume to fill the OS
-/// pipe buffer within seconds; an unread `Stdio::piped()` handle would then
-/// make the server block on its own log write, wedging the whole process —
-/// including the HTTP listener — with no exception or panic to show for it.
+/// Kills the server and its Chrome process on drop, including after test panics.
+/// Drain logs continuously: two headless clients can fill the pipe buffer
+/// and block the server before the test completes.
 struct Server {
     child: Child,
     log: Arc<Mutex<String>>,
@@ -111,15 +104,8 @@ fn sb_bin() -> &'static str {
     env!("CARGO_BIN_EXE_sb")
 }
 
-/// The sibling `silverbullet` server binary in the same target dir, if built.
-///
-/// `None` means this test cannot run at all. Under `CI` that is a hard failure
-/// rather than a silent skip, for the same reason as
-/// `common::chrome_available_or_skip`: this job gates the release and docker
-/// publishes, and a skipped run reads as a pass. It cannot trigger under the
-/// current CI command (`cargo test --workspace --all-features` builds every bin
-/// into the probed target dir), which is precisely why a silent skip here would
-/// go unnoticed the day somebody narrows that command.
+/// Find the sibling server binary. Missing binaries fail CI to prevent
+/// release gates from silently skipping this test; local runs may skip.
 fn server_bin_or_skip() -> Option<PathBuf> {
     let dir = PathBuf::from(sb_bin()).parent()?.to_path_buf();
     let name = if cfg!(windows) {
@@ -211,7 +197,6 @@ fn runtime_api_serves_two_spaces_from_one_shared_chrome() {
         std::thread::sleep(Duration::from_millis(200));
     }
 
-    // Log in as the admin.
     let admin = reqwest::blocking::Client::builder()
         .cookie_store(true)
         .build()
@@ -260,7 +245,6 @@ fn runtime_api_serves_two_spaces_from_one_shared_chrome() {
     )
     .unwrap();
 
-    // An admin API token for `sb --token`.
     let r = admin
         .post(format!(
             "{base}/.spaces/api/admin/users/{ADMIN_USER}/tokens"
@@ -274,7 +258,6 @@ fn runtime_api_serves_two_spaces_from_one_shared_chrome() {
         .expect("token in response")
         .to_string();
 
-    // Anonymous `sb` must be rejected.
     let (code, _, stderr) = run_sb(&["--url", &base, "eval", "1 + 1"], sb_config.path());
     assert_ne!(code, 0, "anonymous eval should fail");
     assert!(
@@ -324,7 +307,6 @@ fn runtime_api_serves_two_spaces_from_one_shared_chrome() {
         }
     }
 
-    // One browser served both spaces.
     let log = server_proc.finish();
     let launches = log.matches("launching shared headless Chrome").count();
     assert_eq!(

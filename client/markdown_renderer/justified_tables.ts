@@ -23,7 +23,6 @@ function getTableJustification(t: ParseTree): Justification[] {
 
   if (!delimiterText) return [];
 
-  // Split at "|" and filter out empty strings (from leading/trailing |)
   const columnDelimiters = delimiterText
     .split("|")
     .filter((part) => part.trim() !== "");
@@ -71,17 +70,14 @@ function justifyRow(row: TagObject, justify: Justification[]): Tag[] {
   return row.body.map((cell, i) => {
     const alignment = justify[i];
 
-    // Skip if no alignment specified or if cell is a string
     if (!alignment || !isTagObject(cell)) {
       return cell;
     }
 
-    // Ensure cell has attrs object
     if (!cell.attrs) {
       cell.attrs = {};
     }
 
-    // Add alignment class
     const alignmentClass = `sb-table-align-${alignment}`;
     if (cell.attrs.class) {
       cell.attrs.class += ` ${alignmentClass}`;
@@ -106,7 +102,6 @@ function justifiedTableTags(
   return table_body.map((row: Tag) => {
     if (!isTagObject(row)) return row;
 
-    // Handle thead specially - it contains a tr row
     if (row.name === "thead" && hasBodyArray(row)) {
       const trRow = row.body[0];
       if (isTagObject(trRow)) {
@@ -114,7 +109,6 @@ function justifiedTableTags(
         trRow.body = newBody;
       }
     } else {
-      // Handle regular rows
       const newBody = justifyRow(row, justify);
       if (newBody.length > 0) {
         row.body = newBody;

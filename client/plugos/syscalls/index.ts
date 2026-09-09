@@ -18,7 +18,6 @@ export function indexSyscalls(
   client: Client,
 ): SysCallMapping {
   return {
-    // Query collection API
     "index.tag": {
       callback: (_ctx, tagName: string): LuaQueryCollection => {
         return objectIndex.objectsWithTag(tagName);
@@ -130,7 +129,6 @@ export function indexSyscalls(
       },
       description: "Returns all indexed tag objects as a query collection.",
     },
-    // Schema introspection: indexed object-type / tag schemas
     "index.describeSchema": {
       callback: (): Record<string, unknown> => {
         return describeSchemas(client.config.get(["tags"], {}));
@@ -167,7 +165,6 @@ export function indexSyscalls(
       description:
         "Returns links whose page name matches more than one page as a query collection.",
     },
-    // Internals
     "index.aggregates": {
       callback: (): LuaQueryCollection => {
         return objectIndex.aggregates();

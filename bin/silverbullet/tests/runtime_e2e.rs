@@ -89,7 +89,6 @@ fn runtime_api_evaluates_lua_against_headless_chrome() {
         .build()
         .unwrap();
 
-    // 1) Server is up.
     wait_until(
         Duration::from_secs(20),
         || {
@@ -146,6 +145,5 @@ fn runtime_api_evaluates_lua_against_headless_chrome() {
     let v: serde_json::Value = serde_json::from_str(script.text().unwrap().trim()).unwrap();
     assert_eq!(v, serde_json::json!({ "result": 2 }));
 
-    // Explicit teardown (also happens on Drop).
     drop(server);
 }

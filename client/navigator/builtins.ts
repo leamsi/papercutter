@@ -26,10 +26,8 @@ async function isReadOnly(): Promise<boolean> {
   return (await editor.getUiOption("forcedROMode")) === true;
 }
 
-// `any`, deliberately: this registry (and the dispatch below) is generic
-// over every view's own row type, which each declares independently in its
-// own `./views/*.ts` -- from here, the row a given event's `obj` carries is
-// opaque until the receiving view's own typed callback reads it.
+// Row types belong to individual views; this registry treats their payloads
+// as opaque until the receiving callback handles them.
 const views: Record<string, BuiltinView<any>> = {
   "std.pages": pagePicker,
   "std.anchors": anchorPicker,
@@ -42,10 +40,8 @@ const views: Record<string, BuiltinView<any>> = {
   "std.gitStatus": gitStatusView,
 };
 
-// A built-in claiming one of these would silently shadow panel navigation
-// (`keyboard.ts`'s `tryKeymap` runs ahead of it), with no error anywhere to
-// say so. `navigator.define` rejects it per call; a built-in has no `define`
-// to reject, so this runs at module load instead.
+// Validate built-ins at module load: unlike navigator.define, they have no
+// registration call that could reject keys shadowing panel navigation.
 export function validateKeymaps(
   registry: Record<string, Pick<BuiltinView, "keymap">>,
 ): void {
@@ -143,10 +139,7 @@ async function builtinRows(
 function builtinRowState(name: string, objs: any[]) {
   const view = views[name];
   if (!view) return [];
-  // A source-mode view subsets in its own source, off the segment label it is
-  // handed; its `where` predicates are never consulted. std.spaceLog is
-  // source-mode but has no segments, so this guard is dormant today -- it
-  // only matters for a source-mode built-in that also declares segments.
+  // Source-mode views filter in their source; no segment masks are computed.
   const wantsSegments = view.segments && view.meta.search !== "source";
   const wantsActions = !!view.actions;
   return objs.map((obj) => {

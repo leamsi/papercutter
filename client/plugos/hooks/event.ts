@@ -79,9 +79,7 @@ export class EventHook implements EventHookI {
               event === eventName ||
               eventNameToRegex(event).test(eventName)
             ) {
-              // Only dispatch functions that can run in this environment
               if (plug.canInvoke(name)) {
-                // Queue the promise
                 promises.push(
                   (async () => {
                     try {
@@ -101,11 +99,9 @@ export class EventHook implements EventHookI {
       }
     }
 
-    // Local listeners
     for (const [name, localListeners] of this.localListeners) {
       if (eventNameToRegex(name).test(eventName)) {
         for (const localListener of localListeners) {
-          // Queue the promise
           promises.push(
             (async () => {
               return await Promise.resolve(localListener(...args));
@@ -115,7 +111,6 @@ export class EventHook implements EventHookI {
       }
     }
 
-    // Space Lua listeners
     if (this.config) {
       const configListeners: Record<string, Function[]> = this.config.get(
         "eventListeners",
@@ -140,7 +135,6 @@ export class EventHook implements EventHookI {
       }
     }
 
-    // Wait for all promises to resolve
     return (await Promise.allSettled(promises))
       .filter((result) => {
         if (result.status === "rejected") {

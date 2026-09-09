@@ -30,7 +30,6 @@ function assertCtxErrorContains(
   const pretty = err.toPrettyString(code);
   expect(pretty).toContain(msgIncludes);
   expect(pretty).toContain(ref);
-  // caret presence sanity check
   expect(pretty).toContain("^");
 }
 

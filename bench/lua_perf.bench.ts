@@ -607,10 +607,7 @@ const luaAsyncQueryPattern = `
 `;
 
 // =====================================================
-// 7. Community-Driven Gap Coverage
-//    Benchmarks derived from analyzing 163 community
-//    Lua scripts (~40K lines) to cover patterns that
-//    are heavily used but previously unbenchmarked.
+// Workloads derived from 163 community Lua scripts (~40K lines).
 // =====================================================
 
 // --- pcall overhead (51 occurrences in community scripts, 0 benchmarks) ---

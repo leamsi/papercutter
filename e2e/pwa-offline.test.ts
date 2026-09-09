@@ -149,11 +149,8 @@ test.describe("PWA offline support", () => {
     // but not when the server is specifically down.
     await sbServer.stop();
 
-    // Navigate to same URL. The SW's fetch() to the server will fail with
-    // browser native errors ("Failed to fetch", etc). With the
-    // isNetworkError() fix, the SW should detect this and fall through to
-    // local data for /.fs requests, while alwaysProxy paths (/.config)
-    // correctly return 503 so the client falls back to localStorage cache.
+    // Network errors should fall back to IndexedDB for files. Always-proxied
+    // config requests return 503 so the client uses its localStorage cache.
     await page.goto(sbServer.url, { waitUntil: "domcontentloaded" });
 
     // Editor should re-appear with the same content from local IndexedDB

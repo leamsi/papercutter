@@ -121,11 +121,8 @@ pub fn resolve_path(path: &str, from_page: &str, index: &BasenameIndex) -> Resol
         };
     }
     if index.has(path) {
-        // An exact path match is fully determined by the link text, so it is
-        // never reported ambiguous — even when other files share the basename.
-        // For a root-level file the bare and qualified forms are the same
-        // string, so there is nothing the author could write instead and the
-        // warning could never be cleared.
+        // Exact paths are unambiguous. For root files there is no more qualified
+        // spelling the author could use to clear an ambiguity warning.
         return ResolveResult {
             path: path.to_string(),
             exists: true,
@@ -134,10 +131,7 @@ pub fn resolve_path(path: &str, from_page: &str, index: &BasenameIndex) -> Resol
         };
     }
 
-    // A bare name is just the degenerate suffix, so one matcher serves both
-    // lookups: a candidate matches when, `/`-prefixed, its path ends with `/`
-    // plus the ref. The suffix fallback is what keeps qualified links working
-    // when a space is opened at a wider root.
+    // Suffix matching keeps qualified links working when a space opens at a wider root.
     let suffix = format!("/{}", path.to_lowercase());
     let mut candidates = index.candidates(file_name(path));
     candidates.retain(|candidate| format!("/{}", candidate.to_lowercase()).ends_with(&suffix));
@@ -149,7 +143,6 @@ pub fn resolve_path(path: &str, from_page: &str, index: &BasenameIndex) -> Resol
             candidates: None,
         };
     }
-    // The overwhelmingly common case under the bare-iff-unique invariant.
     if candidates.len() == 1 {
         return ResolveResult {
             path: candidates.into_iter().next().expect("length checked"),

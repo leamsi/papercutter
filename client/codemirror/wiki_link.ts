@@ -46,7 +46,6 @@ export function cleanWikiLinkPlugin(client: Client) {
           state,
           callback: (e) => {
             if (e.altKey) {
-              // Move cursor into the link
               client.editorView.dispatch({
                 selection: {
                   anchor: from + wikiLinkMatch.leadingTrivia.length,

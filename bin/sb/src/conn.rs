@@ -14,10 +14,6 @@ use crate::{
     crypto,
 };
 
-// ---------------------------------------------------------------------------
-// Auth enum
-// ---------------------------------------------------------------------------
-
 /// Credentials to attach to outgoing requests.
 #[derive(Debug, Clone)]
 pub enum Auth {
@@ -28,10 +24,6 @@ pub enum Auth {
     /// HTTP `Cookie: <name>=<value>` header (JWT session cookie).
     Cookie { name: String, value: String },
 }
-
-// ---------------------------------------------------------------------------
-// SpaceConnection
-// ---------------------------------------------------------------------------
 
 /// An authenticated reqwest client bound to a SilverBullet server.
 pub struct SpaceConnection {
@@ -52,10 +44,6 @@ impl SpaceConnection {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// login_for_jwt
-// ---------------------------------------------------------------------------
 
 /// POST `{base}/.auth` with form-encoded credentials, return `(cookie_name, jwt)`.
 ///
@@ -111,10 +99,6 @@ pub fn login_for_jwt(
     Err("login failed: could not extract auth token from cookie".to_string())
 }
 
-// ---------------------------------------------------------------------------
-// resolve
-// ---------------------------------------------------------------------------
-
 /// Build the shared reqwest blocking client (redirects disabled, given timeout).
 pub fn new_client(timeout: std::time::Duration) -> Result<Client, String> {
     Client::builder()
@@ -139,11 +123,9 @@ pub fn new_client(timeout: std::time::Duration) -> Result<Client, String> {
 pub fn resolve(flags: &GlobalFlags, cfg: &Config) -> Result<SpaceConnection, String> {
     let timeout = Duration::from_secs(flags.timeout);
 
-    // Build a client with redirects disabled and the configured timeout.
     let client = new_client(timeout)?;
 
     if let Some(ref raw_url) = flags.url {
-        // --url was given: skip config lookup entirely.
         let base_url = raw_url.trim_end_matches('/').to_string();
         let auth = flags.token.clone().map(Auth::Bearer).unwrap_or(Auth::None);
         return Ok(SpaceConnection {
@@ -154,7 +136,6 @@ pub fn resolve(flags: &GlobalFlags, cfg: &Config) -> Result<SpaceConnection, Str
         });
     }
 
-    // Load config and find the space.
     let space = config::resolve_space(cfg, flags.space.as_deref())?;
     let base_url = space.url.trim_end_matches('/').to_string();
 
@@ -172,7 +153,6 @@ pub fn resolve(flags: &GlobalFlags, cfg: &Config) -> Result<SpaceConnection, Str
         ));
     }
 
-    // --token always wins, even for named spaces.
     if let Some(ref tok) = flags.token {
         return Ok(SpaceConnection {
             client,
@@ -213,15 +193,8 @@ pub fn resolve(flags: &GlobalFlags, cfg: &Config) -> Result<SpaceConnection, Str
     })
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/// Build a helpful error when a stored credential can't be decrypted: an
-/// authentication-tag failure almost always means
-/// the key file was regenerated, or the secret was encrypted on a different
-/// machine / an older SilverBullet that used the legacy hostname-derived key.
-/// Point the user at re-adding the space rather than leaving a bare `aead::Error`.
+/// Authentication-tag failures usually mean a missing or incompatible key.
+/// Point the user to re-adding the space instead of showing only aead::Error.
 fn decrypt_failure_msg(what: &str, space_name: &str, inner: impl std::fmt::Display) -> String {
     let key_path = config::config_dir().join("key");
     format!(
@@ -255,10 +228,6 @@ fn url_encode(s: &str) -> String {
     out
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,10 +236,6 @@ mod tests {
         net::TcpListener,
         thread,
     };
-
-    // -----------------------------------------------------------------------
-    // Minimal mock HTTP server helpers
-    // -----------------------------------------------------------------------
 
     /// A recorded HTTP request from the mock server.
     #[derive(Debug)]
@@ -295,14 +260,12 @@ mod tests {
             let mut reader = BufReader::new(stream.try_clone().expect("clone stream"));
             let mut writer = stream;
 
-            // Read request line
             let mut req_line = String::new();
             reader.read_line(&mut req_line).unwrap();
             let mut parts = req_line.trim().splitn(3, ' ');
             let method = parts.next().unwrap_or("").to_string();
             let path = parts.next().unwrap_or("").to_string();
 
-            // Read headers (parse content-length only; we don't need to store them)
             let mut content_length: usize = 0;
             loop {
                 let mut line = String::new();
@@ -320,14 +283,12 @@ mod tests {
                 }
             }
 
-            // Read body up to Content-Length
             let mut body = vec![0u8; content_length];
             if content_length > 0 {
                 use std::io::Read;
                 reader.read_exact(&mut body).unwrap();
             }
 
-            // Write the canned response
             writer.write_all(response.as_bytes()).unwrap();
 
             RecordedRequest { method, path, body }
@@ -335,10 +296,6 @@ mod tests {
 
         (base_url, handle)
     }
-
-    // -----------------------------------------------------------------------
-    // login_for_jwt
-    // -----------------------------------------------------------------------
 
     #[test]
     fn login_for_jwt_parses_cookie() {
@@ -359,7 +316,6 @@ mod tests {
         assert_eq!(value, "theJWT");
         assert_eq!(req.method, "POST");
         assert!(req.path.contains(".auth"));
-        // Form body should be URL-encoded
         let body_str = String::from_utf8(req.body).unwrap();
         assert!(body_str.contains("username=alice"));
         assert!(body_str.contains("password=s3cr3t"));
@@ -381,10 +337,6 @@ mod tests {
         let _ = handle.join();
         assert!(err.contains("no auth cookie returned"), "err was: {err}");
     }
-
-    // -----------------------------------------------------------------------
-    // url_encode
-    // -----------------------------------------------------------------------
 
     #[test]
     fn url_encode_basic() {

@@ -54,8 +54,6 @@ async function runAndCatchEnv(code: string, ref = "close_attribute.lua") {
   return { err, env };
 }
 
-// 1. parsing and static validation
-
 test("close: parse ok", () => {
   parseBlock(
     `
@@ -139,8 +137,6 @@ test("close: invalid goto into scope", () => {
     expect(String((e as any)?.message ?? e)).toContain("goto");
   }
 });
-
-// 2. basic scope exit
 
 test("close: nil ignored; false is non-closable", async () => {
   const { e, ref, code } = await runAndCatch(
@@ -285,8 +281,6 @@ test("close: replacing __close function affects close-time behavior", async () =
   expect(t.length).toEqual(1);
   expect(t.get(1)).toEqual("close-2");
 });
-
-// 3. errors and unwinding
 
 test("close: non-closable init", async () => {
   const { e } = await runAndCatch(`
@@ -848,7 +842,6 @@ test("close: multiple closers unwind on error", async () => {
   expect(e).toBeInstanceOf(LuaRuntimeError);
   expect((e as LuaRuntimeError).message).toContain("boom");
 
-  // verify both were closed in reverse order with the error object
   const t = env.get("t") as any;
   expect(t.length).toEqual(2);
   expect(t.get(1)).toEqual("close-B-boom");
@@ -919,7 +912,6 @@ test("close: complex assignment error closes prior", async () => {
   expect(e).toBeInstanceOf(LuaRuntimeError);
   expect((e as LuaRuntimeError).message).toContain("assign_error");
 
-  // verify 'a' was closed despite 'b' failing to assign
   const t = env.get("t") as any;
   expect(t.get(1)).toEqual("a_closed");
 });
@@ -1002,13 +994,10 @@ test("close: async close error reported; later closers still run", async () => {
   expect((e as LuaRuntimeError).message).toContain("b-closefail");
 
   const t = env.get("t") as any;
-  // B closes first and errors, but A must still be closed in Lua 5.4 intent
   expect(t.length).toEqual(2);
   expect(t.get(1)).toEqual("close-B");
   expect(t.get(2)).toEqual("close-A");
 });
-
-// 4. control flow exits
 
 test("close: return closes", async () => {
   const env = await evalBlock(`
@@ -1129,8 +1118,6 @@ test("close: return to-be-closed variable", async () => {
   expect(t.get(1)).toEqual("closed");
   expect(t.get(2)).toEqual("table");
 });
-
-// 5. generic-for loop-scoped closing
 
 test("close: for-in no close", async () => {
   const env = await evalBlock(`
@@ -1388,12 +1375,6 @@ test("close: for-in closing closes before outer block closers", async () => {
 
   const t = env.get("t") as any;
 
-  // Required ordering:
-  // body runs
-  // loop closing value closes at loop end
-  // after-loop runs
-  // outer closes when leaving do-block
-  // after-block runs
   expect(t.get(1)).toEqual("body");
   expect(t.get(2)).toEqual("close-L");
   expect(t.get(3)).toEqual("after-loop");
@@ -1461,7 +1442,6 @@ test("close: for-in closes on error", async () => {
   expect(e).toBeInstanceOf(LuaRuntimeError);
   expect((e as LuaRuntimeError).message).toContain("boom");
 
-  // verify closer received error
   const t = env.get("t") as any;
   expect(t.get(1)).toEqual("close-C-boom");
 });
@@ -1494,7 +1474,6 @@ test("close: for-in closes if iterator errors", async () => {
   expect(e).toBeInstanceOf(LuaRuntimeError);
   expect((e as LuaRuntimeError).message).toContain("iterboom");
 
-  // verify closer received error
   const t = env.get("t") as any;
   expect(t.get(1)).toEqual("close-C-iterboom");
 });
@@ -1569,8 +1548,6 @@ test("close: error inside for-in body closes loop closing value with error", asy
   expect(t.get(1)).toEqual("close-C-boom");
 });
 
-// 6. pairs integration
-
 test("close: pairs closes", async () => {
   const env = await evalBlock(`
     t = {}
@@ -1610,8 +1587,6 @@ test("close: pairs closes", async () => {
   expect((env.get("t") as any).get(2)).toEqual("close-P");
   expect((env.get("t") as any).get(3)).toEqual("closed");
 });
-
-// 7. protected calls
 
 test("close: pcall closes on success", async () => {
   const env = await evalBlock(`
@@ -1810,7 +1785,6 @@ test("close: pcall close error overrides original and skips remaining closers", 
 
   const t = env.get("t") as any;
 
-  // C closes first, then B closes and errors; A is still closed in Lua 5.4
   expect(t.get(1)).toEqual("close-C-boom");
   expect(t.get(2)).toEqual("close-B-boom");
   expect(t.get(3)).toEqual("close-A-boom");
@@ -1874,7 +1848,6 @@ test("close: xpcall boundary contains __close errors", async () => {
 
   const t = env.get("t") as any;
 
-  // close runs during unwind and sees original error
   expect(t.get(1)).toEqual("close-err-boom");
 
   // the close error overrides the original for `xpcall`, so the
@@ -1915,11 +1888,6 @@ test("close: nested to-be-closed created inside __close", async () => {
 
   const t = env.get("t") as any;
 
-  // Expected order:
-  // - body finishes
-  // - outer close begins
-  // - inner scope ends, so inner closes (during exec of outer __close)
-  // - outer close ends
   expect(t.get(1)).toEqual("body-end");
   expect(t.get(2)).toEqual("outer-close-start-nil");
   expect(t.get(3)).toEqual("inner-scope-end");

@@ -79,7 +79,6 @@ test("the revision views vanish entirely when revisions are unavailable", async 
       await builtinHandle(view, "select", { obj: { rev: "a".repeat(40) } }),
     ).toBeUndefined();
   }
-  // Nothing else is affected.
   expect(builtinMeta("std.spaceTree")).toBeDefined();
 });
 
@@ -98,7 +97,6 @@ test("with an index, the rows are the indexed objects", async () => {
   expect(index.queryLuaObjects).toHaveBeenCalledTimes(2);
   expect(space.listPages).not.toHaveBeenCalled();
   expect(space.listDocuments).not.toHaveBeenCalled();
-  // Untouched: whatever the index says a page is, is what the picker shows.
   expect(rows).toEqual([
     { name: "Projects/Alpha", tag: "page", tags: ["work"] },
     { name: "assets/logo.png", tag: "document", extension: "png" },
@@ -121,7 +119,6 @@ test("without one, the rows come from the space's own file listing", async () =>
   // fraction of the space has been indexed so far, which is the trap.
   expect(index.queryLuaObjects).not.toHaveBeenCalled();
   expect(rows).toEqual([
-    // Tagged, so the segments have something to subset by...
     {
       name: "Projects/Alpha",
       lastModified: "2026-08-07",
@@ -147,7 +144,6 @@ test("the branch is re-evaluated per source run, so it upgrades on its own", asy
   index.queryLuaObjects.mockResolvedValue([]);
 
   expect(await spaceContents()).toHaveLength(1);
-  // Second run, index now available: no file listing, the index answers.
   expect(await spaceContents()).toEqual([]);
   expect(space.listPages).toHaveBeenCalledTimes(1);
 });
@@ -159,7 +155,6 @@ test("a throwing handler is flashed, not left as a rejection", async () => {
   // a modal, one that vanished without acting.
   open.mockRejectedValue(new Error("slot is gone"));
 
-  // The tag round-trip: picked from a picker, so it hands the slot back.
   const result = await builtinHandle("std.tags", "select", {
     obj: { name: "work" },
     from: "std.pages",
@@ -206,11 +201,9 @@ test("navigator:key runs std.spaceTree's Space entry: peek without closing the p
 });
 
 test("navigator:key is a no-op for a view (or key) with no keymap entry", async () => {
-  // std.pages defines no keymap at all.
   expect(
     await builtinHandle("std.pages", "key", { key: " ", obj: {} }),
   ).toBeUndefined();
-  // std.spaceTree has one, but not for this key.
   expect(
     await builtinHandle("std.spaceTree", "key", { key: "x", obj: {} }),
   ).toBeUndefined();
@@ -556,7 +549,6 @@ test("std.pageHistory lists revisions newest-first with an uncommitted pseudo-en
   expect((rows as any[])[2].decorations).toEqual([
     { text: expect.any(String), title: expect.any(String), position: "right" },
   ]);
-  // Rows read relatively ("3 days ago"); the exact stamp is the tooltip.
   const timeDecoration = (rows as any[])[1].decorations[1];
   expect(timeDecoration.text).toMatch(/ago$|^(yesterday|now)$/);
   expect(timeDecoration.title).toMatch(
@@ -884,7 +876,6 @@ test("std.pageHistory's preview offers Restore, and not in read-only mode", asyn
   await builtinHandle("std.pageHistory", "select", { obj });
   const preview = currentPreview()!;
   expect(preview.canRestore).toBe(false);
-  // The rest of the preview is unaffected.
   expect(preview.diff).toHaveLength(3);
 });
 
@@ -1025,11 +1016,9 @@ test("std.spaceLog heads the log with an uncommitted pseudo-commit", async () =>
 
   const rows = (await builtinRows("std.spaceLog")) as any[];
 
-  // Ahead of every real commit, reading as what it is and carrying no chips.
   expect(rows[0].primary).toBe("Uncommitted changes");
   expect(rows[0].decorations).toBeUndefined();
   expect(rows[0].obj.rev).toBe("@uncommitted");
-  // Expanding to the files it covers, exactly like a real commit row.
   expect(rows[1].primary).toBe("index.md");
   expect(rows[2].primary).toBe("Projects/Alpha.md");
   expect(rows[3].primary).toBe("add stuff");
@@ -1062,7 +1051,6 @@ test("std.spaceLog previews a page child row and expands a bare commit row", asy
       timestamp: 2000,
     },
   });
-  // The same modal Page History opens, for the file the row names.
   expect(space.getRevisionDiff).toHaveBeenCalledWith(
     "Projects/Alpha.md",
     "c".repeat(40),

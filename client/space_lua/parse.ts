@@ -50,7 +50,6 @@ const customIndent = indentNodeProp.add({
   },
 });
 
-// Use the customIndent in your language support
 export const luaLanguage = LRLanguage.define({
   name: "space-lua",
   parser: parser.configure({
@@ -547,7 +546,6 @@ function functionBodyCapturesNames(
   return blockReferencesNames(body.block, check);
 }
 
-// Walk block using `exprReferencesNames` (inside a function body).
 function blockReferencesNames(block: LuaBlock, names: Set<string>): boolean {
   for (let i = 0; i < block.statements.length; i++) {
     if (statementReferencesNames(block.statements[i], names)) return true;
@@ -650,7 +648,6 @@ function statementReferencesNames(
   }
 }
 
-// Walk block looking for `FunctionDefinition` nodes that capture `names`.
 function blockCapturesNames(block: LuaBlock, names: Set<string>): boolean {
   for (let i = 0; i < block.statements.length; i++) {
     if (statementCapturesNames(block.statements[i], names)) return true;
@@ -743,8 +740,6 @@ function statementCapturesNames(s: LuaStatement, names: Set<string>): boolean {
   }
 }
 
-// At loop block level find `FunctionDefinition` and check if it
-// captures `names`.
 function exprCapturesNames(e: LuaExpression, names: Set<string>): boolean {
   if (!e) return false;
   switch (e.type) {
@@ -871,7 +866,6 @@ function parseBlockNode(t: ParseTree, ctx: ASTCtx): LuaBlock {
       case "Label": {
         hasLabel = true;
         hasLabelHere = true;
-        // Duplicate labels in the same block are illegal
         const name = (s as any).name as string;
         if (!dup) {
           if (seen.has(name)) {
@@ -1207,7 +1201,6 @@ function parseStatement(t: ParseTree, ctx: ASTCtx): LuaStatement {
     case "break":
       return { type: "Break", ctx: context(t, ctx) };
     default:
-      // Gracefully ignore unknown empty nodes
       if (!t.children || t.children.length === 0) {
         return {
           type: "Semicolon",
@@ -1363,10 +1356,7 @@ function parseExpList(t: ParseTree, ctx: ASTCtx): LuaExpression[] {
 
 const delimiterRegex = /^(\[=*\[)([\s\S]*)(\]=*\])$/;
 
-// In case of quoted strings, remove the quotes and unescape the string
-// In case of a [[ type ]] literal string, remove the brackets
 function parseString(s: string): string {
-  // Handle long strings with delimiters
   const delimiterMatch = s.match(delimiterRegex);
   if (delimiterMatch) {
     let text = delimiterMatch[2];
@@ -1403,11 +1393,9 @@ function parseString(s: string): string {
           case "'":
             return "'"; // Single quote
           default:
-            // Handle hexadecimal \x00
             if (capture.startsWith("x")) {
               return String.fromCharCode(parseInt(capture.slice(1), 16));
             }
-            // Handle unicode \u{XXXX}
             if (capture.startsWith("u{")) {
               const codePoint = parseInt(capture.slice(2, -1), 16);
               return String.fromCodePoint(codePoint);
@@ -1435,7 +1423,6 @@ function parseExpression(t: ParseTree, ctx: ASTCtx): LuaExpression {
       const text = t.children![0].text!.toLowerCase();
       return {
         type: "Number",
-        // Use the integer parser fox 0x literals
         // biome-ignore lint/correctness/useParseIntRadix: hex strings need auto-detect radix
         value: text.includes("x") ? parseInt(text) : parseFloat(text),
         numericType: /[.eEpP]/.test(text) ? "float" : "int",
@@ -1651,7 +1638,6 @@ function parseQueryClause(t: ParseTree, ctx: ASTCtx): LuaQueryClause {
   }
 }
 
-// Parse a single OrderBy node (shared by query OrderByClause and AggOrderBy)
 function parseOrderByNode(child: ParseTree, ctx: ASTCtx): LuaOrderBy {
   const kids = child.children!;
   let direction: "asc" | "desc" = "asc";
@@ -1685,7 +1671,6 @@ function parseOrderByNode(child: ParseTree, ctx: ASTCtx): LuaOrderBy {
   return ob;
 }
 
-// Parse an AggOrderBy node into LuaOrderBy[]
 function parseAggOrderBy(t: ParseTree, ctx: ASTCtx): LuaOrderBy[] {
   if (t.type !== "AggOrderBy") {
     throw new Error(`Expected AggOrderBy, got ${t.type}`);
@@ -1699,7 +1684,6 @@ function parseAggOrderBy(t: ParseTree, ctx: ASTCtx): LuaOrderBy[] {
   return orderBy;
 }
 
-// Parse function args, extracting AggOrderBy if present inside funcParams
 function parseFunctionArgsWithOrderBy(
   ts: ParseTree[],
   ctx: ASTCtx,
@@ -1808,7 +1792,6 @@ export function parseBlock(s: string, ctx: ASTCtx = {}): LuaBlock {
     const result = parseChunk(withoutComments(concreteTree), ctx);
     assignCommentsToBlocks(result, comments, s);
     attachFunctionDocumentation(result, comments, s);
-    // console.log("Parsed AST", JSON.stringify(result, null, 2));
     getBlockGotoMeta(result);
     return result;
   } catch (e: any) {

@@ -1,12 +1,6 @@
-// Visual language mirrors `.sb-modal-box` / `.sb-result-list` in
-// `modals.scss` so a docked navigator reads as the same widget family as the
-// command palette and page picker.
 
-// The panel's own reset, scoped to it: it renders inside the editor document
-// now, where a global one would reach everything else on the page. `:where`
-// keeps the scoping free of specificity -- at (0,1,0) it would tie every
-// `.sb-nav-*` rule in components.scss and, sitting later in the stylesheet,
-// win: every row, chip and segment inside the panel would lose its padding.
+// Scope the reset with :where to avoid overriding .sb-nav-* padding by
+// specificity and source order.
 :where(.sb-nav-root,
   .sb-nav-root *,
   .sb-nav-root *::before,
@@ -16,13 +10,8 @@
   padding: 0;
 }
 
-// Every dimmed thing *inside a row* -- icons, chevrons, an aspiring page's
-// name, an inactive chip, the action buttons -- draws in this rather than in
-// `--subtle-color` directly, and the selection repoints it below. Selection is
-// a paired foreground/background: a muted colour surviving onto the accent
-// fill is illegible in either theme, and enumerating every dimmed class in a
-// `.sb-nav-selected X` override is a list that goes stale the next time one is
-// added.
+// Use one mutable dimmed-row color so selection can replace it everywhere;
+// the normal subtle color is illegible on the selected background.
 .sb-nav-root {
   --sb-nav-muted: var(--subtle-color);
   // One row, top padding to bottom padding (see `.sb-nav-row`). The modal's
@@ -41,19 +30,12 @@
   color: var(--modal-color);
 }
 
-// A modal is a picker, and a picker is its chrome plus a capped list -- never
-// a column stretched toward the viewport. It sizes to its content, and the
-// box around it (`.sb-modal-centered` in main.scss) follows; the list's own
-// cap below is what bounds that content.
+// Let the modal follow its content; the list cap below bounds its height.
 .sb-nav-root-modal {
   height: auto;
 }
 
-// Seven rows: 250px verbatim from `.sb-result-list` in the client's
-// modals.scss, rounded to a whole row. A row is 36px (8px of padding twice on
-// a 20px line, the same metrics `.sb-result-list` uses), so the raw 250 cut
-// the seventh row two pixels short and left a permanent sliver of it under the
-// modal's bottom edge -- a cap only reads as a cap when it lands between rows.
+// Round the shared 250px list cap to whole 36px rows to avoid a clipped row.
 .sb-nav-root-modal .sb-nav-body {
   flex: 0 1 auto;
   max-height: calc(7 * var(--sb-nav-row-height));
@@ -74,9 +56,7 @@
   color: var(--modal-header-label-color);
 }
 
-// Room for the drag handle beside the scrollbar rather than on top of it:
-// with classic (non-overlay) scrollbars the two occupy the same strip
-// otherwise, which reads as one clunky double-wide band.
+// Keep the drag handle beside classic scrollbars, not on top of them.
 .sb-nav-root-lhs.sb-nav-resizable .sb-nav-body {
   margin-right: 6px;
 }
@@ -222,7 +202,6 @@
 .sb-nav-selected {
   background-color: var(--modal-selected-option-background-color);
   color: var(--modal-selected-option-color);
-  // ...and nothing a row class dimmed stays dim on top of it.
   --sb-nav-muted: var(--modal-selected-option-color);
 }
 

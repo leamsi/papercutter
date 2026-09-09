@@ -293,7 +293,6 @@ mod tests {
             },
             false,
         );
-        // `cat` with no args echoes its stdin to stdout.
         let (status, body) =
             post_shell(st, r#"{"cmd":"cat","args":[],"stdin":"piped-in-data"}"#).await;
         assert_eq!(status, StatusCode::OK);
@@ -307,10 +306,8 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn large_stdin_does_not_deadlock() {
-        // Regression: stdin used to be written to completion before any
-        // output was drained; with more than ~2 pipe buffers (~128KB)
-        // round-tripped through `cat`, parent and child would block on each
-        // other's full pipes forever. stdin now feeds from its own thread.
+        // More than two pipe buffers exposes deadlock if stdin is written
+        // synchronously before stdout is drained.
         let st = state_with(
             ShellConfig {
                 enabled: true,
@@ -338,7 +335,6 @@ mod tests {
         Arc::new(s)
     }
 
-    // A nonexistent command returns an exit code of -1 rather than erroring.
     #[tokio::test]
     async fn nonexistent_command_returns_minus_one() {
         let st = state_with(
@@ -359,7 +355,6 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn whitelisted_command_is_allowed() {
-        // A command on the whitelist is allowed to run.
         let st = state_with(
             ShellConfig {
                 enabled: true,
@@ -378,7 +373,6 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn runs_in_the_space_folder() {
-        // The command's cwd is the space folder.
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("marker.txt"), b"x").unwrap();
         let st = state_in_dir(dir.path().to_str().unwrap());
@@ -393,7 +387,6 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn captures_both_stdout_and_stderr() {
-        // Both stdout and stderr are captured.
         let dir = tempfile::tempdir().unwrap();
         let script = dir.path().join("both.sh");
         std::fs::write(&script, b"#!/bin/sh\necho out\necho err >&2\nexit 0\n").unwrap();
@@ -406,12 +399,7 @@ mod tests {
         assert_eq!(v["stderr"].as_str().unwrap().trim(), "err");
     }
 
-    // The shell handler is cross-platform (the same `std::process::Command` path
-    // the App uses, plus the `CREATE_NO_WINDOW` flag), so it must also work on
-    // Windows. The exec logic (stdin piping, stream capture) is OS-agnostic and
-    // already verified on Unix above; these confirm the `Command` + cwd path on
-    // Windows itself. A real temp dir is used because the default test cwd is
-    // Unix-style.
+    // Use a real Windows directory; the default test cwd is Unix-style.
     #[cfg(windows)]
     #[tokio::test]
     async fn runs_an_allowed_command_windows() {

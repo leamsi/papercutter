@@ -18,7 +18,6 @@ function untagNumber(x: any): number {
 }
 
 export const mathApi = new LuaTable({
-  // math constants
   huge: 1 / 0,
   pi: Math.PI,
 
@@ -145,7 +144,6 @@ export const mathApi = new LuaTable({
     ],
   }),
 
-  // Basic functions
   abs: new LuaBuiltinFunction({
     callback: (_sf, x: number) => Math.abs(untagNumber(x)),
     description: "Returns the absolute value of `x`.",
@@ -177,7 +175,6 @@ export const mathApi = new LuaTable({
     returns: [{ type: "number" }],
   }),
 
-  // Rounding and remainder
   fmod: new LuaBuiltinFunction({
     callback: (_sf, x: number, y: number) => untagNumber(x) % untagNumber(y),
     description:
@@ -248,7 +245,6 @@ export const mathApi = new LuaTable({
     returns: [{ type: "number" }],
   }),
 
-  // Power and logarithms
   exp: new LuaBuiltinFunction({
     callback: (_sf, x: number) => Math.exp(untagNumber(x)),
     description: "Returns `e` raised to `x`.",
@@ -289,7 +285,6 @@ export const mathApi = new LuaTable({
     returns: [{ type: "number" }],
   }),
 
-  // Trigonometric functions
   cos: new LuaBuiltinFunction({
     callback: (_sf, x: number) => Math.cos(untagNumber(x)),
     description: "Returns the cosine of `x` radians.",
@@ -359,7 +354,6 @@ export const mathApi = new LuaTable({
     deprecated: "Retained for compatibility with older Lua versions.",
   }),
 
-  // Additional utility
   deg: new LuaBuiltinFunction({
     callback: (_sf, x: number) => (untagNumber(x) * 180) / Math.PI,
     description: "Converts an angle from radians to degrees.",
@@ -386,7 +380,6 @@ export const mathApi = new LuaTable({
     examples: [{ code: "print(math.ult(2, 3)) -- true" }],
   }),
 
-  // Keep the cosineSimilarity utility function
   cosineSimilarity: new LuaBuiltinFunction({
     callback: (sf, vecA: LuaTable | number[], vecB: LuaTable | number[]) => {
       if (vecA instanceof LuaTable) {

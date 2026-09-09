@@ -2,7 +2,6 @@ import type { SysCallMapping } from "../system.ts";
 import { type OutputUnit, Validator, format } from "@cfworker/json-schema";
 import { stripFunctions } from "../util.ts";
 
-// Register custom formats
 format.email = (data: string) => data.includes("@");
 format["page-ref"] = (data: string) =>
   data.startsWith("[[") && data.endsWith("]]");

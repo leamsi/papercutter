@@ -473,9 +473,7 @@ async function fetchSpaceLogPage(
       rows.push(...syncRows(log.sync));
     }
   }
-  // A pseudo-commit for what is not committed yet, expanding to the files it
-  // covers exactly as a real commit row does. It describes the working tree
-  // right now, not this page of history -- only the first page shows it.
+  // Only the first history page includes the current working-tree pseudo-row.
   if (before === undefined) {
     const uncommitted = log.uncommitted ?? [];
     if (uncommitted.length > 0) {
@@ -617,10 +615,8 @@ export const spaceLogView: BuiltinView<LogRow> = {
   },
   source: spaceLogRows,
   onSelect: (obj) => {
-    // The banner row is purely informational -- unlike a commit row, its
-    // paths are flat siblings, not children behind an expand click, so
-    // there is nothing for selecting it to do. A conflicted path is a link
-    // straight to the page, not a preview: there is no commit to diff.
+    // Banner rows are informational. Conflicted paths open the page directly:
+    // there is no commit to preview.
     if (obj.sync === "header") return Promise.resolve(false);
     if (obj.sync === "path") {
       return editor.navigate({ path: obj.file as Path }).then(() => false);

@@ -25,10 +25,6 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-// ---------------------------------------------------------------------------
-// Structs
-// ---------------------------------------------------------------------------
-
 /// Authentication credentials for a space.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AuthConfig {
@@ -103,10 +99,6 @@ pub struct Config {
     pub spaces: Vec<SpaceConfig>,
 }
 
-// ---------------------------------------------------------------------------
-// Directory / path helpers
-// ---------------------------------------------------------------------------
-
 /// Compute the config directory from explicit XDG / home values (pure, testable).
 ///
 /// `xdg` — value of `$XDG_CONFIG_HOME` (empty string means "not set").
@@ -139,10 +131,6 @@ fn home_dir() -> String {
         .unwrap_or_default()
 }
 
-// ---------------------------------------------------------------------------
-// Load / save
-// ---------------------------------------------------------------------------
-
 /// Load config from `dir/config.json`.
 ///
 /// If the file does not exist, returns `Ok(Config { spaces: [] })`.
@@ -167,7 +155,6 @@ pub fn load() -> Result<Config, String> {
 /// Serialize and write `cfg` to `dir/config.json` (pretty JSON, 2-space
 /// indent, trailing newline, mode 0600 on unix, dir mode 0700).
 pub fn save_to(dir: &Path, cfg: &Config) -> Result<(), String> {
-    // Ensure dir exists with 0700.
     create_dir_private(dir)?;
 
     let path = dir.join("config.json");
@@ -182,10 +169,6 @@ pub fn save_to(dir: &Path, cfg: &Config) -> Result<(), String> {
 pub fn save(cfg: &Config) -> Result<(), String> {
     save_to(&config_dir(), cfg)
 }
-
-// ---------------------------------------------------------------------------
-// Space resolution
-// ---------------------------------------------------------------------------
 
 /// Resolve a space by optional name.
 ///
@@ -206,18 +189,10 @@ pub fn resolve_space<'a>(cfg: &'a Config, name: Option<&str>) -> Result<&'a Spac
     }
 }
 
-// ---------------------------------------------------------------------------
-// UUID
-// ---------------------------------------------------------------------------
-
 /// Generate a random UUID v4 string (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
 pub fn new_uuid() -> String {
     uuid::Uuid::new_v4().to_string()
 }
-
-// ---------------------------------------------------------------------------
-// Private file-write helpers (mirror crypto.rs patterns)
-// ---------------------------------------------------------------------------
 
 fn create_dir_private(dir: &Path) -> Result<(), String> {
     #[cfg(unix)]
@@ -255,17 +230,9 @@ fn write_private(path: &Path, data: &[u8]) -> std::io::Result<()> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // -----------------------------------------------------------------------
-    // Unknown field preservation (round-trip)
-    // -----------------------------------------------------------------------
 
     #[test]
     fn unknown_space_fields_survive_round_trip() {
@@ -291,7 +258,6 @@ mod tests {
         let out = serde_json::to_string(&space).unwrap();
         let v: serde_json::Value = serde_json::from_str(&out).unwrap();
         let obj = v.as_object().unwrap();
-        // Should only have the known fields we set.
         for key in obj.keys() {
             assert!(
                 ["id", "name", "url", "auth"].contains(&key.as_str()),
@@ -299,10 +265,6 @@ mod tests {
             );
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Load / save round-trip via tempdir (no env mutation)
-    // -----------------------------------------------------------------------
 
     #[test]
     fn load_save_round_trip() {
@@ -376,13 +338,11 @@ mod tests {
         std::fs::write(dir.join("config.json"), json).unwrap();
         let mut cfg = load_from(dir).unwrap();
 
-        // Core fields read correctly
         assert_eq!(cfg.spaces[0].id, "abc-123");
         assert_eq!(cfg.spaces[0].name, "my-notes");
         assert_eq!(cfg.spaces[0].folder_path, "/home/user/notes");
         assert_eq!(cfg.spaces[0].auth.method, "none");
 
-        // Modify a Core field
         cfg.spaces[0].name = "renamed-notes".into();
 
         save_to(dir, &cfg).unwrap();
@@ -399,10 +359,6 @@ mod tests {
             "lastOpened must survive"
         );
     }
-
-    // -----------------------------------------------------------------------
-    // config_dir_from (pure, no env mutation)
-    // -----------------------------------------------------------------------
 
     #[test]
     fn config_dir_from_uses_xdg_when_set() {
@@ -421,10 +377,6 @@ mod tests {
         let d = config_dir_from(Some(""), "/home/user");
         assert_eq!(d, PathBuf::from("/home/user/.config/silverbullet"));
     }
-
-    // -----------------------------------------------------------------------
-    // resolve_space
-    // -----------------------------------------------------------------------
 
     #[test]
     fn resolve_space_by_name() {
@@ -497,10 +449,6 @@ mod tests {
         assert!(err.contains("no spaces configured"), "error was: {err}");
     }
 
-    // -----------------------------------------------------------------------
-    // new_uuid
-    // -----------------------------------------------------------------------
-
     #[test]
     fn new_uuid_is_unique_and_correct_length() {
         let id1 = new_uuid();
@@ -512,10 +460,6 @@ mod tests {
             "UUID length should be 36 (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)"
         );
     }
-
-    // -----------------------------------------------------------------------
-    // File permissions (unix only)
-    // -----------------------------------------------------------------------
 
     #[cfg(unix)]
     #[test]
@@ -532,10 +476,6 @@ mod tests {
             & 0o777;
         assert_eq!(file_mode, 0o600, "config.json must be mode 0600");
     }
-
-    // -----------------------------------------------------------------------
-    // JSON field naming (camelCase, omitempty)
-    // -----------------------------------------------------------------------
 
     #[test]
     fn auth_config_camel_case_fields() {
@@ -591,10 +531,6 @@ mod tests {
         assert!(v.get("folderPath").is_some(), "must use folderPath");
         assert!(v.get("url").is_none(), "empty url must be omitted");
     }
-
-    // -----------------------------------------------------------------------
-    // Pretty-print + trailing newline
-    // -----------------------------------------------------------------------
 
     #[test]
     fn save_produces_pretty_json_with_trailing_newline() {

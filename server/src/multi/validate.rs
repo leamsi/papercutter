@@ -66,13 +66,9 @@ pub fn validate(
                         "prefixes starting with /. are reserved",
                     );
                 } else {
-                    // Prefixes must be unique AND non-overlapping: a space at
-                    // /work and another at /work/sub would fight over URL
-                    // space (and their service-worker scopes would overlap).
-                    // "" (bare root, from a "/" prefix) is now valid — it only
-                    // conflicts with another exact "" (never via the overlap
-                    // checks, which would otherwise treat every other prefix
-                    // as "starting with" the empty string).
+                    // Nested prefixes overlap routes and service-worker scopes. The empty
+                    // root prefix conflicts only with another root; treating it as a normal
+                    // prefix would incorrectly reject every other binding.
                     let conflict = seen_prefixes.iter().find(|(other_norm, _)| {
                         *other_norm == &norm
                             || (!norm.is_empty()
@@ -107,7 +103,6 @@ pub fn validate(
                     );
                 } else if let Some(other) = seen_hosts.insert(host.to_ascii_lowercase(), id.clone())
                 {
-                    // Host matching is case-insensitive, so dupe detection is too.
                     err(
                         &mut errors,
                         format!("{id}.binding"),
@@ -257,7 +252,6 @@ mod tests {
             ),
         ]);
         assert!(validate(&c, dir.path(), &users(&[])).is_empty());
-        // But two root bindings conflict.
         let c = cfg(vec![
             ("a", space("A", Binding::Prefix { prefix: "/".into() })),
             ("b", space("B", Binding::Prefix { prefix: "".into() })),
@@ -272,7 +266,6 @@ mod tests {
     #[test]
     fn overlapping_prefixes_rejected() {
         let dir = tempfile::tempdir().unwrap();
-        // Nested prefixes conflict regardless of declaration order.
         for (p1, p2) in [("/work", "/work/sub"), ("/work/sub", "/work")] {
             let c = cfg(vec![
                 ("a", space("A", Binding::Prefix { prefix: p1.into() })),
@@ -284,7 +277,6 @@ mod tests {
                 "{p1} + {p2} must conflict: {errs:?}"
             );
         }
-        // A shared string prefix without a path-segment boundary is fine.
         let c = cfg(vec![
             (
                 "a",
@@ -330,7 +322,6 @@ mod tests {
             errs.iter().any(|e| e.field.ends_with(".folder")),
             "{errs:?}"
         );
-        // Sibling folders are fine.
         let mut a = space(
             "A",
             Binding::Prefix {
@@ -370,7 +361,6 @@ mod tests {
             errs.iter().any(|e| e.field.ends_with(".folder")),
             "{errs:?}"
         );
-        // Two empty folders are fine (each defaults to its own GUID dir).
         let c = cfg(vec![
             (
                 "a",

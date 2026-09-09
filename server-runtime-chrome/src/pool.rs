@@ -259,15 +259,8 @@ impl ClientTransport for SharedChromeTransport {
         let live = self.live.clone();
         let js = js.to_string();
         self.pool.rt().block_on(async move {
-            // The timeout covers *acquiring* `live` as well as the eval itself.
-            // The eval alone was never unbounded — chromiumoxide gives every
-            // command a ~30s `REQUEST_TIMEOUT` of its own — but the lock wait in
-            // front of it had no bound at all, and it is the part that stacks:
-            // this call occupies a thread on the server's shared
-            // `spawn_blocking` pool, and the supervisor's liveness probe takes
-            // the same lock. Wrapping both means a caller's own timeout is the
-            // real bound, instead of an implicit one from a dependency plus an
-            // unbounded queue behind it.
+            // Include the lock wait: this occupies a shared blocking-pool thread,
+            // and the supervisor liveness probe contends for the same lock.
             let attempt = async {
                 let guard = live.lock().await;
                 let page = guard.as_ref().ok_or(RuntimeError::NotReady)?;
@@ -324,20 +317,11 @@ impl Drop for SharedChromeTransport {
         let Some(reg) = reg else { return };
         let Registration { live, supervisor } = reg;
         self.pool.rt().spawn(async move {
-            // Abort *and wait* before touching `live`. `JoinHandle::abort` is
-            // not synchronous: cancelling the supervisor while it is inside
-            // `launch_page` means its page is a task local, in neither `live`
-            // nor anywhere else, until its `PageCloseGuard` drops. Aborting from
-            // `Drop` and closing here immediately could observe `live == None`,
-            // finish, and let the supervisor then publish a page nobody will
-            // ever look at again. Awaiting the handle guarantees the task (and
-            // its guard) is fully torn down first.
+            // Await cancellation so an in-progress launch drops its PageCloseGuard
+            // before teardown checks `live`; abort alone can leave an orphaned tab.
             supervisor.abort();
             let _ = supervisor.await;
-            // Two statements, so the `MutexGuard` is dropped at the `;` rather
-            // than held across the `close` await — matching `supervise_space`'s
-            // restart path. Nothing contends for `live` here, but the two sites
-            // should read alike.
+            // Drop the MutexGuard before awaiting close.
             let stale = live.lock().await.take();
             if let Some(page) = stale {
                 let _ = page.close().await;
@@ -403,7 +387,6 @@ mod tests {
         assert!(!pool.browser_is_launched().await);
 
         let t = pool.transport_for(page("a", "http://127.0.0.1:3000"), LogBuffer::new());
-        // Give the supervisor task a chance to run before checking.
         tokio::time::sleep(Duration::from_millis(50)).await;
         assert!(!pool.browser_is_launched().await);
         assert!(!t.is_ready());
@@ -436,8 +419,6 @@ mod tests {
             "a stale generation must not retire the live browser"
         );
 
-        // The generation that actually failed is retired, so the next
-        // `ensure_browser` launches a fresh one.
         pool.discard_browser(1).await;
         assert!(
             !pool.browser_is_launched().await,
@@ -463,7 +444,6 @@ mod tests {
     #[tokio::test]
     async fn a_failed_launch_leaves_the_slot_empty() {
         let pool = ChromePool::new(config()).unwrap();
-        // `/nonexistent/chrome` cannot be spawned, so this fails fast.
         assert!(pool.ensure_browser().await.is_err());
         assert!(!pool.browser_is_launched().await);
     }
@@ -473,6 +453,6 @@ mod tests {
         let pool = ChromePool::new(config()).unwrap();
         let t = pool.transport_for(page("a", "http://127.0.0.1:3000"), LogBuffer::new());
         drop(t);
-        drop(pool); // must not panic
+        drop(pool);
     }
 }

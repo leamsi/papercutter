@@ -73,14 +73,12 @@ export const FootnoteDefinition: MarkdownConfig = {
             bodyText += `\n${line.text}`;
             endPos = cx.parsedPos + line.text.length + 1;
           } else if (line.text.trim() === "") {
-            // Blank line: peek ahead to see if next line is indented
             bodyText += "\n";
             endPos = cx.parsedPos + line.text.length + 1;
           } else {
             break;
           }
         }
-        // Trim trailing blank lines from the body
         while (bodyText.endsWith("\n")) {
           const trimmed = bodyText.slice(0, -1);
           if (trimmed.endsWith("\n") || trimmed.length === 0) {

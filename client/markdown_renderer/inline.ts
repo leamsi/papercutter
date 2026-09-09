@@ -42,7 +42,6 @@ import type { SpaceLuaEnvironment } from "../space_lua.ts";
 // Synthetic node type used to represent pre-resolved custom syntax HTML in the parse tree
 export const CustomSyntaxRenderedHtmlType = "CustomSyntaxRenderedHtml";
 
-// Extends the parser spec with an optional renderHtml callback for HTML rendering
 export type CustomSyntaxHtmlRenderer = CustomSyntaxSpec & {
   renderHtml?: (
     body: string,
@@ -106,7 +105,6 @@ export async function expandMarkdown(
         );
       }
 
-      // We don't transclude anything that's not markdown
       const mimeType = getMimeTypeFromUrl(
         transclusion.url,
         transclusion.linktype !== "wikilink",
@@ -124,12 +122,10 @@ export async function expandMarkdown(
 
         const tree = parse(mdLang, result.text);
 
-        // Remove frontmatter when transcluding
         if (result.offset === 0 && tree.children) {
           tree.children = tree.children.filter((c) => c.type !== "FrontMatter");
         }
 
-        // Recursively process
         return expandMarkdown(
           space,
           nameFromTransclusion(transclusion),
@@ -188,12 +184,10 @@ export async function expandMarkdown(
             `**Lua timeout:** this widget took too long to render and was stopped. Reload the page to try again.`,
           );
         }
-        // Reduce blast radius and give useful error message
         console.error("Error evaluating Lua directive", exprText, e);
         return parse(mdLang, `**Error:** ${e.message}`);
       }
     } else if (n.type === "Task" && options.rewriteTasks !== false) {
-      // Add a task reference to this based on the current page name if there's not one already
       const existingLink = findNodeOfType(n, "WikiLink");
       if (!existingLink) {
         n.children!.splice(
@@ -222,7 +216,6 @@ export async function expandMarkdown(
         );
       }
     } else if (n.type && options.syntaxExtensions) {
-      // Resolve custom syntax renderHtml callbacks
       const spec = options.syntaxExtensions[n.type];
       if (!spec?.renderHtml) return;
 
@@ -267,7 +260,6 @@ export function getMimeTypeFromUrl(
   allowExternal: boolean,
 ): string | null {
   if (!isLocalURL(url) && allowExternal) {
-    // Remote URL: determine mime type from the URL extension
     const extension = URL.parse(url)?.pathname.split(".").pop();
     if (extension) {
       return mime.getType(extension);

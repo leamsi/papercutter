@@ -11,12 +11,10 @@ export async function deletePage() {
   ) {
     return;
   }
-  // Query for last
   const recentlyOpenedPages = await editor.getRecentlyOpenedPages();
   const allPages = await space.listPages();
   const existingPageNames = new Set(allPages.map((p) => p.name));
 
-  // Find the first recently opened page that still exists and is not the current page
   const firstRecentlyOpenedPage = recentlyOpenedPages.find(
     (page) => page.name !== pageName && existingPageNames.has(page.name),
   );
@@ -50,7 +48,6 @@ export async function copyPage(
   try {
     // This throws an error if the page does not exist, which we expect to be the case
     await space.getPageMeta(newName);
-    // So when we get to this point, we error out
     throw new Error(
       `"${newName}" already exists, cannot copy to existing page.`,
     );
@@ -69,11 +66,9 @@ export async function copyPage(
   await space.writePage(newName, text);
 
   if (currentPage === fromName) {
-    // If we're copying the current page, navigate there
     console.log("Navigating to new page");
     await editor.navigate(newName);
   } else {
-    // Otherwise just notify of success
     await editor.flashNotification("Page copied successfully");
   }
 }

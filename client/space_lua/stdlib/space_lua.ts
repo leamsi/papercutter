@@ -180,7 +180,6 @@ export async function interpolateLuaString(
 
     result += template.slice(currentIndex, startIndex);
 
-    // Find matching closing brace by counting nesting
     let nestLevel = 1;
     let endIndex = startIndex + 2;
     while (nestLevel > 0 && endIndex < template.length) {
@@ -519,7 +518,7 @@ export const spaceluaApi = new LuaTable({
    */
   baseUrl: new LuaBuiltinFunction({
     callback: () => {
-      //NOTE: Removing trailing slash to stay compatible with original code: `location.protocol + "//" + location.host;`
+      // The origin contract excludes a trailing slash.
       return document.baseURI.replace(/\/*$/, "");
     },
     description:

@@ -31,7 +31,6 @@ test("Test item indexing", async () => {
   };
   const items = await indexItems(pageMeta, frontmatter, tree);
   expect(items.length).toEqual(9);
-  // Test regular items
   expect(items[0].name).toEqual("Item 1");
   expect(items[0].age).toEqual(100);
   expect(items[0].page).toEqual("test");
@@ -50,7 +49,6 @@ test("Test item indexing", async () => {
   expect(items[2].name).toEqual("Item 1.1.1");
   expect(items[2].parent).toEqual(items[1].ref);
 
-  // Test tasks
   expect(items[3].tag).toEqual("task");
   expect(items[3].name).toEqual("Task 1");
   expect(items[3].done).toEqual(false);
@@ -72,8 +70,6 @@ test("Test item indexing", async () => {
   expect(items[8].links).toEqual(["link 2"]);
   expect(new Set(items[8].ilinks)).toEqual(new Set(["link", "link 2"]));
 });
-
-// --- Anchor tests ---
 
 async function indexItemsForTest(
   md: string,
@@ -143,11 +139,9 @@ test("Test item indexing with nested lists in list items", async () => {
     lastModified: "",
     perm: "rw",
   };
-  // Should not throw an error
   const items = await indexItems(pageMeta, frontmatter, tree);
   expect(items.length).toBeGreaterThan(0);
 
-  // The regular item should still be indexed correctly
   const regularItem = items.find((i) => i.name === "Regular item");
   expect(regularItem).toBeDefined();
 });

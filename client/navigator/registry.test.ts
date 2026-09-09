@@ -186,10 +186,7 @@ test("a built-in hook is dispatched to the built-in registry", async () => {
   expect(await handle({ view: "std.anchors", hook: "rows" })).toEqual([]);
 });
 
-// std.toc used to be a built-in (client/navigator/views/toc.ts); it's now a
-// Space Lua view (navigator.define in Widgets.md) keeping the historical
-// name for persisted dock/width state, so registering it must no longer be
-// rejected as a built-in name clash.
+// std.toc is a Space Lua view; its persisted dock name must remain registerable.
 test("register no longer rejects std.toc now that it's a Lua view, not a built-in", () => {
   expect(() =>
     register({ meta: luaMeta({ name: "std.toc" }), spec: luaSpec(INERT) }),
@@ -251,10 +248,7 @@ test('selectInFlight tracks a "select" hook while it runs, and clears once it se
 
   const call = handle({ view: "space.inflight", hook: "select", args: {} });
 
-  // Synchronously, with no tick in between: a supersede that consults this
-  // right after the panel dispatched a select has to see it. That used to be
-  // covered by a drain that waited out the postMessage queue the select
-  // crossed; direct calls replaced the drain with this ordering.
+  // The in-flight selection must be visible synchronously to supersede.
   expect(selectInFlight("space.inflight")).toBeDefined();
 
   resolve({ picked: true });

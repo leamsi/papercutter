@@ -6,17 +6,13 @@ import type { Edge, ForceSettings, ObjectNode } from "../../src/model.ts";
 import { STRUCTURAL_KINDS } from "../../src/model.ts";
 import { colorForTag } from "../colors.ts";
 
-// All four force parameters are now driven by sliders in the sidebar;
-// see ForceSettings in src/model.ts for the defaults.
 const CLICK_DELAY_MS = 220;
 // Upper bound for the auto-fit camera scale. Prevents zoomToFit from
 // magnifying a single isolated node to fill the entire canvas.
 const MAX_AUTO_ZOOM = 4;
 
-// Tick budgets before the simulation cools and we auto-fit the camera (via
-// onEngineStop → recenter). Fitting on a fixed timer fit mid-layout and left
-// nodes half off-screen; fitting on settle is reliable. A from-scratch first
-// layout needs more settling than an incremental expansion.
+// Fit after simulation settles to avoid framing an incomplete layout.
+// A from-scratch layout needs more settling than an incremental expansion.
 const FIRST_FIT_COOLDOWN_TICKS = 140;
 const REFIT_COOLDOWN_TICKS = 60;
 

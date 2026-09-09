@@ -76,11 +76,8 @@ struct Manifest {
     description: String,
 }
 
-/// Serve the dynamically generated PWA `manifest.json` (referenced from
-/// `index.html`). Reconstructed from the former Go `manifestHandler`: space
-/// name/description and theme color come from config, and `host_url_prefix` is
-/// prepended to the icon, start URL, and scope so the PWA installs correctly
-/// under a sub-path mount.
+/// Render the PWA manifest from space configuration, prefixing icon, start,
+/// and scope URLs so installations work under a sub-path mount.
 pub async fn handle_manifest(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
     let prefix = &state.host_url_prefix;
     let manifest = Manifest {
@@ -114,7 +111,7 @@ mod tests {
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use axum::response::IntoResponse;
-    use tower::ServiceExt; // for `oneshot`
+    use tower::ServiceExt;
 
     #[tokio::test]
     async fn ping_returns_version_header() {

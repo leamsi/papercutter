@@ -354,9 +354,8 @@ test("a stale close from an already-resolved pick can never resolve or hide the 
   expect(await second).toBe("OnlyB");
 });
 
-// The navigator's registry and its pending-pick bookkeeping are client-side
-// state now: a plug reload no longer has anything to tear out from under an
-// open picker, so the pick stays live and still resolves normally.
+// The registry and pending picks are client state, so a plug reload
+// must leave an open picker usable.
 test("a plug reload mid-pick leaves the picker standing", async ({
   sbPage,
 }) => {
@@ -467,8 +466,7 @@ test("navigator.define and navigator.open both reject the reserved pick prefix, 
   expect(rows).toContain("dock=false");
   const dockError = rows.find((r) => r.startsWith("dock.error="));
   expect(dockError).toBeDefined();
-  // The fixture calls the `navigator.*` alias, but the validator names the
-  // canonical API in its message -- `view.define`, since the rename.
+  // The navigator alias reports validation errors under its canonical view.define name.
   expect(dockError).toContain("view.define");
   expect(dockError).toContain("'dock'");
   await sbPage.keyboard.press("Escape");

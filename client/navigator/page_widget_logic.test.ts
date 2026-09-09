@@ -214,7 +214,6 @@ test("a re-fetch after the slot settled re-measures", () => {
 });
 
 test("plain row text skips the markdown pipeline entirely", () => {
-  // The overwhelmingly common case: page names, ref labels, task pages.
   for (const plain of [
     "SomePage",
     "Projects/Alpha",
@@ -262,10 +261,6 @@ test("a click on plain row text activates the row", () => {
   expect(isRowActivation({})).toBe(true);
 });
 
-// --- Content views (`view.define { content = ... }`) -------------------------
-// Same pattern as the helpers above: `PageContentWidget`'s decisions are
-// exported so they can be asserted without mounting it.
-
 const NODE = {} as HTMLElement;
 
 test("a content widget shows nothing until its load has settled", () => {
@@ -274,11 +269,8 @@ test("a content widget shows nothing until its load has settled", () => {
 
 test("rendered content is ready; nothing to show is empty, however it got there", () => {
   expect(contentOutcome({ markdown: "# Hi", node: NODE })).toBe("ready");
-  // The view said nothing...
   expect(contentOutcome({ markdown: "" })).toBe("empty");
   expect(contentOutcome({ markdown: "   \n  " })).toBe("empty");
-  // ...or it said something that rendered to nothing. Same thing to a reader:
-  // no widget at all.
   expect(contentOutcome({ markdown: "# Hi", node: undefined })).toBe("empty");
 });
 
@@ -286,16 +278,13 @@ test("an error is an outcome in its own right, load error or render error", () =
   expect(contentOutcome({ markdown: "", error: "source blew up" })).toBe(
     "error",
   );
-  // A *render* failure: the markdown arrived, turning it into HTML is what
-  // failed. This is the case that used to never report a settle (I2).
+  // The fetch succeeds, but Markdown rendering fails.
   expect(contentOutcome({ markdown: "# Hi", error: "expand failed" })).toBe(
     "error",
   );
 });
 
-// The regression this pairs with: a render failure that never reported left
-// `createSettleTracker` with a name still pending, so the slot's height cache
-// kept reserving a phantom gap on every later visit to the page.
+// A render failure must settle the slot so no phantom height remains cached.
 test("every terminal outcome reports the slot settle; only pending withholds it", () => {
   expect(settlesSlot("pending")).toBe(false);
   for (const outcome of ["error", "empty", "ready"] as const) {
@@ -306,8 +295,7 @@ test("every terminal outcome reports the slot settle; only pending withholds it"
 test("a content view gets the markdown widget, everything else the row widget", () => {
   expect(widgetKind({ hasContent: true })).toBe("content");
   expect(widgetKind({ hasContent: false })).toBe("rows");
-  // Absent (every built-in, and every row view defined before content views
-  // existed) is a row view, not a broken one.
+  // Absent content metadata identifies a row view.
   expect(widgetKind({})).toBe("rows");
 });
 
@@ -321,15 +309,11 @@ test("a collapse toggle flips and persists the same value", () => {
 test("a collapsed widget draws no body, and neither does one with nothing to show", () => {
   expect(showsBody(false, true)).toBe(true);
   expect(showsBody(true, true)).toBe(false);
-  // Nothing to draw is nothing to draw, collapsed or not.
   expect(showsBody(false, false)).toBe(false);
   expect(showsBody(true, false)).toBe(false);
 });
 
-// --- Page-dock tree keyboard ------------------------------------------------
-// A page dock has no filter input to drive the tree from, so the rows take
-// their own keys. These are the standard tree bindings, and the same pair the
-// panel's own pipeline uses.
+// Page-docked rows handle their own tree keys because no filter input exists.
 
 test("Enter and Space open a row, folder or not", () => {
   for (const key of ["Enter", " "]) {
@@ -375,8 +359,6 @@ test("every other key is left to the page", () => {
     ).toBeUndefined();
   }
 });
-
-// --- Skipping a no-op refresh ----------------------------------------------
 
 test("identical rows produce an identical identity, and a changed field does not", () => {
   const a = [{ obj: { name: "A", pos: 1 }, primary: "A" }];
@@ -424,9 +406,7 @@ test("error transitions always commit, in both directions", () => {
   const bad = loadIdentity("boom", "");
   expect(shouldCommit(ok, bad)).toBe(true);
   expect(shouldCommit(bad, ok)).toBe(true);
-  // ...and one error replaced by a different one.
   expect(shouldCommit(bad, loadIdentity("other", ""))).toBe(true);
-  // The same error twice running is genuinely nothing new.
   expect(shouldCommit(bad, loadIdentity("boom", ""))).toBe(false);
 });
 
@@ -434,10 +414,6 @@ test("an unserialisable result is treated as changed, never as unchanged", () =>
   const known = loadIdentity(undefined, "# hi");
   expect(shouldCommit(known, loadIdentity(undefined, undefined))).toBe(true);
 });
-
-// --- The commit gate -------------------------------------------------------
-// The wiring, not just the comparison. Both Important bugs of round 4 lived
-// here: what gets recorded, and when.
 
 test("the gate skips a repeat of what it committed, and takes anything else", () => {
   const gate = createLoadGate();
@@ -449,10 +425,8 @@ test("the gate skips a repeat of what it committed, and takes anything else", ()
   expect(gate.shouldCommit(loadIdentity(undefined, "# there"))).toBe(true);
 });
 
-// The regression this exists for: the identity used to be recorded when the
-// load *arrived*, before the render that could still throw. A failed render
-// then left the success identity recorded, so the next identical refresh was
-// skipped -- and the error stayed on screen until the user navigated away.
+// Record identity only after rendering succeeds, so failed renders can retry
+// on an identical refresh.
 test("a failed render leaves nothing recorded, so an identical refresh retries", () => {
   const gate = createLoadGate();
   const same = loadIdentity(undefined, "# hi");
@@ -460,7 +434,6 @@ test("a failed render leaves nothing recorded, so an identical refresh retries",
   expect(gate.shouldCommit(same)).toBe(true);
   gate.failed(); // the render threw; nothing reached the screen
 
-  // Byte-identical markdown, and it must still be retried.
   expect(gate.shouldCommit(same)).toBe(true);
   gate.committed(same);
   expect(gate.shouldCommit(same)).toBe(false);
@@ -471,10 +444,8 @@ test("a committed error is remembered, and recovering from it commits", () => {
   const bad = loadIdentity("boom", "");
   gate.committed(bad);
 
-  // The same error again is genuinely nothing new...
   expect(gate.shouldCommit(bad)).toBe(false);
-  // ...but a success that clears it must land, even though the markdown
-  // either side of the transition is empty.
+  // A success must clear the error even if its Markdown is still empty.
   expect(gate.shouldCommit(loadIdentity(undefined, ""))).toBe(true);
 });
 

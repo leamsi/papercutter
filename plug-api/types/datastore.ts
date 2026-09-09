@@ -1,4 +1,3 @@
-// Message Queue related types
 export type MQMessage = {
   id: string;
   queue: string;
@@ -17,7 +16,6 @@ export type MQSubscribeOptions = {
   leaseRenewIntervalMs?: number;
 };
 
-// KV types
 export type KvKey = string[];
 
 export type KV<T = any> = {

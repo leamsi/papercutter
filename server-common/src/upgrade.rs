@@ -36,10 +36,6 @@ pub struct UpgradeSpec {
     pub binary: &'static str,
 }
 
-// ---------------------------------------------------------------------------
-// Public entry point
-// ---------------------------------------------------------------------------
-
 /// Download and install `spec.binary` from a release zip at `url_prefix`,
 /// replacing the currently running executable in place.
 pub fn upgrade(spec: &UpgradeSpec, url_prefix: &str) -> Result<(), String> {
@@ -52,8 +48,6 @@ pub fn upgrade(spec: &UpgradeSpec, url_prefix: &str) -> Result<(), String> {
 
     println!("Install dir: {}", install_dir.display());
 
-    // A self-cleaning temp dir for the download (auto-removed on drop, even if
-    // an error short-circuits the function).
     let tmp = tempfile::Builder::new()
         .prefix(&format!("{}-upgrade-", spec.asset))
         .tempdir()
@@ -117,10 +111,6 @@ fn do_upgrade(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Zip extraction
-// ---------------------------------------------------------------------------
-
 /// Extract all entries from the zip at `src` into `dest`.
 pub fn extract_zip(src: &Path, dest: &Path) -> Result<(), String> {
     let f = std::fs::File::open(src).map_err(|e| format!("failed to open zip: {e}"))?;
@@ -139,7 +129,6 @@ pub fn extract_zip(src: &Path, dest: &Path) -> Result<(), String> {
             continue;
         }
 
-        // Ensure parent directory exists.
         if let Some(parent) = out_path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("failed to create parent dir {}: {e}", parent.display()))?;
@@ -158,7 +147,6 @@ pub fn extract_zip(src: &Path, dest: &Path) -> Result<(), String> {
             }
         }
 
-        // Honour the unix mode stored in the zip if available, otherwise 0644.
         #[cfg(unix)]
         let out_file = {
             use std::os::unix::fs::OpenOptionsExt;
@@ -184,10 +172,6 @@ pub fn extract_zip(src: &Path, dest: &Path) -> Result<(), String> {
 
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Pure helpers (tested independently)
-// ---------------------------------------------------------------------------
 
 /// Build the release-asset URL for this platform.
 ///
@@ -242,11 +226,8 @@ fn normalize_path(p: &Path) -> PathBuf {
             Component::RootDir => {
                 has_root = true;
             }
-            Component::CurDir => {
-                // `.` — skip
-            }
+            Component::CurDir => {}
             Component::ParentDir => {
-                // `..` — pop last normal component if any
                 stack.pop();
             }
             Component::Normal(seg) => {
@@ -265,17 +246,9 @@ fn normalize_path(p: &Path) -> PathBuf {
     result
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // -----------------------------------------------------------------------
-    // asset_url
-    // -----------------------------------------------------------------------
 
     #[test]
     fn asset_url_linux_x86_64() {
@@ -309,7 +282,6 @@ mod tests {
 
     #[test]
     fn asset_url_server_asset_name() {
-        // The `silverbullet` server binary uses the "silverbullet-server" asset.
         let url = asset_url("silverbullet-server", "PRE", "darwin", "aarch64").unwrap();
         assert_eq!(url, "PRE/silverbullet-server-darwin-aarch64.zip");
     }
@@ -322,14 +294,9 @@ mod tests {
 
     #[test]
     fn asset_url_darwin_passthrough() {
-        // If someone explicitly passes "darwin" (not "macos") it still works.
         let url = asset_url("sb", "https://example.com", "darwin", "x86_64").unwrap();
         assert_eq!(url, "https://example.com/sb-darwin-x86_64.zip");
     }
-
-    // -----------------------------------------------------------------------
-    // safe_extract_path
-    // -----------------------------------------------------------------------
 
     #[test]
     fn safe_extract_path_simple_file_is_ok() {
@@ -359,10 +326,6 @@ mod tests {
         assert!(err.contains("illegal file path"), "error was: {err}");
     }
 
-    // -----------------------------------------------------------------------
-    // normalize_path (internal — tested via safe_extract_path)
-    // -----------------------------------------------------------------------
-
     #[test]
     fn normalize_removes_dot_dot() {
         let p = PathBuf::from("/tmp/x/../y");
@@ -374,10 +337,6 @@ mod tests {
         let p = PathBuf::from("/tmp/./x");
         assert_eq!(normalize_path(&p), PathBuf::from("/tmp/x"));
     }
-
-    // -----------------------------------------------------------------------
-    // extract_zip
-    // -----------------------------------------------------------------------
 
     /// The `zip` dependency is built with only the `deflate` codec (see the
     /// workspace manifest), which is what our release archives use. Guards

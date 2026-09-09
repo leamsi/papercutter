@@ -81,15 +81,12 @@ export class ObjectIndex {
     private eventHook: EventHook,
     private mq: DataStoreMQ,
   ) {
-    // Clear any entries for deleted files
     this.eventHook.addLocalListener("file:deleted", (path: string) => {
       return this.clearFileIndex(path);
     });
 
-    // Tracks if the file:listed event has been triggered,
-    // which is fired after all file:changed events have been dispatched
-    // resulting in new index entries (if any) being queued in the index queue
-    // this is later used to track if the index is complete
+    // file:listed follows the change events that enqueue index work; both
+    // listing and queue drain are needed to establish completion.
     let indexStarted = false;
     let finishInitialIndex: (() => Promise<void>) | undefined;
     // The queue announces a drain, not the state of being empty, so a client
@@ -108,7 +105,6 @@ export class ObjectIndex {
       return finishIfDrained();
     });
 
-    // Handle initial index completion for fresh installs only.
     void this.getCurrentIndexVersion().then((currentVersion) => {
       if (currentVersion === undefined) {
         const emptyQueueHandler = async () => {
@@ -128,14 +124,8 @@ export class ObjectIndex {
           }
           finishing = true;
           try {
-            // The index is complete when it covers the listed space, not when
-            // the queue happens to be empty: an interrupted earlier boot
-            // leaves the file-list snapshot saved but the queue half-drained
-            // (a reload then diffs to nothing), and dropped messages would
-            // otherwise go missing silently. Re-queueing converges on the
-            // real work set, and stopping as soon as a round fails to shrink
-            // it keeps a page that can never be indexed (deleted mid-boot,
-            // permanently failing) from holding completion hostage.
+            // Queue drain alone cannot prove completeness after an interrupted boot.
+            // Requeue missing files while the set shrinks, stopping if none make progress.
             const missingFiles = lastFileList
               ? await this.findUnindexedPages(lastFileList)
               : [];
@@ -159,15 +149,12 @@ export class ObjectIndex {
               );
             }
             finishInitialIndex = undefined;
-            // Indexing has just finished for the first time for this client
             console.info("Initial index complete, reloading editor state");
             await this.markFullIndexComplete();
-            // Unsubscribe yourself
             this.eventHook.removeLocalListener(
               "mq:emptyQueue:indexQueue",
               emptyQueueHandler,
             );
-            // Trigger an editor:reloadState event to reload the editor state (render widgets etc.)
             void this.eventHook.dispatchEvent("editor:reloadState");
           } finally {
             finishing = false;
@@ -186,16 +173,13 @@ export class ObjectIndex {
 
   private enricher(key: KvKey, value: any): any {
     const tag = key[1];
-    // See if we have a meta table defined, which we'll then slap on
     const mt = this.config.get<LuaTable | undefined>(
       ["tags", tag, "metatable"],
       undefined,
     );
     if (!mt) {
-      // Return as is
       return value;
     }
-    // Convert to LuaTable
     value = jsToLuaValue(value);
     value.metatable = mt;
     return value;
@@ -374,7 +358,6 @@ export class ObjectIndex {
       });
     }
 
-    // Config entries (user-defined overrides and aliases)
     const userAggs: Record<string, any> = this.config.get("aggregates", {});
     for (const [key, spec] of Object.entries(userAggs)) {
       const aliasTarget =
@@ -444,7 +427,6 @@ export class ObjectIndex {
   async ensureFullIndex(space: Space) {
     const currentIndexVersion = await this.getCurrentIndexVersion();
 
-    // Fast path: the index is present and already at the desired version.
     if (
       currentIndexVersion !== undefined &&
       currentIndexVersion >= desiredIndexVersion
@@ -452,14 +434,8 @@ export class ObjectIndex {
       return;
     }
 
-    // An `undefined` version is ambiguous. A genuinely fresh install builds
-    // its index lazily as sync streams files in (handled by the
-    // constructor's one-shot empty-queue handler), so there's nothing to do
-    // here. But a reindex *also* deletes the version key at its start, so an
-    // `undefined` version that still carries the in-progress marker means a
-    // prior reindex was interrupted (e.g. the window was closed mid-reindex)
-    // and must be resumed — otherwise the index stays permanently empty and
-    // `ensureFullIndex` would keep mistaking it for a fresh install.
+    // A fresh install has no version and indexes lazily. An interrupted reindex
+    // also has no version, but its marker requires resuming the rebuild.
     if (
       currentIndexVersion === undefined &&
       !(await this.isReindexInProgress())
@@ -503,7 +479,6 @@ export class ObjectIndex {
 
         await this.reindexSpaceUnlocked(space);
 
-        // Dispatch an editor:reloadState event to reload the editor state (render widgets etc.)
         void this.eventHook.dispatchEvent("editor:reloadState");
       });
     } finally {
@@ -540,7 +515,6 @@ export class ObjectIndex {
       const files = await space.deduplicatedFileList();
 
       console.log("Queing", files.length, "pages to be indexed.");
-      // Queue all file names to be indexed
       const startTime = Date.now();
       await this.mq.batchSend(
         "indexQueue",
@@ -613,7 +587,6 @@ export class ObjectIndex {
 
   async markFullIndexComplete() {
     await this.ds.set(indexVersionKey, desiredIndexVersion);
-    // The index is whole again — drop the interrupted-reindex marker.
     await this.ds.delete(reindexInProgressKey);
   }
 
@@ -722,7 +695,6 @@ export class ObjectIndex {
       }
     }
     if (tag === "link") {
-      // Route through the virtual link collection
       return this.linkObjects().query(query, env, sf) as Promise<
         ObjectValue<T>[]
       >;
@@ -766,7 +738,6 @@ export class ObjectIndex {
     if (file.endsWith(".md")) {
       file = file.replace(/\.md$/, "");
     }
-    // console.log("Clearing index for", file);
     const allKeys: KvKey[] = [];
     for await (const { key } of this.ds.query({
       prefix: [pageKey, file],
@@ -804,7 +775,6 @@ export class ObjectIndex {
     for await (const { key } of this.ds.query({ prefix: [pageKey] })) {
       allKeys.push(key);
     }
-    // Delete in chunks rather than as one giant transaction.
     const deleteChunkSize = 500;
     for (let i = 0; i < allKeys.length; i += deleteChunkSize) {
       await this.ds.batchDelete(allKeys.slice(i, i + deleteChunkSize));
@@ -880,7 +850,6 @@ export class ObjectIndex {
       const allTags = [obj.tag, ...(obj.tags || [])];
       for (const tag of allTags) {
         const tagDefinition = tagDefinitions[tag];
-        // Validate object based on schema if required
         if (
           tagDefinition?.schema &&
           (tagDefinition?.mustValidate || throwOnValidationErrors)
@@ -903,7 +872,6 @@ export class ObjectIndex {
             }
           }
         }
-        // Validate object based on validate callback if required
         if (
           tagDefinition?.validate &&
           (tagDefinition?.mustValidate || throwOnValidationErrors)
@@ -923,7 +891,6 @@ export class ObjectIndex {
             }
           }
         }
-        // Transform object
         if (tagDefinition?.transform) {
           let newObjects;
           try {
@@ -933,13 +900,11 @@ export class ObjectIndex {
           }
 
           if (!newObjects) {
-            // null value returned, just index as usual
             tagsToWrite.push(tag);
             continue;
           }
 
           if (!Array.isArray(newObjects)) {
-            // Probably returned single object, let's normalize
             newObjects = [newObjects];
           }
           // A transform function _must_ either return an empty list of objects to index, or return at least one object with the same ref
@@ -959,7 +924,6 @@ export class ObjectIndex {
               current = newObj;
               foundAssignedRef = true;
             } else {
-              // Some other object — needs its own processing pass
               objects.push(newObj);
             }
           }
@@ -973,8 +937,6 @@ export class ObjectIndex {
           tagsToWrite.push(tag);
         }
       }
-      // Emit kvs with the final transformed value so every tag's row shares
-      // the same post-transform state.
       const refKey = this.cleanKey(current.ref, page);
       for (const tag of tagsToWrite) {
         kvs.push({

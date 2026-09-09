@@ -7,7 +7,6 @@ export interface LuaTaggedFloat {
   readonly isFloat: true;
 }
 
-// Pre-allocated singletons for float zeros
 const FLOAT_POS_ZERO: LuaTaggedFloat = { value: 0, isFloat: true };
 const FLOAT_NEG_ZERO: LuaTaggedFloat = { value: -0, isFloat: true };
 
@@ -159,7 +158,6 @@ export function coerceNumericPair(
 ): CoerceNumericPairResult {
   const forceFloat = op === "/" || op === "^";
 
-  // Both plain numbers
   if (typeof a === "number" && typeof b === "number") {
     const lt = leftType ?? inferNumericType(a);
     const rt = rightType ?? inferNumericType(b);
@@ -175,7 +173,6 @@ export function coerceNumericPair(
     };
   }
 
-  // One tagged float, one plain number
   if (typeof a === "number" && isTaggedFloat(b)) {
     return {
       left: a,
@@ -192,7 +189,6 @@ export function coerceNumericPair(
     };
   }
 
-  // Both tagged floats
   if (isTaggedFloat(a) && isTaggedFloat(b)) {
     return {
       left: a.value,
@@ -201,7 +197,6 @@ export function coerceNumericPair(
     };
   }
 
-  // General fallback
   const A = coerceNumeric(a, leftType);
   const B = coerceNumeric(b, rightType);
 

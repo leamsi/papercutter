@@ -56,7 +56,6 @@ function parseSpec(
     }
   }
 
-  // Parse width
   let width = 0;
   if (i < len && fmt.charCodeAt(i) === 42) {
     // '*'
@@ -69,7 +68,6 @@ function parseSpec(
     }
   }
 
-  // Parse precision
   let hasPrec = false;
   let prec = 0;
   if (i < len && fmt.charCodeAt(i) === 46) {
@@ -183,7 +181,6 @@ function formatInt(n: number, spec: FormatSpec): string {
 
   if (upper) digits = digits.toUpperCase();
 
-  // Precision
   if (spec.hasPrec) {
     if (spec.prec === 0 && v === 0) {
       digits = "";
@@ -192,7 +189,6 @@ function formatInt(n: number, spec: FormatSpec): string {
     }
   }
 
-  // Alt flag
   let prefix = "";
   if (spec.flags & FLAG_HASH) {
     if (base === 8 && (digits.length === 0 || digits.charCodeAt(0) !== 48)) {
@@ -277,7 +273,6 @@ function formatFloat(n: number, spec: FormatSpec): string {
   // Alt flag for 'f'/'e': ensure decimal point exists
   if (spec.flags & FLAG_HASH && lower !== 103) {
     if (body.indexOf(".") === -1) {
-      // Insert dot before 'e' if present, else append
       const eIdx = body.indexOf("e");
       const EIdx = body.indexOf("E");
       const expIdx = eIdx !== -1 ? eIdx : EIdx;
@@ -348,7 +343,6 @@ function stripTrailingZerosG(s: string): string {
     // '0'
     end--;
   }
-  // Remove dot if nothing after it
   if (end === dotIdx + 1) {
     end = dotIdx;
   }
@@ -452,13 +446,11 @@ function hexFloatBody(abs: number, spec: FormatSpec): string {
   let mantBits: bigint;
 
   if (biasedExp === 0) {
-    // Subnormal
     if (frac === 0n) return "0x0p+0";
     const shift = 52 - bitLength(frac) + 1;
     mantBits = frac << BigInt(shift);
     exponent = -1022 - shift;
   } else {
-    // Normal
     exponent = biasedExp - 1023;
     mantBits = frac | (1n << 52n);
   }
@@ -680,8 +672,6 @@ export function luaFormat(fmt: string, ...args: any[]): string {
   while (i < len) {
     const c = fmt.charCodeAt(i);
     if (c !== 37) {
-      // not '%'
-      // Fast path: scan for next '%' or end
       let j = i + 1;
       while (j < len && fmt.charCodeAt(j) !== 37) j++;
       out += fmt.slice(i, j);
@@ -689,7 +679,6 @@ export function luaFormat(fmt: string, ...args: any[]): string {
       continue;
     }
 
-    // '%' found
     i++;
     if (i >= len) {
       throw new Error("invalid format (ends with '%')");
@@ -705,7 +694,6 @@ export function luaFormat(fmt: string, ...args: any[]): string {
     const { spec, end } = parseSpec(fmt, i);
     i = end + 1;
 
-    // Resolve `*` width and precision from args
     let width = spec.width;
     if (width === -1) {
       width = Number(args[ai++]) || 0;

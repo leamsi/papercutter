@@ -122,7 +122,6 @@ service.define {
   run = function(data)
     local name = data.name
     local content = data.text
-    -- Check configuration
     local checkOk, err = pcall(github.checkConfig)
     if not checkOk then
       editor.flashNotification(err, "error")
@@ -140,9 +139,7 @@ service.define {
     if not path then
       return
     end
-    -- Ask for a commit message
     local message = editor.prompt("Commit message:", "Commit")
-    -- Push the change
     local resp = github.request(github.buildAPIURL(repo, path), "PUT", {
       message = message,
       committer = {
@@ -173,7 +170,6 @@ service.define {
   run = function(data)
     local uri = data.uri
     local content = data.content
-    -- Check configuration
     local checkOk, err = pcall(github.checkConfig)
     if not checkOk then
       editor.flashNotification(err, "error")
@@ -186,9 +182,7 @@ service.define {
       error("Could not fetch existing file")
     end
     local sha = oldContent.body.sha
-    -- Ask for a commit message
     local message = editor.prompt("Commit message:", "Commit")
-    -- Push the change
     local resp = github.request(github.buildAPIURL(repo, path), "PUT", {
       message = message,
       committer = {
@@ -217,7 +211,6 @@ service.define {
       branch = "main"
     end
     local fullUrl = "https://github.com/" .. owner .. "/" .. repo .. "/blob/" .. branch .. "/" .. path
-    -- Redirect to full URI implementation
     net.writeURI(fullUrl, data.content)
   end
 }
@@ -306,7 +299,6 @@ local function extractGistId(url)
   return url:match("([^/]+)$")
 end
 
--- Share onboarding
 service.define {
   selector = "share:onboard",
   match = {

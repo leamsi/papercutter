@@ -106,21 +106,12 @@ export function useDerived({
       strip && phrase.startsWith(strip) ? phrase.slice(strip.length) : phrase;
     return hashtagFilter ? splitHashtags(typed) : { tags: [], rest: typed };
   }, [hashtagFilter, phrase, view?.meta.stripPrefix]);
-  // A stable stand-in for `tags`, whose array identity changes every
-  // keystroke: an untagged phrase keeps this `""` from keystroke to keystroke,
-  // so the row filtering below stays a per-segment memo rather than becoming
-  // per-keystroke work for every view. NUL-joined, because a `#<tag like
-  // this>` can itself contain spaces.
+  // Use a stable tag key so filtering stays memoized across untagged keystrokes.
+  // NUL separates tags because a tag can contain spaces.
   const tagKey = tags.join("\u0000");
 
-  // One pass over the batched `where` masks; free of syscalls, like the
-  // phrase below, so switching segments costs no round trip. A source-mode
-  // view subsets in its own source, off the label it was handed, so its rows
-  // arrive already filtered -- and no masks are computed to filter them with.
-  // The dropdown's masks are batched at load like the segments' are, so a
-  // selection is also mask-lookup cheap. Unlike segments it applies in source
-  // mode too: the source knows nothing of the dropdown, so its subsetting is
-  // always the panel's.
+  // Use batched masks to switch filters without syscalls. Source-mode views
+  // already apply segments, but dropdown filtering is always the panel’s job.
   const dropdownIndex = dropdownIndexFor(view?.dropdownOptions, dropdownValue);
 
   const filteredRows = useMemo(() => {
@@ -158,17 +149,12 @@ export function useDerived({
   }, [view, sourceMode, filteredRows, rankPhrase]);
 
   const limit = view?.meta.limit || DEFAULT_LIMIT;
-  // Everything past the cap stays out of the DOM: a phrase that matches
-  // thousands of rows is a phrase that needs another character, not 5000 rows
-  // of markup. See the footer row in the render.
+  // Cap rendered matches to keep broad queries from creating thousands of rows.
   const visible = ranked.length > limit ? ranked.slice(0, limit) : ranked;
 
   const segments = view?.meta.segments;
 
-  // The ranking phrase, not the raw one: a `#tag` in it is a filter, and a
-  // page named after the filter you typed is not what "create this" means.
-  // (FilterList makes the same choice -- its `allowNew` runs on the phrase its
-  // `phrasePreprocessor` already stripped.)
+  // Use the ranking phrase for creation so hashtag filters stay out of the name.
   const trimmedPhrase = rankPhrase.trim();
   // Same trigger as FilterList's `allowNew`: a non-empty phrase that no row
   // already carries verbatim. Scanning `view.rows` (not `ranked`) keeps this
@@ -205,9 +191,7 @@ export function useDerived({
     return out;
   }, [visible, createIndex]);
   const error = bootError ?? view?.error;
-  // An error with nothing left to show takes the panel; an error over rows
-  // that are still good is a banner above them. In source mode the source
-  // runs per keystroke, so one bad phrase must not clear the screen.
+  // Keep existing rows under source errors; a bad phrase must not clear the screen.
   const fatalError = !!error && ranked.length === 0;
   // The `where` masks never arrived (their batch failed), so this segment can
   // only fail closed -- which on its own looks exactly like "nothing matched".
@@ -267,10 +251,7 @@ export function useDerived({
     activeTreeIndex >= 0 && activeTreeIndex < treeVisible.length
       ? treeVisible[activeTreeIndex].node
       : undefined;
-  // Derived from the index rather than from the sentinel, so the fallback to
-  // index 0 lands on the create row when the phrase pruned the tree to
-  // nothing -- otherwise the only visible row would look actionable while
-  // Enter did nothing.
+  // Derive from the index so an empty filtered tree selects its sole create row.
   const createSelectedInTree =
     canCreate && activeTreeIndex >= 0 && activeTreeIndex >= treeVisible.length;
   const createSelected = isTreeMode

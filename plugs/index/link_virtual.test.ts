@@ -1,8 +1,4 @@
-// Regression coverage for the virtual `link` collection.
-//
-// `link` records are no longer indexed directly; they're projected
-// from `relation` records via `relationToLink` whenever something
-// queries the `link` tag.
+// The virtual link collection projects relation records through relationToLink.
 
 import type { PageMeta } from "@silverbulletmd/silverbullet/type/index";
 import { expect, test } from "vitest";
@@ -143,9 +139,8 @@ spouse: "[[Jack]]"
   const fm = extractFrontMatter(tree);
   const relations = await indexRelations(meta("People"), fm, tree, page);
 
-  // Inline attributes and `#tag` data blocks now carry the attribute key
-  // as their `kind` (e.g. `attr`, `spouse`), which projects into the
-  // legacy `link` index. Co-mentions still have no `link` representation.
+  // Inline attributes and data blocks use the attribute key as kind and project
+  // into the link collection. Co-mentions have no link representation.
   const kinds = new Set(
     relations.filter((o: any) => o.tag === "relation").map((o: any) => o.kind),
   );
@@ -155,8 +150,7 @@ spouse: "[[Jack]]"
 
   const virtual = virtualLinks(relations);
   expect(virtual.every((l) => l.type === "page")).toBe(true);
-  // Both the inline attribute and the data block contribute a Jack link
-  // now, alongside the two prose mentions.
+  // The inline attribute and data block each contribute a link alongside the prose mentions.
   expect(new Set(virtual.map((l) => l.toPage))).toEqual(
     new Set(["Jack", "Linda"]),
   );

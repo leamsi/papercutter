@@ -558,10 +558,8 @@ test("an async for loop bills its IO wait to nothing", async () => {
   expect(limitCalls).toBe(0);
 });
 
-// F1-F4 regression coverage: constructs whose await happens somewhere other
-// than a loop body's own back-edge -- a for-header bound, a for-in
-// expression list, a native async iterator call, or a statement that
-// precedes a loop entirely -- must also never bill their wait to busyMs.
+// Exclude async waits outside loop back-edges too: for-header bounds,
+// iterator expressions/calls, and statements preceding loops.
 async function assertNeverGrinds(
   code: string,
   setup?: (
@@ -750,12 +748,8 @@ test("await never grinds: for-in expression list await", async () => {
 });
 
 test("await never grinds: label bubbled up from a nested block, in a function known to use goto elsewhere", async () => {
-  // A block that has no direct goto/label of its own, but inherits
-  // `hasLabel` from a nested block, takes evalBlockNoClose's non-meta
-  // `runFrom` (not runStatementsNoGoto's `processFrom`) whenever the
-  // enclosing function is *already known* to use goto somewhere. A real
-  // (if contrived) goto/label pair in the same function establishes that
-  // condition naturally -- no need to fabricate interpreter state.
+  // A nested label routes an enclosing goto-aware function through runFrom.
+  // Use a real goto/label pair to exercise that continuation path.
   await assertNeverGrinds(
     `
     local function f()
@@ -775,13 +769,8 @@ test("await never grinds: label bubbled up from a nested block, in a function kn
   );
 });
 
-// The remaining constructs' own body-promise resume points are only
-// reachable in practice once a *nested* back-edge has already consumed the
-// `awaited` flag that the body's own statement-sequencing set -- otherwise
-// that inner mark alone would already protect a plain "body awaits" test.
-// `bump` manufactures a second, unmarked wait right after that inner
-// consumption so each construct's own mark is the only thing that can
-// still protect it.
+// An inner back-edge consumes awaited first. Add a second unmarked wait
+// so only the enclosing construct’s resume hook can exclude that time.
 test("await never grinds: while body await, past an inner consumption", async () => {
   await assertNeverGrinds(
     `
@@ -797,14 +786,9 @@ test("await never grinds: while body await, past an inner consumption", async ()
 });
 
 test("await never grinds: repeat body await, past an inner consumption", async () => {
-  // A trailing iteration is required: the trick iteration's own back-edge
-  // check is what would observe a missing mark, and with the trick on the
-  // *last* iteration the loop exits before any such check runs, making
-  // the mark unobservable either way. The trick must also stay a flat
-  // sequence of sibling statements, not wrapped in its own `if` block --
-  // wrapping it re-triggers runStatementsNoGoto's own resume (already
-  // fixed) on the *outer* block after `bump()` has already run, which
-  // would re-mark `awaited` and mask the very thing being isolated here.
+  // Keep a trailing iteration so its back-edge observes the missing mark.
+  // Use flat sibling statements: an enclosing if would introduce another
+  // resume hook and mask the behavior under test.
   await assertNeverGrinds(
     `
     local i = 0
@@ -869,16 +853,8 @@ test("await never grinds: for-in sync-iterator body await, past an inner consump
   );
 });
 
-// The `bump`-based tests above pin these same body-promise sites, but only
-// by asserting that *over*-marking excuses genuinely synchronous grinding
-// (an inner back-edge consumes the mark, then `bump` adds pure sync work,
-// and the assertion is that this still isn't billed). That's within the
-// design's intended slack, but it isn't the property these sites actually
-// exist to protect. An async `<close>` handler is: `withCloseBoundary`
-// (eval.ts) turns an otherwise fully-synchronous loop body into a promise
-// once `luaCloseFromMark` itself returns one, so no statement-level mark
-// ever sees a promise here -- the loop driver's own body-promise `.then`
-// is the *only* thing that can mark this wait as awaited.
+// An async __close turns a synchronous loop body into a promise without
+// statement-level awaits; only the loop driver can mark that wait.
 test("await never grinds: while loop body with an async <close> handler", async () => {
   await assertNeverGrinds(
     `

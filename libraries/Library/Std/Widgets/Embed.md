@@ -17,7 +17,6 @@ ${embed.vimeo "https://vimeo.com/1084537"}
 # Implementation
 ```space-lua
 -- priority: 10
--- Schema
 local embedVideoSpecSchema = {
   type = "object",
   properties = {
@@ -28,12 +27,10 @@ local embedVideoSpecSchema = {
   required = {"url"}
 }
 
--- Youtube widget
 function embed.youtube(specOrUrl)
   if type(specOrUrl) == "string" then
     specOrUrl = { url = specOrUrl }
   end
-  -- Validate spec
   local validationResult = jsonschema.validateObject(embedVideoSpecSchema, specOrUrl)
   if validationResult then
     error(validationResult)
@@ -62,12 +59,10 @@ function embed.youtube(specOrUrl)
   })
 end
 
--- Peertube widget
 function embed.peertube(specOrUrl)
   if type(specOrUrl) == "string" then
     specOrUrl = { url = specOrUrl }
   end
- -- Validate spec
   local validationResult = jsonschema.validateObject(embedVideoSpecSchema, specOrUrl)
   if validationResult then
     error(validationResult)
@@ -94,12 +89,10 @@ function embed.peertube(specOrUrl)
   })
 end
 
--- Vimeo widget
 function embed.vimeo(specOrUrl)
   if type(specOrUrl) == "string" then
     specOrUrl = { url = specOrUrl }
   end
-  -- Validate spec
   local validationResult = jsonschema.validateObject(embedVideoSpecSchema, specOrUrl)
   if validationResult then
     error(validationResult)

@@ -1,9 +1,6 @@
 /**
- * Matched-character highlighting for a row's primary text -- one
- * `<mark>`-per-token pass, driven by whatever phrase is currently ranking
- * rows. Token-based rather than positional: most fuzzy rankers score a
- * candidate without reporting which characters it matched, so this does its
- * own (cheap) substring search over the same tokens the ranker was handed.
+ * Highlights phrase tokens independently of ranking: fuzzy rankers do not
+ * necessarily report the character positions they matched.
  */
 
 function escapeRegExp(s: string): string {

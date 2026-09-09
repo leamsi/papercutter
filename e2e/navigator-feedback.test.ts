@@ -36,13 +36,8 @@ view.define {
 \`\`\`
 `;
 
-// A render-phase exception, not a data-level one already caught elsewhere:
-// `row.primary` here is a *number*. `highlightMatches` (row_item.tsx) short-
-// circuits on an empty phrase and hands it straight back as a child --
-// preact renders "42" fine, first paint. Typing a character gives it a
-// phrase to search, at which point it calls `.split` on that same number and
-// throws, synchronously, inside the render -- exactly the shape the NavRoot
-// error boundary (Addendum 9) exists to catch.
+// Numeric row.primary renders with an empty phrase, but throws inside
+// highlightMatches once typing triggers .split(), exercising the render boundary.
 const THROW_ON_RENDER_CONFIG = `# Throws on second render
 \`\`\`space-lua
 view.define {

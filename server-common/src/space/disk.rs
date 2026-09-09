@@ -81,12 +81,10 @@ impl DiskSpacePrimitives {
     pub fn safe_path(&self, path: &str) -> Result<PathBuf, SpaceError> {
         let clean = Path::new(path);
 
-        // Reject absolute paths.
         if clean.is_absolute() {
             return Err(SpaceError::PathOutsideRoot);
         }
 
-        // Reject any `..` component — lexical traversal in the request itself.
         for component in clean.components() {
             if matches!(component, std::path::Component::ParentDir) {
                 return Err(SpaceError::PathOutsideRoot);
@@ -141,10 +139,8 @@ impl DiskSpacePrimitives {
 
     /// Build FileMeta from filesystem metadata.
     fn file_info_to_meta(&self, name: &str, metadata: &fs::Metadata) -> FileMeta {
-        // `created()` reads btime, which is unavailable on NFS, many SMB/CIFS
-        // mounts, tmpfs, and overlayfs (statx reports it unsupported). Fall back
-        // to mtime there so `created` is a sane non-zero value rather than the
-        // 1970 epoch. (`modified()` is `st_mtime`, present on every real FS.)
+        // Birth time is unavailable on some filesystems (NFS, SMB, tmpfs, overlayfs).
+        // Fall back to mtime instead of reporting the Unix epoch.
         let created = metadata
             .created()
             .ok()
@@ -238,12 +234,10 @@ impl DiskSpacePrimitives {
             .follow_links(true)
             .into_iter()
             .filter_entry(move |e| {
-                // Skip hidden directories at traversal time
                 if e.file_type().is_dir() && e.file_name().to_string_lossy().starts_with('.') {
                     // Allow the root directory itself (which may start with .)
                     return e.depth() == 0;
                 }
-                // Prune ignored directories so we don't recurse into them
                 if let Some(ref gi) = gi_for_filter {
                     if e.depth() > 0 && e.file_type().is_dir() {
                         let rel = e.path().strip_prefix(&root_path).unwrap_or(e.path());
@@ -259,7 +253,6 @@ impl DiskSpacePrimitives {
             let path = entry.path();
             let is_dir = entry.file_type().is_dir();
 
-            // Skip hidden files (hidden directories were already pruned above)
             if !is_dir && entry.file_name().to_string_lossy().starts_with('.') {
                 continue;
             }
@@ -270,7 +263,6 @@ impl DiskSpacePrimitives {
                 continue;
             }
 
-            // Apply gitignore (check the file path and all parent directories)
             if matcher.is_ignored(&relative, false) {
                 continue;
             }
@@ -303,7 +295,6 @@ impl DiskSpacePrimitives {
                 break;
             }
             if fs::remove_dir(&dir).is_err() {
-                // Directory not empty or other error — stop
                 break;
             }
             current = dir.parent().map(Path::to_path_buf);
@@ -366,7 +357,6 @@ impl SpacePrimitives for DiskSpacePrimitives {
         // entry but keeps its old name, so the rename never lands.
         self.recase_to_requested(path);
 
-        // Ensure parent directory exists
         if let Some(parent) = local_path.parent() {
             fs::create_dir_all(parent)
                 .map_err(|e| SpaceError::WriteError(format!("{path}: {e}")))?;
@@ -567,9 +557,7 @@ mod plan_tests {
 
     #[test]
     fn timestamps_are_nonzero() {
-        // Guards the `created`/`last_modified` epoch (1970) regression: both must
-        // be populated for a freshly written file. On filesystems without btime,
-        // `created` comes from the mtime fallback rather than 0.
+        // Filesystems without birth time must report mtime rather than the Unix epoch.
         let dir = tempdir().unwrap();
         let sp = DiskSpacePrimitives::new(dir.path(), "").unwrap();
         let meta = sp.write_file("a.md", b"x", None).unwrap();
@@ -636,8 +624,6 @@ mod plan_tests {
         assert_eq!(sp.read_file("Notes/A.md").unwrap().0, b"two");
     }
 
-    /// With the flag off, the backend must behave exactly as it did before this
-    /// change — this is what protects Linux servers.
     #[test]
     fn write_does_nothing_special_when_case_sensitive() {
         let dir = tempdir().unwrap();
@@ -650,7 +636,6 @@ mod plan_tests {
         let mut found = names(&sp);
         found.sort();
         if sp_fs_is_case_insensitive(dir.path()) {
-            // Historical behavior: the alias truncates and the name survives.
             assert_eq!(found, vec!["OldName.md".to_string()]);
         } else {
             assert_eq!(
@@ -740,10 +725,7 @@ mod plan_tests {
 
             sp.write_file("linked/a.md", b"two", None).unwrap();
 
-            // Reads the literal directory entry name rather than doing a
-            // case-insensitive path lookup (`.join("Linked").is_symlink()`) —
-            // on default APFS that lookup would still resolve to a renamed
-            // `linked` entry and pass either way, masking a regression.
+            // Inspect the directory entry: a case-insensitive lookup would accept either casing.
             let entries: Vec<String> = std::fs::read_dir(dir.path())
                 .unwrap()
                 .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
@@ -863,7 +845,7 @@ mod merge_eligible_tests {
 
 /// Tree-walk behavior around symlinks and unreadable directories. Unix-only:
 /// relies on `std::os::unix` symlink + permission APIs. Mirrors the behavior of
-/// the previous `fastwalk`-based walker (follow symlinks; skip-and-continue on
+/// the filesystem traversal contract (follow symlinks; skip-and-continue on
 /// errors; terminate on cycles).
 #[cfg(all(test, unix))]
 mod unix_walk_tests {
@@ -888,7 +870,7 @@ mod unix_walk_tests {
         let dir = tempdir().unwrap();
         let sp = DiskSpacePrimitives::new(dir.path(), "").unwrap();
         sp.write_file("a.md", b"hello", None).unwrap();
-        symlink("a.md", dir.path().join("b.md")).unwrap(); // b.md -> a.md (in-space)
+        symlink("a.md", dir.path().join("b.md")).unwrap();
         let n = names(&sp);
         assert!(n.contains(&"a.md".to_string()));
         assert!(
@@ -902,7 +884,7 @@ mod unix_walk_tests {
         let dir = tempdir().unwrap();
         let sp = DiskSpacePrimitives::new(dir.path(), "").unwrap();
         sp.write_file("sub/c.md", b"hi", None).unwrap();
-        symlink("sub", dir.path().join("link")).unwrap(); // link -> sub (in-space dir)
+        symlink("sub", dir.path().join("link")).unwrap();
         let n = names(&sp);
         assert!(n.contains(&"sub/c.md".to_string()));
         assert!(
@@ -933,7 +915,7 @@ mod unix_walk_tests {
         let sp = DiskSpacePrimitives::new(dir.path(), "").unwrap();
         std::fs::create_dir(dir.path().join("d")).unwrap();
         sp.write_file("d/x.md", b"x", None).unwrap();
-        symlink(dir.path().join("d"), dir.path().join("d/loop")).unwrap(); // d/loop -> d
+        symlink(dir.path().join("d"), dir.path().join("d/loop")).unwrap();
         let n = names(&sp);
         assert!(
             n.contains(&"d/x.md".to_string()),
@@ -951,7 +933,6 @@ mod unix_walk_tests {
         let dir = tempdir().unwrap();
         let sp = DiskSpacePrimitives::new(dir.path(), "").unwrap();
         sp.write_file("inside.md", b"x", None).unwrap();
-        // ext.md -> /outside/external.md (absolute target, outside the space)
         symlink(
             outside.path().join("external.md"),
             dir.path().join("ext.md"),
@@ -970,14 +951,12 @@ mod unix_walk_tests {
 
     #[test]
     fn symlink_to_outside_dir_contents_listed_and_readable() {
-        // Linking an external folder into a space is supported too.
         let outside = tempdir().unwrap();
         std::fs::create_dir(outside.path().join("shared")).unwrap();
         std::fs::write(outside.path().join("shared/doc.md"), b"shared doc").unwrap();
 
         let dir = tempdir().unwrap();
         let sp = DiskSpacePrimitives::new(dir.path(), "").unwrap();
-        // shared -> /outside/shared (external directory)
         symlink(outside.path().join("shared"), dir.path().join("shared")).unwrap();
 
         let n = names(&sp);

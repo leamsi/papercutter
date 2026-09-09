@@ -66,7 +66,6 @@ export class AssetBundle {
     data: Uint8Array,
     mtime: number = Date.now(),
   ) {
-    // Replace \ with / for windows
     path = path.replaceAll("\\", "/");
     this.bundle[path] = {
       data: base64EncodedDataUrl(mimeType, data),

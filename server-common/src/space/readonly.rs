@@ -64,7 +64,6 @@ mod tests {
         let ro = ro();
         assert!(ro.write_file("b.md", b"x", None).is_err());
         assert!(ro.delete_file("a.md").is_err());
-        // The underlying file is untouched.
         assert!(ro.read_file("a.md").is_ok());
     }
 }
