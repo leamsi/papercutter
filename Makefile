@@ -1,4 +1,4 @@
-.PHONY: build build-e2e build-for-docker build-linux-ci docker build-server-releases build-server-releases-macos build-server-releases-freebsd build-cli-releases-rust build-cli-releases-freebsd build-cli-releases-rust-macos clean check fmt test test-e2e test-e2e-all test-e2e-release bench generate website install uninstall bundle build-rs build-rs-cli run-rs
+.PHONY: build build-e2e build-for-docker build-linux-ci docker build-server-releases build-server-releases-macos build-server-releases-freebsd build-cli-releases-rust build-cli-releases-freebsd build-cli-releases-rust-macos clean check fmt test test-e2e test-e2e-all test-e2e-release test-e2e-oidc bench generate website install uninstall bundle build-rs build-rs-cli run-rs
 
 build:
 	npm run build
@@ -6,10 +6,8 @@ build:
 	cargo build --release -p silverbullet
 	cargo build --release -p sb
 
-# Fast build for the e2e suite: a debug server (rust-embed reads the client
-# bundle from disk in debug, so no embed step) plus the frontend bundle. Skips
-# the release compile, plug-compile, and the `sb` CLI — none are exercised by
-# the debug e2e suite. The embedded-bundle path is covered by `test-e2e-release`.
+# Debug rust-embed serves the client bundle from disk. Embedded assets are
+# covered separately by test-e2e-release.
 build-e2e:
 	npm run build
 	cargo build -p silverbullet
@@ -18,10 +16,8 @@ setup:
 	npm install
 	npx playwright install
 
-# Install the `silverbullet` server and `sb` CLI into Cargo's bin directory
-# (~/.cargo/bin, normally already on PATH). `cargo install` copies a stable
-# release artifact (re-run to update). Set `CARGO_INSTALL_ROOT` or pass
-# `--root <dir>` to install elsewhere.
+# cargo install puts stable release binaries on PATH; set CARGO_INSTALL_ROOT
+# to override the default ~/.cargo location.
 install:
 	cargo install --path bin/silverbullet --force
 	cargo install --path bin/sb --force
@@ -39,20 +35,13 @@ build-for-docker:
 	cargo build --release -p silverbullet --target armv7-unknown-linux-musleabihf
 	cp target/armv7-unknown-linux-musleabihf/release/silverbullet silverbullet-arm
 
-# CI: compile each Linux target ONCE, emitting BOTH the raw docker binaries
-# (silverbullet-<arch>, consumed by Dockerfile via TARGETARCH) and the
-# server/CLI release zips. Replaces the old split where docker.yml and edge.yml
-# each recompiled the musl server binaries independently.
+# Build each Linux target once for both Docker binaries and release archives.
 build-linux-ci: build-for-docker
-	# Server release zips reuse the raw musl binaries built by build-for-docker
-	# (no recompile).
 	cp silverbullet-amd64 silverbullet && zip silverbullet-server-linux-x86_64.zip silverbullet && rm silverbullet
 	cp silverbullet-arm64 silverbullet && zip silverbullet-server-linux-aarch64.zip silverbullet && rm silverbullet
 	cp silverbullet-arm   silverbullet && zip silverbullet-server-linux-armv7.zip   silverbullet && rm silverbullet
-	# Windows server (no docker image for windows → no raw copy kept)
 	cargo build --release -p silverbullet --target x86_64-pc-windows-gnu
 	cp target/x86_64-pc-windows-gnu/release/silverbullet.exe silverbullet.exe && zip silverbullet-server-windows-x86_64.zip silverbullet.exe && rm silverbullet.exe
-	# sb CLI release zips (musl x3 + windows)
 	$(MAKE) build-cli-releases-rust
 
 docker: build-for-docker
@@ -90,13 +79,11 @@ build-server-releases-freebsd:
 	cargo build --release -p silverbullet --target x86_64-unknown-freebsd
 	cp target/x86_64-unknown-freebsd/release/silverbullet silverbullet && zip silverbullet-server-freebsd-x86_64.zip silverbullet && rm silverbullet
 
-# --- Rust standalone server binary (bin/silverbullet) -----------------------
 build-rs:
 	npm run build
 	cargo build --release -p silverbullet
 	@echo "Built: target/release/silverbullet"
 
-# --- Rust standalone CLI client (bin/sb) ------------------------------------
 build-rs-cli:
 	cargo build --release -p sb
 	@echo "Built: target/release/sb"
@@ -151,6 +138,9 @@ test:
 	npx vitest run
 	cargo test --workspace --all-features
 
+test-e2e-oidc: build-e2e
+	npx playwright test --config=playwright.oidc.config.ts
+
 test-e2e: build-e2e
 	npx playwright test --project=chromium
 
@@ -175,4 +165,3 @@ generate:
 
 edit-docs: build-rs
 	SB_INDEX_PAGE=SilverBullet SB_DISABLE_SERVICE_WORKER=1 ./target/release/silverbullet -p 3001 docs
-

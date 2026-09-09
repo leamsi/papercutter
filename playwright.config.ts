@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: "**/oidc/**",
   timeout: 60_000,
   expect: { timeout: 30_000 },
   fullyParallel: false,
@@ -24,7 +25,7 @@ export default defineConfig({
       name: "chromium",
       // The embedded-bundle test needs the release binary; it runs as its
       // own `release` project (see `make test-e2e-release`).
-      testIgnore: "**/release-embedded.test.ts",
+      testIgnore: ["**/release-embedded.test.ts", "**/oidc/**"],
       use: {
         ...devices["Desktop Chrome"],
         // CI runners have a small /dev/shm, which crashes the chromium
@@ -34,13 +35,13 @@ export default defineConfig({
     },
     {
       name: "firefox",
-      testIgnore: "**/release-embedded.test.ts",
+      testIgnore: ["**/release-embedded.test.ts", "**/oidc/**"],
       retries: 2,
       use: { ...devices["Desktop Firefox"] },
     },
     {
       name: "webkit",
-      testIgnore: "**/release-embedded.test.ts",
+      testIgnore: ["**/release-embedded.test.ts", "**/oidc/**"],
       retries: 2,
       use: { ...devices["Desktop Safari"] },
     },
