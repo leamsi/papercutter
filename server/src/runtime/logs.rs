@@ -17,13 +17,44 @@ pub struct LogEntry {
     pub timestamp: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LogBatch {
+    pub entries: Vec<LogEntry>,
+    pub cursor: Option<String>,
+    pub dropped: bool,
+}
+
 const MAX_LOG_ENTRIES: usize = 1000;
+
+#[derive(Clone)]
+struct SequencedLogEntry {
+    sequence: u64,
+    entry: LogEntry,
+}
+
+struct LogState {
+    generation: String,
+    sequence: u64,
+    entries: VecDeque<SequencedLogEntry>,
+}
 
 /// A cloneable, thread-safe bounded ring buffer of log entries. Clones share
 /// the same underlying buffer (so the transport and the runtime see one log).
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct LogBuffer {
-    inner: Arc<Mutex<VecDeque<LogEntry>>>,
+    inner: Arc<Mutex<LogState>>,
+}
+
+impl Default for LogBuffer {
+    fn default() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(LogState {
+                generation: uuid::Uuid::new_v4().to_string(),
+                sequence: 0,
+                entries: VecDeque::new(),
+            })),
+        }
+    }
 }
 
 impl LogBuffer {
@@ -33,21 +64,26 @@ impl LogBuffer {
 
     /// Append an entry, evicting the oldest once `MAX_LOG_ENTRIES` is reached.
     pub fn push(&self, entry: LogEntry) {
-        let mut buf = self.inner.lock().unwrap();
-        if buf.len() >= MAX_LOG_ENTRIES {
-            buf.pop_front();
+        let mut state = self.inner.lock().unwrap();
+        state.sequence += 1;
+        let sequence = state.sequence;
+        if state.entries.len() >= MAX_LOG_ENTRIES {
+            state.entries.pop_front();
         }
-        buf.push_back(entry);
+        state
+            .entries
+            .push_back(SequencedLogEntry { sequence, entry });
     }
 
     /// Return entries, optionally only those strictly newer than `since`
     /// (timestamp), capped to the most recent `limit`.
     pub fn query(&self, limit: usize, since: Option<i64>) -> Vec<LogEntry> {
-        let buf = self.inner.lock().unwrap();
-        let filtered: Vec<LogEntry> = buf
+        let state = self.inner.lock().unwrap();
+        let filtered: Vec<LogEntry> = state
+            .entries
             .iter()
-            .filter(|e| since.is_none_or(|s| e.timestamp > s))
-            .cloned()
+            .filter(|e| since.is_none_or(|s| e.entry.timestamp > s))
+            .map(|e| e.entry.clone())
             .collect();
         if limit < filtered.len() {
             filtered[filtered.len() - limit..].to_vec()
@@ -55,6 +91,54 @@ impl LogBuffer {
             filtered
         }
     }
+
+    pub fn query_batch(&self, limit: usize, cursor: Option<&str>) -> LogBatch {
+        let state = self.inner.lock().unwrap();
+        let requested = cursor.and_then(parse_cursor);
+        let cursor_matches = requested
+            .as_ref()
+            .is_some_and(|(generation, _)| generation == &state.generation);
+        let requested_sequence = requested
+            .as_ref()
+            .filter(|_| cursor_matches)
+            .map(|(_, sequence)| *sequence);
+        let mut dropped = cursor.is_some() && requested_sequence.is_none();
+        if requested_sequence.is_some_and(|sequence| sequence > state.sequence) {
+            dropped = true;
+        }
+        let start_sequence = requested_sequence.filter(|sequence| *sequence <= state.sequence);
+        if let (Some(sequence), Some(first)) = (start_sequence, state.entries.front()) {
+            if sequence.saturating_add(1) < first.sequence {
+                dropped = true;
+            }
+        }
+        let mut entries: Vec<LogEntry> = state
+            .entries
+            .iter()
+            .filter(|entry| start_sequence.is_none_or(|sequence| entry.sequence > sequence))
+            .map(|entry| entry.entry.clone())
+            .collect();
+        if limit > 0 && entries.len() > limit {
+            if cursor.is_some() {
+                dropped = true;
+            }
+            entries = entries.split_off(entries.len() - limit);
+        }
+        LogBatch {
+            entries,
+            cursor: Some(format_cursor(&state.generation, state.sequence)),
+            dropped,
+        }
+    }
+}
+
+fn format_cursor(generation: &str, sequence: u64) -> String {
+    format!("{generation}:{sequence}")
+}
+
+fn parse_cursor(cursor: &str) -> Option<(String, u64)> {
+    let (generation, sequence) = cursor.rsplit_once(':')?;
+    Some((generation.to_string(), sequence.parse().ok()?))
 }
 
 #[cfg(test)]
@@ -120,5 +204,49 @@ mod tests {
         let b = a.clone();
         a.push(entry("shared", 1));
         assert_eq!(b.query(100, None).len(), 1);
+    }
+
+    #[test]
+    fn cursor_distinguishes_entries_with_the_same_timestamp() {
+        let buf = LogBuffer::new();
+        buf.push(entry("first", 7));
+        let initial = buf.query_batch(100, None);
+        let cursor = initial.cursor.unwrap();
+
+        buf.push(entry("second", 7));
+        let next = buf.query_batch(100, Some(&cursor));
+
+        assert_eq!(next.entries, vec![entry("second", 7)]);
+        assert!(!next.dropped);
+    }
+
+    #[test]
+    fn cursor_reports_entries_evicted_before_the_next_read() {
+        let buf = LogBuffer::new();
+        buf.push(entry("before", 1));
+        let cursor = buf.query_batch(100, None).cursor.unwrap();
+        for i in 0..=MAX_LOG_ENTRIES {
+            buf.push(entry(&format!("after-{i}"), 2));
+        }
+
+        let next = buf.query_batch(usize::MAX, Some(&cursor));
+
+        assert!(next.dropped);
+        assert_eq!(next.entries.len(), MAX_LOG_ENTRIES);
+        assert_eq!(next.entries.first().unwrap().text, "after-1");
+    }
+
+    #[test]
+    fn cursor_reports_a_new_buffer_generation() {
+        let old = LogBuffer::new();
+        old.push(entry("old", 1));
+        let cursor = old.query_batch(100, None).cursor.unwrap();
+        let restarted = LogBuffer::new();
+        restarted.push(entry("new", 2));
+
+        let next = restarted.query_batch(100, Some(&cursor));
+
+        assert!(next.dropped);
+        assert_eq!(next.entries, vec![entry("new", 2)]);
     }
 }
