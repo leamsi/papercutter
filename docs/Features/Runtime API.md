@@ -9,7 +9,7 @@ The Runtime API lets you interact with a SilverBullet client programmatically vi
 Requests are evaluated via Chrome DevTools Protocol (CDP) in a headless Chrome instance, which does the actual execution so all results reflect the live client state.
 
 > **note** Note
-> The [[Features/CLI]] provides a convenient command-line interface for the Runtime API — evaluate Lua, run scripts, open a REPL, and more, without writing raw HTTP requests.
+> The [[Features/CLI]] provides a convenient command-line interface for the Runtime API — evaluate Lua, run scripts, and more, without writing raw HTTP requests.
 
 # Setup
 The Runtime API is enabled automatically when Chrome, Chromium, or Chromium headless shell is detected on your system — no configuration needed. Auto-detection prefers headless shell when it is available on `PATH`.
@@ -69,12 +69,6 @@ return pages' \
 # => {"result":[{"name":"index"},{"name":"Projects"},{"name":"TODO"}]}
 ```
 
-## Evaluate console input
-
-`POST /.runtime/lua_script` with `X-SilverBullet-Lua-Mode: repl` parses input as an expression first, then as a statement block if expression parsing fails. It executes the chosen form exactly once; execution errors do not trigger a second attempt. Scope and result conversion follow the script endpoint, including returning only the first Lua return value.
-
-Before sending this header, check the authenticated `GET /.runtime/logs?limit=1` response for `X-SilverBullet-Lua-Modes: repl`. Older servers ignore unknown request headers, so callers must check support before submitting input. Plain script requests without the mode header retain their existing behavior.
-
 ## Console logs
 `GET /.runtime/logs`
 
@@ -83,8 +77,7 @@ Returns recent console log entries from the headless browser.
 | Query parameter | Description |
 |---|---|
 | `limit` | Maximum number of entries to return (default: 100, server retains up to 1000) |
-| `since` | Unix millisecond timestamp — only return entries newer than this; takes precedence over `cursor` |
-| `cursor` | Opaque cursor returned by a prior response; receives subsequent entries without timestamp collisions |
+| `since` | Unix millisecond timestamp — only return entries newer than this |
 
 ```bash
 curl http://localhost:3000/.runtime/logs?limit=5
@@ -99,8 +92,6 @@ curl http://localhost:3000/.runtime/logs?limit=5
   ]
 }
 ```
-
-Responses also include `cursor` (an opaque string, or null when unavailable) and `dropped` (boolean). Pass the cursor back on subsequent requests without `since`. A cursor identifies both the runtime generation and log position. `dropped: true` means the runtime changed or entries are no longer available; the response contains the available recent entries and a fresh cursor. Older servers may omit both fields. The CLI console uses cursor polling when available and overlapping snapshots for older servers.
 
 Each entry has:
 * `level` — one of `log`, `info`, `warn`, `error`, `debug`

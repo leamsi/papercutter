@@ -5,7 +5,7 @@ use std::sync::{
 };
 use std::time::Duration;
 
-use super::{LogBatch, LogEntry, RuntimeBackend, RuntimeError, RuntimeInstance};
+use super::{LogEntry, RuntimeBackend, RuntimeError, RuntimeInstance};
 use crate::auth::{AccessLevel, AccessPolicy, Actor, AuthContext, AuthOutcome, RequestAuthorizer};
 use crate::multi::{
     instance::{RuntimeFactory, RuntimeRequest},
@@ -77,16 +77,6 @@ impl RuntimeBackend for RuntimeLease {
             return vec![];
         }
         self.backend.logs(limit, since)
-    }
-    fn log_batch(&self, limit: usize, cursor: Option<&str>) -> LogBatch {
-        if !self.valid() {
-            return LogBatch {
-                entries: vec![],
-                cursor: None,
-                dropped: false,
-            };
-        }
-        self.backend.log_batch(limit, cursor)
     }
     fn ready(&self) -> bool {
         self.valid() && self.backend.ready()
@@ -381,17 +371,6 @@ mod tests {
         fn logs(&self, _: usize, _: Option<i64>) -> Vec<super::super::LogEntry> {
             vec![]
         }
-        fn log_batch(&self, _: usize, cursor: Option<&str>) -> LogBatch {
-            LogBatch {
-                entries: vec![LogEntry {
-                    level: "log".into(),
-                    text: self.id.to_string(),
-                    timestamp: 1,
-                }],
-                cursor: cursor.map(str::to_string),
-                dropped: false,
-            }
-        }
         fn ready(&self) -> bool {
             !self.stopped.load(Ordering::SeqCst)
         }
@@ -491,17 +470,6 @@ mod tests {
         assert!(!runtime.manage_runtime(&initial[0].id, true).unwrap());
         assert!(runtime.manage_runtime(&replacement[0].id, true).unwrap());
         assert!(runtime.runtime_instances().is_empty());
-    }
-
-    #[test]
-    fn actor_lease_forwards_cursor_log_reads_to_its_backend() {
-        let runtime = runtime(Arc::new(AtomicBool::new(true)));
-        let lease = runtime.for_actor(&actor("writer-one")).unwrap().unwrap();
-
-        let batch = lease.log_batch(10, Some("fixture:3"));
-
-        assert_eq!(batch.entries[0].text, "0");
-        assert_eq!(batch.cursor.as_deref(), Some("fixture:3"));
     }
 
     #[test]

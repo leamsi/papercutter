@@ -17,9 +17,6 @@ use crate::runtime::RuntimeError;
 use crate::state::ServerState;
 
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
-const LUA_MODE_HEADER: &str = "X-SilverBullet-Lua-Mode";
-const LUA_MODES_HEADER: &str = "X-SilverBullet-Lua-Modes";
-const LUA_MODES: &str = "expression, script, repl";
 
 /// X-Timeout is a whole number of seconds, defaulting to 30.
 pub(crate) fn parse_timeout(headers: &HeaderMap) -> Duration {
@@ -104,17 +101,9 @@ async fn runtime_eval(
             .into_response();
     }
     let timeout = parse_timeout(&headers);
-    let fn_name = match (kind, headers.get(LUA_MODE_HEADER)) {
-        (EvalKind::Lua, _) => "sbRuntime.evalLua",
-        (EvalKind::Script, None) => "sbRuntime.evalLuaScript",
-        (EvalKind::Script, Some(mode)) if mode == "repl" => "sbRuntime.evalLuaRepl",
-        (EvalKind::Script, Some(_)) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({ "error": "Unsupported Lua mode" })),
-            )
-                .into_response();
-        }
+    let fn_name = match kind {
+        EvalKind::Lua => "sbRuntime.evalLua",
+        EvalKind::Script => "sbRuntime.evalLuaScript",
     };
 
     // The backend is synchronous and may block (waiting on a browser); run it on
@@ -145,7 +134,6 @@ async fn runtime_eval(
 pub struct LogsQuery {
     limit: Option<usize>,
     since: Option<i64>,
-    cursor: Option<String>,
 }
 
 pub async fn handle_runtime_logs(
@@ -159,30 +147,16 @@ pub async fn handle_runtime_logs(
     let runtime = rt.clone();
     let result = tokio::task::spawn_blocking(move || {
         let selected = runtime.for_actor(&actor)?;
-        let selected = selected.as_ref().unwrap_or(&runtime);
-        let limit = params.limit.unwrap_or(100);
-        Ok::<_, RuntimeError>(if params.since.is_some() {
-            crate::runtime::LogBatch {
-                entries: selected.logs(limit, params.since),
-                cursor: None,
-                dropped: false,
-            }
-        } else {
-            selected.log_batch(limit, params.cursor.as_deref())
-        })
+        Ok::<_, RuntimeError>(
+            selected
+                .as_ref()
+                .unwrap_or(&runtime)
+                .logs(params.limit.unwrap_or(100), params.since),
+        )
     })
     .await;
     match result {
-        Ok(Ok(batch)) => (
-            StatusCode::OK,
-            [(LUA_MODES_HEADER, LUA_MODES)],
-            Json(json!({
-                "logs": batch.entries,
-                "cursor": batch.cursor,
-                "dropped": batch.dropped,
-            })),
-        )
-            .into_response(),
+        Ok(Ok(logs)) => (StatusCode::OK, Json(json!({ "logs": logs }))).into_response(),
         Ok(Err(error)) => runtime_error_response(error),
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
@@ -190,7 +164,7 @@ pub async fn handle_runtime_logs(
 
 #[cfg(test)]
 mod tests {
-    use crate::runtime::{LogBatch, LogEntry, RuntimeBackend, RuntimeError};
+    use crate::runtime::{LogEntry, RuntimeBackend, RuntimeError};
     use crate::state::ServerState;
     use crate::test_support::test_state;
     use axum::body::Body;
@@ -204,7 +178,6 @@ mod tests {
         eval: Result<serde_json::Value, RuntimeErrorKind>,
         logs: Vec<LogEntry>,
         calls: Arc<Mutex<Vec<(String, String)>>>,
-        batch: Option<LogBatch>,
     }
     /// A `Clone`-able error description (RuntimeError isn't Clone).
     #[derive(Clone)]
@@ -219,7 +192,6 @@ mod tests {
                 eval: Ok(value),
                 logs: vec![],
                 calls: Arc::new(Mutex::new(vec![])),
-                batch: None,
             }
         }
         fn failing(kind: RuntimeErrorKind) -> Self {
@@ -227,7 +199,6 @@ mod tests {
                 eval: Err(kind),
                 logs: vec![],
                 calls: Arc::new(Mutex::new(vec![])),
-                batch: None,
             }
         }
         fn err(&self) -> RuntimeError {
@@ -253,13 +224,6 @@ mod tests {
         }
         fn logs(&self, _limit: usize, _since: Option<i64>) -> Vec<LogEntry> {
             self.logs.clone()
-        }
-        fn log_batch(&self, limit: usize, cursor: Option<&str>) -> LogBatch {
-            self.batch.clone().unwrap_or_else(|| LogBatch {
-                entries: self.logs(limit, None),
-                cursor: cursor.map(str::to_string),
-                dropped: false,
-            })
         }
         fn ready(&self) -> bool {
             true
@@ -299,38 +263,19 @@ mod tests {
 
     #[tokio::test]
     async fn eval_success_returns_envelope_200() {
-        let backend = Box::new(FakeBackend::returning(serde_json::json!(2)));
-        let (status, body) = post_lua(state_with_runtime(Some(backend)), "1 + 1").await;
-        assert_eq!(status, StatusCode::OK);
-        assert_eq!(body, r#"{"result":2}"#);
-    }
-
-    #[tokio::test]
-    async fn repl_mode_selects_the_repl_evaluator_before() {
         let backend = FakeBackend::returning(serde_json::json!(2));
         let calls = backend.calls.clone();
-        let state = state_with_runtime(Some(Box::new(backend)));
-        let resp = crate::build_router(state)
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/.runtime/lua_script")
-                    .header("X-SilverBullet-Lua-Mode", "repl")
-                    .body(Body::from("1 + 1"))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(resp.status(), StatusCode::OK);
+        let (status, body) = post_lua(state_with_runtime(Some(Box::new(backend))), "1 + 1").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body, r#"{"result":2}"#);
         assert_eq!(
             calls.lock().unwrap().as_slice(),
-            &[("sbRuntime.evalLuaRepl".into(), "1 + 1".into())]
+            &[("sbRuntime.evalLua".into(), "1 + 1".into())]
         );
     }
 
     #[tokio::test]
-    async fn script_mode_without_opt_in_keeps_raw_script_semantics() {
+    async fn script_endpoint_uses_script_evaluator() {
         let backend = FakeBackend::returning(serde_json::json!(null));
         let calls = backend.calls.clone();
         let state = state_with_runtime(Some(Box::new(backend)));
@@ -409,44 +354,11 @@ mod tests {
         let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
             .await
             .unwrap();
-        let body = String::from_utf8_lossy(&bytes);
-        assert!(body.contains(r#""logs":["#), "{body}");
-        assert!(body.contains(r#""text":"hi""#), "{body}");
-    }
-
-    #[tokio::test]
-    async fn logs_endpoint_returns_cursor_metadata_and_repl_capability() {
-        let mut backend = FakeBackend::returning(serde_json::json!(null));
-        backend.batch = Some(LogBatch {
-            entries: vec![],
-            cursor: Some("generation:4".into()),
-            dropped: true,
-        });
-        let state = state_with_runtime(Some(Box::new(backend)));
-        let resp = crate::build_router(state)
-            .oneshot(
-                Request::builder()
-                    .uri("/.runtime/logs?cursor=generation%3A3")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(resp.status(), StatusCode::OK);
-        assert_eq!(
-            resp.headers()
-                .get("X-SilverBullet-Lua-Modes")
-                .and_then(|value| value.to_str().ok()),
-            Some("expression, script, repl")
-        );
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
-            .await
-            .unwrap();
         let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(body["logs"], serde_json::json!([]));
-        assert_eq!(body["cursor"], "generation:4");
-        assert_eq!(body["dropped"], true);
+        assert_eq!(
+            body,
+            serde_json::json!({"logs": [{"level": "log", "text": "hi", "timestamp": 1}]})
+        );
     }
 
     #[tokio::test]

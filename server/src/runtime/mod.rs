@@ -13,7 +13,7 @@ pub mod transport;
 pub use availability::RuntimeAvailability;
 pub use backend::{RuntimeBackend, RuntimeError};
 pub use client::{build_global_call_js, ClientRuntime};
-pub use logs::{LogBatch, LogBuffer, LogEntry};
+pub use logs::{LogBuffer, LogEntry};
 pub use management::{RuntimeInstance, RuntimeSnapshot};
 pub use transport::ClientTransport;
 

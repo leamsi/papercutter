@@ -50,7 +50,6 @@ clap = { version = "4", features = ["derive", "env"] }
 rust-embed = { version = "8", features = ["interpolate-folder-path", "mime-guess"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde_yaml = "0.9"
-rustyline = "14"
 uuid = { version = "1", features = ["v4"] }
 aes-gcm = "0.10"
 tempfile = "3"

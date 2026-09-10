@@ -20,17 +20,8 @@ pub struct LogEntry {
     pub timestamp: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct LogBatch {
-    pub entries: Vec<LogEntry>,
-    pub cursor: Option<String>,
-    pub dropped: bool,
-}
-
 const MAX_EVAL_RESPONSE_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_LOG_RESPONSE_BYTES: u64 = 8 * 1024 * 1024;
-const LUA_MODE_HEADER: &str = "X-SilverBullet-Lua-Mode";
-const LUA_MODES_HEADER: &str = "X-SilverBullet-Lua-Modes";
 
 fn read_response(
     response: reqwest::blocking::Response,
@@ -64,12 +55,7 @@ fn runtime_error(status: StatusCode, body: &[u8]) -> String {
 }
 
 impl SpaceConnection {
-    fn post_runtime(
-        &self,
-        path: &str,
-        body: &str,
-        lua_mode: Option<&str>,
-    ) -> Result<Value, String> {
+    fn post_runtime(&self, path: &str, body: &str) -> Result<Value, String> {
         let url = format!("{}{path}", self.base_url);
         let req = self
             .client
@@ -77,11 +63,6 @@ impl SpaceConnection {
             .header("Content-Type", "text/plain")
             .header("X-Timeout", self.timeout.as_secs().to_string())
             .body(body.to_string());
-        let req = if let Some(mode) = lua_mode {
-            req.header(LUA_MODE_HEADER, mode)
-        } else {
-            req
-        };
         let req = self.apply_auth(req);
         let resp = req.send().map_err(|e| format!("request failed: {e}"))?;
 
@@ -105,77 +86,16 @@ impl SpaceConnection {
 
     /// Evaluate a Lua expression via `POST /.runtime/lua`.
     pub fn eval_lua(&self, expr: &str) -> Result<Value, String> {
-        self.post_runtime("/.runtime/lua", expr, None)
-    }
-
-    pub fn inspect_lua_path(&self, path: &[String]) -> Result<Value, String> {
-        if path.is_empty() {
-            return self.eval_lua("lua.inspect()");
-        }
-        for key in path {
-            let mut bytes = key.bytes();
-            if !bytes
-                .next()
-                .is_some_and(|b| b.is_ascii_alphabetic() || b == b'_')
-                || !bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')
-            {
-                return Err("inspection path must contain only ASCII Lua identifiers".into());
-            }
-        }
-        let keys = path
-            .iter()
-            .map(|key| format!("\"{key}\""))
-            .collect::<Vec<_>>()
-            .join(",");
-        self.eval_lua(&format!("lua.inspect({{{keys}}})"))
+        self.post_runtime("/.runtime/lua", expr)
     }
 
     /// Execute a Lua script via `POST /.runtime/lua_script`.
     pub fn eval_lua_script(&self, code: &str) -> Result<Value, String> {
-        self.post_runtime("/.runtime/lua_script", code, None)
-    }
-
-    pub fn eval_lua_repl(&self, code: &str) -> Result<Value, String> {
-        let url = format!("{}/.runtime/logs", self.base_url);
-        let req = self
-            .apply_auth(self.client.get(&url))
-            .query(&[("limit", "1")]);
-        let response = req.send().map_err(|e| format!("request failed: {e}"))?;
-        let status = response.status();
-        let supports_repl = response
-            .headers()
-            .get(LUA_MODES_HEADER)
-            .and_then(|value| value.to_str().ok())
-            .is_some_and(|modes| modes.split(',').any(|mode| mode.trim() == "repl"));
-        let body = read_response(
-            response,
-            MAX_LOG_RESPONSE_BYTES,
-            "runtime capability response",
-        )?;
-        if !status.is_success() {
-            return Err(runtime_error(status, &body));
-        }
-        if !supports_repl {
-            return Err("server does not support safe automatic Lua evaluation".into());
-        }
-        self.post_runtime("/.runtime/lua_script", code, Some("repl"))
+        self.post_runtime("/.runtime/lua_script", code)
     }
 
     /// Fetch console logs via `GET /.runtime/logs`.
     pub fn logs(&self, limit: usize, since: Option<i64>) -> Result<Vec<LogEntry>, String> {
-        Ok(self.get_log_batch(limit, since, None)?.entries)
-    }
-
-    pub fn log_batch(&self, cursor: Option<&str>) -> Result<LogBatch, String> {
-        self.get_log_batch(1000, None, cursor)
-    }
-
-    fn get_log_batch(
-        &self,
-        limit: usize,
-        since: Option<i64>,
-        cursor: Option<&str>,
-    ) -> Result<LogBatch, String> {
         let url = format!("{}/.runtime/logs", self.base_url);
         let mut req = self.client.get(&url);
         if limit > 0 {
@@ -185,9 +105,6 @@ impl SpaceConnection {
             if s > 0 {
                 req = req.query(&[("since", s.to_string())]);
             }
-        }
-        if let Some(cursor) = cursor {
-            req = req.query(&[("cursor", cursor)]);
         }
         let req = self.apply_auth(req);
         let resp = req.send().map_err(|e| format!("request failed: {e}"))?;
@@ -208,19 +125,11 @@ impl SpaceConnection {
         #[derive(Deserialize)]
         struct LogsResponse {
             logs: Vec<LogEntry>,
-            #[serde(default)]
-            cursor: Option<String>,
-            #[serde(default)]
-            dropped: bool,
         }
 
         let data: LogsResponse =
             serde_json::from_slice(&bytes).map_err(|e| format!("parsing logs response: {e}"))?;
-        Ok(LogBatch {
-            entries: data.logs,
-            cursor: data.cursor,
-            dropped: data.dropped,
-        })
+        Ok(data.logs)
     }
 
     /// GET `/.config` and return the parsed JSON body on 200.
@@ -373,61 +282,6 @@ mod tests {
         (base_url, handle)
     }
 
-    fn mock_server_sequence(
-        responses: Vec<&'static str>,
-    ) -> (String, thread::JoinHandle<Vec<RecordedRequest>>) {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
-        let port = listener.local_addr().unwrap().port();
-        let base_url = format!("http://127.0.0.1:{port}");
-
-        let handle = thread::spawn(move || {
-            responses
-                .into_iter()
-                .map(|response| {
-                    let (stream, _) = listener.accept().expect("accept");
-                    let mut reader = BufReader::new(stream.try_clone().expect("clone"));
-                    let mut writer = stream;
-                    let mut request_line = String::new();
-                    reader.read_line(&mut request_line).unwrap();
-                    let mut parts = request_line.trim().splitn(3, ' ');
-                    let method = parts.next().unwrap_or("").to_string();
-                    let path = parts.next().unwrap_or("").to_string();
-                    let mut headers = Vec::new();
-                    let mut content_length = 0;
-                    loop {
-                        let mut line = String::new();
-                        reader.read_line(&mut line).unwrap();
-                        let trimmed = line.trim();
-                        if trimmed.is_empty() {
-                            break;
-                        }
-                        if let Some(colon) = trimmed.find(':') {
-                            let name = trimmed[..colon].trim().to_string();
-                            let value = trimmed[colon + 1..].trim().to_string();
-                            if name.eq_ignore_ascii_case("content-length") {
-                                content_length = value.parse().unwrap_or(0);
-                            }
-                            headers.push((name, value));
-                        }
-                    }
-                    let mut body = vec![0; content_length];
-                    if content_length > 0 {
-                        use std::io::Read;
-                        reader.read_exact(&mut body).unwrap();
-                    }
-                    writer.write_all(response.as_bytes()).unwrap();
-                    RecordedRequest {
-                        _method: method,
-                        _path: path,
-                        headers,
-                        _body: body,
-                    }
-                })
-                .collect()
-        });
-        (base_url, handle)
-    }
-
     fn bearer_conn(base_url: &str, token: &str) -> SpaceConnection {
         SpaceConnection {
             client: Client::builder()
@@ -437,43 +291,6 @@ mod tests {
             base_url: base_url.trim_end_matches('/').to_string(),
             auth: Auth::Bearer(token.to_string()),
             timeout: Duration::from_secs(30),
-        }
-    }
-
-    #[test]
-    fn inspect_lua_path_posts_only_identifier_keys() {
-        for (path, expression) in [
-            (vec![], "lua.inspect()"),
-            (
-                vec!["index", "_nested2"],
-                r#"lua.inspect({"index","_nested2"})"#,
-            ),
-        ] {
-            let response = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\n{\"result\":{}}";
-            let (base_url, handle) = mock_server(response);
-            let conn = bearer_conn(&base_url, "tok");
-            let path = path.into_iter().map(String::from).collect::<Vec<_>>();
-
-            assert_eq!(conn.inspect_lua_path(&path).unwrap(), serde_json::json!({}));
-            let request = handle.join().unwrap();
-            assert_eq!(request._path, "/.runtime/lua");
-            assert_eq!(request._body, expression.as_bytes());
-        }
-    }
-
-    #[test]
-    fn inspect_lua_path_rejects_invalid_keys_before_sending() {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        listener.set_nonblocking(true).unwrap();
-        let conn = bearer_conn(&format!("http://{}", listener.local_addr().unwrap()), "tok");
-        for key in ["", "2name", "a.b", "a()", "a b", "é", "x\"}); print(1); --"] {
-            assert!(conn
-                .inspect_lua_path(&["index".into(), key.into()])
-                .is_err());
-            assert_eq!(
-                listener.accept().unwrap_err().kind(),
-                std::io::ErrorKind::WouldBlock
-            );
         }
     }
 
@@ -549,56 +366,6 @@ mod tests {
     }
 
     #[test]
-    fn eval_lua_repl_preflights_capability_and_forwards_auth() {
-        let capability = concat!(
-            "HTTP/1.1 200 OK\r\n",
-            "X-SilverBullet-Lua-Modes: expression, script, repl\r\n",
-            "Content-Length: 11\r\n",
-            "\r\n",
-            r#"{"logs":[]}"#,
-        );
-        let evaluation = concat!(
-            "HTTP/1.1 200 OK\r\n",
-            "Content-Type: application/json\r\n",
-            "Content-Length: 13\r\n",
-            "\r\n",
-            r#"{"result":42}"#,
-        );
-        let (base_url, handle) = mock_server_sequence(vec![capability, evaluation]);
-        let conn = bearer_conn(&base_url, "mytoken");
-
-        assert_eq!(conn.eval_lua_repl("6 * 7").unwrap(), serde_json::json!(42));
-        let requests = handle.join().unwrap();
-
-        assert_eq!(requests.len(), 2);
-        assert!(requests[0]._path.contains("/.runtime/logs?limit=1"));
-        assert_eq!(requests[0].header("authorization"), Some("Bearer mytoken"));
-        assert_eq!(requests[1]._path, "/.runtime/lua_script");
-        assert_eq!(requests[1].header("authorization"), Some("Bearer mytoken"));
-        assert_eq!(requests[1].header(super::LUA_MODE_HEADER), Some("repl"));
-        assert_eq!(requests[1]._body, b"6 * 7");
-    }
-
-    #[test]
-    fn eval_lua_repl_does_not_post_to_an_old_server() {
-        let response = concat!(
-            "HTTP/1.1 200 OK\r\n",
-            "Content-Length: 11\r\n",
-            "\r\n",
-            r#"{"logs":[]}"#,
-        );
-        let (base_url, handle) = mock_server(response);
-        let conn = bearer_conn(&base_url, "mytoken");
-
-        let error = conn.eval_lua_repl("dangerous()").unwrap_err();
-        let request = handle.join().unwrap();
-
-        assert!(error.contains("does not support safe automatic Lua evaluation"));
-        assert!(request._path.contains("/.runtime/logs?limit=1"));
-        assert!(request._body.is_empty());
-    }
-
-    #[test]
     fn logs_200_parses_entries() {
         let body = r#"{"logs":[{"level":"log","text":"hi","timestamp":5}]}"#;
         let response = format!(
@@ -616,53 +383,6 @@ mod tests {
         assert_eq!(entries[0].level, "log");
         assert_eq!(entries[0].text, "hi");
         assert_eq!(entries[0].timestamp, 5);
-    }
-
-    #[test]
-    fn log_batch_parses_cursor_metadata() {
-        let body = r#"{"logs":[{"level":"warn","text":"late","timestamp":5}],"cursor":"generation:8","dropped":true}"#;
-        let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
-            body.len(),
-            body
-        );
-        let response: &'static str = Box::leak(response.into_boxed_str());
-        let (base_url, handle) = mock_server(response);
-        let conn = bearer_conn(&base_url, "tok");
-
-        let batch = conn.log_batch(Some("generation:7")).unwrap();
-        let request = handle.join().unwrap();
-
-        assert_eq!(batch.entries[0].text, "late");
-        assert_eq!(batch.cursor.as_deref(), Some("generation:8"));
-        assert!(batch.dropped);
-        assert!(request._path.contains("limit=1000"), "{}", request._path);
-        assert!(
-            request._path.contains("cursor=generation%3A7"),
-            "{}",
-            request._path
-        );
-        assert_eq!(request.header("authorization"), Some("Bearer tok"));
-    }
-
-    #[test]
-    fn log_batch_accepts_old_server_response_without_cursor() {
-        let body = r#"{"logs":[]}"#;
-        let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
-            body.len(),
-            body
-        );
-        let response: &'static str = Box::leak(response.into_boxed_str());
-        let (base_url, handle) = mock_server(response);
-        let conn = bearer_conn(&base_url, "tok");
-
-        let batch = conn.log_batch(None).unwrap();
-        let _ = handle.join();
-
-        assert!(batch.entries.is_empty());
-        assert_eq!(batch.cursor, None);
-        assert!(!batch.dropped);
     }
 
     #[test]

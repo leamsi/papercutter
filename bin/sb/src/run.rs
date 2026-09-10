@@ -70,15 +70,6 @@ pub fn run_core_command(g: &GlobalFlags, cmd: CoreCommand) -> Result<ExitCode, S
             commands::upgrade::run(true)?;
             Ok(ExitCode::SUCCESS)
         }
-        CoreCommand::Repl { plain } => {
-            let mut flags = g.clone();
-            if !commands::repl::prepare_connection(&mut flags)? {
-                return Ok(ExitCode::SUCCESS);
-            }
-            let conn = resolve_conn(&flags)?;
-            commands::repl::run_with_options(conn, plain)?;
-            Ok(ExitCode::SUCCESS)
-        }
         cmd => {
             let conn = resolve_conn(g)?;
             let mode = resolve_out(g);
@@ -115,7 +106,7 @@ pub fn run_core_command(g: &GlobalFlags, cmd: CoreCommand) -> Result<ExitCode, S
                 CoreCommand::Logs { lines, follow } => {
                     commands::logs::run(&conn, lines, follow, &mut out)?
                 }
-                CoreCommand::Repl { .. } | CoreCommand::Upgrade | CoreCommand::UpgradeEdge => {
+                CoreCommand::Upgrade | CoreCommand::UpgradeEdge => {
                     unreachable!("handled above")
                 }
             }
@@ -164,7 +155,6 @@ mod tests {
     #[test]
     fn resolve_out_json_flag() {
         let g = GlobalFlags {
-            selected_space_id: None,
             space: None,
             url: None,
             token: None,
@@ -180,7 +170,6 @@ mod tests {
     #[test]
     fn resolve_out_text_flag() {
         let g = GlobalFlags {
-            selected_space_id: None,
             space: None,
             url: None,
             token: None,
@@ -198,7 +187,6 @@ mod tests {
     #[test]
     fn resolve_conn_url_skips_config() {
         let g = GlobalFlags {
-            selected_space_id: None,
             space: None,
             url: Some("http://127.0.0.1:9999".to_string()),
             token: Some("tok".to_string()),

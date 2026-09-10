@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use super::logs::{LogBatch, LogEntry};
+use super::logs::LogEntry;
 
 /// An infrastructure-level runtime failure (transport down, not ready, timed
 /// out). A *Lua-level* error is NOT one of these — it travels back inside the
@@ -77,14 +77,6 @@ pub trait RuntimeBackend: Send + Sync {
     /// Recent console-log entries (most recent `limit`, optionally only those
     /// strictly newer than `since`).
     fn logs(&self, limit: usize, since: Option<i64>) -> Vec<LogEntry>;
-
-    fn log_batch(&self, limit: usize, _cursor: Option<&str>) -> LogBatch {
-        LogBatch {
-            entries: self.logs(limit, None),
-            cursor: None,
-            dropped: false,
-        }
-    }
 
     /// Whether the client runtime is ready to evaluate.
     fn ready(&self) -> bool;

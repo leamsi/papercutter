@@ -58,6 +58,7 @@ An attempt at documenting the changes/new features introduced in each release.
 * Fix: [[Features/Space Manager|multi-space]] mode silently ignored `SB_REMEMBER_ME_HOURS`, `SB_LOCKOUT_TIME`, and `SB_LOCKOUT_LIMIT`, hardcoding “remember me” sessions to 7 days and lockout to 10 attempts per minute. All three now apply there too — server-wide, like the session itself — matching what [[Install/Configuration]] documents.
 * The [[Features/Runtime API]] now uses a separate Chrome process and temporary profile for each user and space, isolating cookies, browser storage, and logs. Runtime requests carry the user’s identity; revoking access stops the affected browser. Chrome detection is reported at startup.
 * Fix: the Runtime API failed to start when authentication was enabled.
+* Removed the experimental `sb repl` command and its dedicated runtime support. Use `sb lua`, `sb lua-script`, and `sb logs` for terminal access.
 * Fixes around casing in page/file names:
   * Renaming a page or folder to a different casing of the same name now works on case-insensitive filesystems (macOS, Windows)
   * Renames are now rejected when the new name differs only in casing from an existing page or document, so spaces stay portable between case-sensitive and case-insensitive hosts.

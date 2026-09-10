@@ -21,8 +21,6 @@ pub struct GlobalFlags {
     /// Named space from config.
     #[arg(short = 's', long, global = true)]
     pub space: Option<String>,
-    #[arg(skip)]
-    pub selected_space_id: Option<String>,
     /// Direct server URL (skips config lookup).
     #[arg(long, global = true)]
     pub url: Option<String>,
@@ -84,12 +82,6 @@ pub enum CoreCommand {
         #[arg(short = 'f', long)]
         follow: bool,
     },
-    /// Interactive Lua REPL.
-    Repl {
-        /// Use the line-oriented REPL instead of the full-screen console.
-        #[arg(long)]
-        plain: bool,
-    },
     /// Upgrade to the latest release.
     Upgrade,
     /// Upgrade to the edge release.
@@ -135,6 +127,26 @@ mod tests {
     fn browser_auth_commands_accept_no_browser() {
         assert!(Cli::try_parse_from(["sb", "space", "add", "--no-browser"]).is_ok());
         assert!(Cli::try_parse_from(["sb", "space", "login", "notes", "--no-browser"]).is_ok());
+    }
+
+    #[test]
+    fn repl_is_not_a_supported_subcommand() {
+        assert!(Cli::try_parse_from(["sb", "repl"]).is_err());
+        assert!(Cli::try_parse_from(["sb", "repl", "--plain"]).is_err());
+    }
+
+    #[test]
+    fn lua_and_logs_remain_supported() {
+        assert!(matches!(
+            Cli::try_parse_from(["sb", "lua", "1 + 1"]).unwrap().command,
+            Command::Core(CoreCommand::Lua { .. })
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["sb", "logs", "--follow"])
+                .unwrap()
+                .command,
+            Command::Core(CoreCommand::Logs { follow: true, .. })
+        ));
     }
 
     #[test]

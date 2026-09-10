@@ -9,7 +9,7 @@ references:
 > **note** This is **not** the server
 > `sb` is the optional **CLI client**, it talks to an already-running SilverBullet instance over HTTP. If you’re looking for the actual server binary, that’s [[Install/Binary]] (`silverbullet`), not this. You do not need `sb` to use SilverBullet.
 
-The SilverBullet CLI is a companion command-line tool for interacting with a running SilverBullet instance from your terminal. It communicates with the server via the [[Features/Runtime API]], letting you evaluate Lua expressions, run scripts, open an interactive REPL, tail logs, and more — without touching a browser.
+The SilverBullet CLI is a companion command-line tool for interacting with a running SilverBullet instance from your terminal. It communicates with the server via the [[Features/Runtime API]], letting you evaluate Lua expressions, run scripts, tail logs, and more — without touching a browser.
 
 # Installation
 The CLI binary (`sb`) is available alongside the server binary on the [GitHub releases page](https://github.com/silverbulletmd/silverbullet/releases) (or the [edge](https://github.com/silverbulletmd/silverbullet/releases/tag/edge) build). Download the version matching your platform.
@@ -71,9 +71,6 @@ sb lua-script myscript.lua
 # Or pipe from stdin:
 echo 'local x = 40; return x + 2' | sb lua-script
 ```
-
-## `repl`
-Open a full-screen Lua console (Experimental)
 
 ## `logs`
 Show console logs from the headless browser client.

@@ -83,7 +83,6 @@ import {
   parseBlock as parseLua,
 } from "./space_lua/parse.ts";
 import type { LuaCollectionQuery } from "./space_lua/query_collection.ts";
-import { evalLuaRepl } from "./space_lua/repl.ts";
 import {
   LuaEnv,
   LuaRuntimeError,
@@ -139,7 +138,6 @@ export type SBRuntime = {
   ready?: boolean;
   evalLua?: (expr: string) => Promise<unknown>;
   evalLuaScript?: (script: string) => Promise<unknown>;
-  evalLuaRepl?: (code: string) => Promise<unknown>;
 };
 
 declare global {
@@ -785,8 +783,6 @@ export class Client {
     globalThis.sbRuntime.evalLua = (expr: string) =>
       evalLuaCode(`return ${expr}`);
     globalThis.sbRuntime.evalLuaScript = evalLuaCode;
-    globalThis.sbRuntime.evalLuaRepl = (code: string) =>
-      evalLuaRepl(code, spaceLuaEnv.env);
 
     // Signal readiness after widgets are fully ready (index complete +
     // editor state rebuild settled). Waiting on the widget-ready

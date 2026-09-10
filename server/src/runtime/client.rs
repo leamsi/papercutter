@@ -7,7 +7,7 @@
 use std::time::Duration;
 
 use super::backend::{RuntimeBackend, RuntimeError};
-use super::logs::{LogBatch, LogBuffer, LogEntry};
+use super::logs::{LogBuffer, LogEntry};
 use super::transport::ClientTransport;
 
 /// Build the JS expression that invokes a global function with a single
@@ -57,11 +57,6 @@ impl<T: ClientTransport> RuntimeBackend for ClientRuntime<T> {
         // A log read must start a lazy runtime or sb logs --follow can wait forever.
         self.transport.ensure_started();
         self.logs.query(limit, since)
-    }
-
-    fn log_batch(&self, limit: usize, cursor: Option<&str>) -> LogBatch {
-        self.transport.ensure_started();
-        self.logs.query_batch(limit, cursor)
     }
 
     fn ready(&self) -> bool {
