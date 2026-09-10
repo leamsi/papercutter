@@ -1,4 +1,3 @@
-
 // Scope the reset with :where to avoid overriding .sb-nav-* padding by
 // specificity and source order.
 :where(.sb-nav-root,
@@ -23,7 +22,7 @@
   // would read as a stray one down the side of the dock.
   overflow: hidden;
   font-family: var(--ui-font);
-  font-size: 13px;
+  font-size: 16px;
   background: var(--modal-background-color);
   color: var(--modal-color);
 }
@@ -134,16 +133,8 @@
   pointer-events: none;
 }
 
-.sb-nav-no-filter .sb-nav-close {
+.sb-nav-no-filter .sb-nav-input + * {
   margin-left: auto;
-}
-
-.sb-nav-no-filter .sb-nav-copy {
-  margin-left: auto;
-}
-
-.sb-nav-no-filter .sb-nav-copy~.sb-nav-close {
-  margin-left: 0;
 }
 
 .sb-nav-copy,
@@ -345,6 +336,7 @@
   outline: 2px solid var(--modal-selected-option-background-color);
   outline-offset: -2px;
 }
+
 .sb-nav-root-lhs,
 .sb-nav-root-rhs {
   background: var(--panel-background-color);

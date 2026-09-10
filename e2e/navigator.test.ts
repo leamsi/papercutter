@@ -3146,7 +3146,7 @@ test.describe("built-in views", () => {
     });
     expect(modalMetrics).toEqual({
       rowHeightToken: "36px",
-      rootFontSize: "13px",
+      rootFontSize: "16px",
       rootOverflow: "hidden",
       rowPadding: "8px 8px 8px 8px",
       rowGap: "6px",
@@ -3165,7 +3165,7 @@ test.describe("built-in views", () => {
       chipFontSize: "10px",
       chipLineHeight: "10px",
       hintPadding: "3px 5px 3px 5px",
-      hintFontSize: "13px",
+      hintFontSize: "16px",
       inputPadding: "0px 0px 0px 0px",
       inputBorderWidth: "0px",
       inputSelectable: true,
@@ -3818,6 +3818,46 @@ test.describe("openOnStart", () => {
       (globalThis as any).sbRuntime.evalLua("navigator._openOnStartRejected"),
     );
     expect(rejected).toBe(true);
+  });
+});
+
+const CONFIGURED_STARTUP_VIEW = `# Configured startup view
+\`\`\`space-lua
+view.define {
+  name = "configuredsidebar",
+  title = "Configured Sidebar",
+  dock = "lhs",
+  source = function() return { { name = "Ready" } } end,
+  onSelect = function(obj) editor.navigate(obj.name) end,
+}
+\`\`\`
+`;
+
+test.describe("configured startup view", () => {
+  test.use({
+    spaceFiles: {
+      "index.md": "Welcome",
+      "CONFIG.md": `# Configuration
+\`\`\`space-lua
+config.set("view.defaults", {
+  configuredsidebar = { open = true },
+})
+\`\`\`
+`,
+      "configured-view.md": CONFIGURED_STARTUP_VIEW,
+    },
+  });
+
+  test("a configured-open Space Lua view opens after the first index", async ({
+    sbPage,
+  }) => {
+    const frame = sidebarFrame(sbPage);
+    await expect(frame.locator(".sb-nav-title")).toHaveText(
+      "Configured Sidebar",
+    );
+    await expect(
+      frame.locator(".sb-nav-row", { hasText: "Ready" }),
+    ).toBeVisible();
   });
 });
 

@@ -59,10 +59,10 @@ html {
   --modal-selected-option-description-color: var(--subtle-color);
 
   --notifications-background-color: inherit;
-  --notifications-border-color: rgb(41, 41, 41);
-  --notification-info-background-color: rgb(187, 221, 247);
-  --notification-error-background-color: rgb(255, 84, 84);
-  --notification-warning-background-color: rgb(255, 213, 79);
+  --notifications-border-color: var(--ui-surface-border-color);
+  --notification-info-background-color: color-mix(in srgb, var(--alert-info-color) 10%, var(--modal-background-color));
+  --notification-error-background-color: color-mix(in srgb, var(--alert-error-color) 10%, var(--modal-background-color));
+  --notification-warning-background-color: color-mix(in srgb, var(--alert-warning-color) 10%, var(--modal-background-color));
 
   --button-background-color: #f6f7f8;
   --button-hover-background-color: #edf0f3;
@@ -239,10 +239,10 @@ html[data-theme="light"] {
   --modal-selected-option-description-color: var(--subtle-color);
 
   --notifications-background-color: #333;
-  --notifications-border-color: rgb(197, 197, 197);
-  --notification-info-background-color: #1b76bb;
-  --notification-error-background-color: #a32121;
-  --notification-warning-background-color: #b8860b;
+  --notifications-border-color: var(--ui-surface-border-color);
+  --notification-info-background-color: color-mix(in srgb, var(--alert-info-color) 10%, var(--modal-background-color));
+  --notification-error-background-color: color-mix(in srgb, var(--alert-error-color) 10%, var(--modal-background-color));
+  --notification-warning-background-color: color-mix(in srgb, var(--alert-warning-color) 10%, var(--modal-background-color));
 
   --button-background-color: #20242a;
   --button-hover-background-color: #292f36;

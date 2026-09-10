@@ -46,6 +46,7 @@
       .sb-input {
         font-family: var(--ui-font);
         font-size: inherit;
+        font-weight: bold;
         line-height: 1.35;
         color: inherit;
         background-color: transparent;
@@ -226,7 +227,7 @@
     pointer-events: auto;
     padding: 3px 8px;
     margin-bottom: 3px;
-    border-radius: 5px;
+    border-radius: 0;
     display: flex;
     align-items: center;
     gap: 8px;

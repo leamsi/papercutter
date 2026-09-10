@@ -1243,6 +1243,29 @@ test("opening a second rhs view displaces the first; closing it brings the first
   await expect(rhs.locator(".sb-nav-title")).toHaveText("Table of Contents");
 });
 
+test("a filterless view keeps its dock and close controls together on the right", async ({
+  sbPage,
+}) => {
+  await runCommandViaPalette(sbPage, "Navigate: Mentions");
+
+  const header = sbPage.locator(".sb-nav-root-rhs .sb-nav-header-row");
+  const title = header.locator(".sb-nav-title");
+  const dock = header.locator(".sb-dock-button");
+  const close = header.locator(".sb-nav-close");
+  await expect(title).toHaveText("Mention Inbox");
+
+  const [titleBox, dockBox, closeBox] = await Promise.all([
+    title.boundingBox(),
+    dock.boundingBox(),
+    close.boundingBox(),
+  ]);
+  expect(titleBox).not.toBeNull();
+  expect(dockBox).not.toBeNull();
+  expect(closeBox).not.toBeNull();
+  expect(dockBox!.x - (titleBox!.x + titleBox!.width)).toBeGreaterThan(20);
+  expect(closeBox!.x - (dockBox!.x + dockBox!.width)).toBeLessThan(12);
+});
+
 test.describe("mobile presentation", () => {
   test.use({
     viewport: { width: 390, height: 844 },
