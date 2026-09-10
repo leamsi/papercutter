@@ -21,6 +21,8 @@ pub struct GlobalFlags {
     /// Named space from config.
     #[arg(short = 's', long, global = true)]
     pub space: Option<String>,
+    #[arg(skip)]
+    pub selected_space_id: Option<String>,
     /// Direct server URL (skips config lookup).
     #[arg(long, global = true)]
     pub url: Option<String>,
@@ -83,7 +85,11 @@ pub enum CoreCommand {
         follow: bool,
     },
     /// Interactive Lua REPL.
-    Repl,
+    Repl {
+        /// Use the line-oriented REPL instead of the full-screen console.
+        #[arg(long)]
+        plain: bool,
+    },
     /// Upgrade to the latest release.
     Upgrade,
     /// Upgrade to the edge release.

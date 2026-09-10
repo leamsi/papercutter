@@ -136,7 +136,14 @@ pub fn resolve(flags: &GlobalFlags, cfg: &Config) -> Result<SpaceConnection, Str
         });
     }
 
-    let space = config::resolve_space(cfg, flags.space.as_deref())?;
+    let space = if let Some(id) = &flags.selected_space_id {
+        cfg.spaces
+            .iter()
+            .find(|space| &space.id == id)
+            .ok_or_else(|| "selected space is no longer configured".to_string())?
+    } else {
+        config::resolve_space(cfg, flags.space.as_deref())?
+    };
     let base_url = space.url.trim_end_matches('/').to_string();
 
     // A space with no URL is folder-based: it's served by a local SilverBullet
@@ -231,6 +238,35 @@ fn url_encode(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn selected_id_distinguishes_spaces_with_identical_names() {
+        use clap::Parser;
+        let cfg = crate::config::Config {
+            spaces: vec![
+                crate::config::SpaceConfig {
+                    id: "first".into(),
+                    name: "notes".into(),
+                    url: "http://localhost:3001".into(),
+                    ..Default::default()
+                },
+                crate::config::SpaceConfig {
+                    id: "second".into(),
+                    name: "notes".into(),
+                    url: "http://localhost:3002".into(),
+                    ..Default::default()
+                },
+            ],
+        };
+        let mut flags = crate::cli::Cli::parse_from(["sb", "repl"]).global;
+        flags.selected_space_id = Some("second".into());
+        assert_eq!(
+            super::resolve(&flags, &cfg).unwrap().base_url,
+            "http://localhost:3002"
+        );
+        flags.selected_space_id = Some("removed".into());
+        assert!(super::resolve(&flags, &cfg).is_err());
+    }
+
     use super::*;
     use std::{
         io::{BufRead, BufReader, Write},
