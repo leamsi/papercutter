@@ -113,7 +113,6 @@ export function SpaceForm({
   const [shellWhitelist, setShellWhitelist] = useState(
     (initial?.shell.whitelist ?? []).join(" "),
   );
-  const [runtimeApi, setRuntimeApi] = useState(initial?.runtimeApi ?? false);
   const [revisions, setRevisions] = useState<RevisionsMode>(
     initial?.revisions ?? "disabled",
   );
@@ -186,17 +185,10 @@ export function SpaceForm({
       .then((info) => {
         setRuntimeAvailability(info.runtimeApi);
         setRuntimeServerEnabled(info.runtimeApiEnabled);
-        if (!initial)
-          setRuntimeApi(
-            info.runtimeApi.status === "available" && info.runtimeApiEnabled,
-          );
       })
       .catch(() => {});
   }, []);
   const runtimeApiUnavailable =
-    (bindType === "host"
-      ? "Runtime API requires a prefix-bound space."
-      : null) ??
     runtimeApiUnavailableReason(runtimeAvailability) ??
     (!runtimeServerEnabled ? "Disabled in Server settings." : null);
 
@@ -211,7 +203,6 @@ export function SpaceForm({
       enabled: shellEnabled,
       whitelist: shellWhitelist.split(/\s+/).filter(Boolean),
     },
-    runtimeApi,
     revisions,
     revisionsCommit,
     indexPage,
@@ -286,7 +277,7 @@ export function SpaceForm({
         }
       }}
     >
-      {id ? <h2>{SPACE_SECTIONS[section]}</h2> : <h1>Create space</h1>}
+      {!id && <h1>Create space</h1>}
       <SaveConfirmation scope="space" />
       {(!id || errorSection === section) && <FieldErrors errors={errors} />}
       <fieldset class="sb-settings-fields" disabled={saveState === "saving"}>
@@ -371,7 +362,7 @@ export function SpaceForm({
             apiBase="api/admin"
             browseStart={folderTouched ? undefined : "spaces"}
           />
-          <label for="space-index-page">Start page</label>
+          <label for="space-index-page">Index page</label>
           <Input
             id="space-index-page"
             value={indexPage}
@@ -433,7 +424,7 @@ export function SpaceForm({
               users={users}
               members={members}
               frozen={readOnly}
-              runtimeAvailable={runtimeApi && runtimeApiUnavailable === null}
+              runtimeAvailable={runtimeApiUnavailable === null}
               onRuntimeChange={(username, enabled) =>
                 setMembers((previous) => ({
                   ...previous,
@@ -450,11 +441,8 @@ export function SpaceForm({
                 })
               }
             />
-            {(runtimeApiUnavailable || !runtimeApi) && (
-              <p class="sb-help-text">
-                {runtimeApiUnavailable ??
-                  "Enable the runtime API in Advanced settings to grant runtime access."}
-              </p>
+            {runtimeApiUnavailable && (
+              <p class="sb-help-text">{runtimeApiUnavailable}</p>
             )}
             {readOnly && (
               <p class="sb-help-text">
@@ -576,22 +564,6 @@ export function SpaceForm({
               />
             </Fragment>
           )}
-          {/* The stored flag and its availability stay orthogonal: `runtimeApi`
-          means "this space wants the runtime API", availability means "this
-          server can currently provide it". Locking the control does not
-          rewrite the value, so installing Chrome and restarting lights the
-          space up without the admin having to come back here. */}
-          <label>
-            <Checkbox
-              checked={runtimeApi}
-              disabled={runtimeApiUnavailable !== null}
-              onChange={(e) => setRuntimeApi(e.currentTarget.checked)}
-            />{" "}
-            Enable runtime API
-            {runtimeApiUnavailable && (
-              <span class="sb-help-text">{runtimeApiUnavailable}</span>
-            )}
-          </label>
         </div>
       </fieldset>
       <div class="row">

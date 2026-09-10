@@ -2,8 +2,9 @@ import { runtimeApiUnavailableReason } from "../runtime_availability.ts";
 import {
   Alert,
   Button,
-  Checkbox,
+  CheckboxField,
   Input,
+  Field,
 } from "@silverbulletmd/silverbullet/ui";
 import { useEffect, useState } from "preact/hooks";
 import { adminApi, formatApiError, getServerInfo } from "../api.ts";
@@ -86,35 +87,37 @@ export function ServerSettingsView({
           }}
         >
           <SaveConfirmation scope="server" />
-          <label for="server-name">Server Name</label>
-          <Input
-            id="server-name"
-            required
-            maxLength={100}
-            value={serverName}
-            onInput={(event) => setServerName(event.currentTarget.value)}
-          />
-          <label for="server-primary-url">Primary URL</label>
-          <Input
-            id="server-primary-url"
-            type="url"
-            required
-            value={primaryUrl}
-            onInput={(event) => {
-              setPrimaryUrl(event.currentTarget.value);
-            }}
-          />
-          <p class="sb-help-text">
-            The address for server management and sign-in.
-          </p>
-          <label>
-            <Checkbox
-              checked={runtimeApi}
-              disabled={runtimeReason !== null}
-              onChange={(event) => setRuntimeApi(event.currentTarget.checked)}
+          <Field label="Server Name">
+            <Input
+              id="server-name"
+              required
+              maxLength={100}
+              value={serverName}
+              onInput={(event) => setServerName(event.currentTarget.value)}
             />
-            Enable runtime API
-          </label>
+          </Field>
+          <Field
+            label="Primary URL"
+            hint="The address for server management and sign-in."
+          >
+            <Input
+              id="server-primary-url"
+              type="url"
+              required
+              value={primaryUrl}
+              onInput={(event) => {
+                setPrimaryUrl(event.currentTarget.value);
+              }}
+            />
+          </Field>
+
+          <CheckboxField
+            label="Enable runtime API"
+            checked={runtimeApi}
+            disabled={runtimeReason !== null}
+            onChange={(event) => setRuntimeApi(event.currentTarget.checked)}
+          />
+
           {runtimeReason && <p class="sb-help-text">{runtimeReason}</p>}
           <Button type="submit" variant="primary" disabled={busy}>
             Save

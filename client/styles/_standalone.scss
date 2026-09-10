@@ -5,14 +5,14 @@
 @use "tokens";
 
 body.sb-standalone {
-  --top-color: #66a3bb;
-  --bottom-color: #0b3a69;
   min-height: 100vh;
-  background: linear-gradient(to bottom, var(--top-color), var(--bottom-color));
+  margin: 0;
+  background: var(--ui-surface-background-color);
+  color: var(--ui-surface-color);
+  font-size: 14px;
+  line-height: 1.5;
   font-family: var(--ui-font);
 
-  // The gradient lives on <body> rather than <html> so it can be scoped by a
-  // class; <html> only needs to stop collapsing under it.
   *,
   *::before,
   *::after {
@@ -95,7 +95,7 @@ body.sb-standalone {
   }
 
   .sb-spaces-error {
-    color: #b00020;
+    color: var(--danger-color);
   }
 
   .sb-spaces-ok {
@@ -113,37 +113,105 @@ body.sb-standalone {
   }
 }
 
-// The 720px reading column, used by the setup wizard and the Space Manager.
-// The login page opts out: it centres a card in the viewport instead.
 body.sb-standalone.sb-page {
   max-width: 720px;
   margin: 0 auto;
   padding: 2rem 1rem;
 }
 
-// The "floating island" card. On the column pages (Space Manager, setup
-// wizard) the mount point *is* the card; the login page mounts a full-viewport
-// centring wrapper instead and puts .floating-island inside it, so `#root` is
-// qualified with .sb-page to avoid drawing a second card around the first.
 .sb-standalone .floating-island,
 .sb-standalone.sb-page #root {
-  padding: 3em;
-  border-radius: 8px;
-  box-shadow: rgba(0, 0, 0, 0.35) 0px 20px 20px;
-  background-color: white;
-  border: var(--modal-border-color) 1px solid;
-  margin-block: 2rem;
+  padding: 0;
+  border-radius: 4px;
+  box-shadow: none;
+  background-color: transparent;
+  border: 0;
+  margin-block: 0;
 }
 
 .sb-standalone .center {
-  // `min-height`, not `height`: a card taller than the viewport (a login form
-  // carrying an error, a phone in landscape) must push the page taller rather
-  // than centre itself half-off the top edge. `dvh` keeps it honest while a
-  // mobile browser's URL bar slides in and out.
-  min-height: 100vh;
-  min-height: 100dvh;
-  display: grid;
-  place-items: center;
+  display: flex;
+  justify-content: center;
+  padding: 72px 24px 40px;
+}
+
+.sb-standalone .floating-island,
+.sb-standalone .sb-auth-content {
+  width: 100%;
+  max-width: 416px;
+  min-width: 0;
+  margin-inline: auto;
+  overflow-wrap: anywhere;
+}
+
+.sb-standalone .sb-auth-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 64px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--ui-surface-border-color);
+  .sb-auth-brand {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 17px;
+    font-weight: 600;
+    img { width: 26px; height: 26px; }
+  }
+  .sb-auth-host {
+    font-size: 13px;
+    color: var(--subtle-color);
+    overflow-wrap: anywhere;
+    min-width: 0;
+    text-align: right;
+  }
+}
+
+body.sb-standalone.sb-page:has(.sb-auth-header) {
+  max-width: none;
+  padding: 0;
+  #root { margin: 0; padding: 0; }
+  .sb-auth-content { padding-block: 72px 40px; }
+  .sb-setup-content { max-width: 640px; }
+}
+
+.sb-standalone :is(.floating-island, .sb-auth-content) {
+  h1 { font-size: 24px; line-height: 1.35; font-weight: 700; letter-spacing: -0.03em; }
+  p { line-height: 1.5; }
+  label { margin-bottom: 7px; font-weight: 400; }
+  .sb-input { min-height: 40px; }
+  .sb-button, .sb-button-primary { min-height: 38px; }
+  .sb-auth-description, [role="separator"] { color: var(--subtle-color); }
+  [role="separator"] { font-size: 12px; text-align: center; }
+  .sb-help-text { font-size: 12px; line-height: 1.5; }
+  .password-field {
+    position: relative;
+    .sb-input { padding-right: 68px; }
+    .sb-button {
+      position: absolute;
+      right: 3px;
+      min-height: 34px;
+      padding: 4px 10px;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      &:hover { background: var(--ui-surface-hover-background-color); }
+    }
+  }
+  #login [type="submit"] { width: 100%; }
+  footer { border-top: 1px solid var(--ui-surface-border-color); padding-top: 16px; font-size: 12px; }
+}
+
+@media (max-width: 600px) {
+  .sb-standalone .center { padding: 40px 24px; }
+  body.sb-standalone.sb-page:has(.sb-auth-header) .sb-auth-content {
+    padding: 40px 24px;
+    max-width: 464px;
+  }
+  .sb-standalone .sb-auth-header { padding-inline: 18px; }
 }
 
 .sb-standalone .flow {
@@ -161,7 +229,7 @@ body.sb-standalone.sb-page {
 }
 
 .sb-standalone .error-message {
-  color: #b00020;
+  color: var(--danger-color);
 }
 
 .sb-standalone .checkbox-wrapper {
@@ -419,7 +487,7 @@ body.sb-standalone.sb-page {
 }
 
 .sb-standalone .sb-token-reveal .sb-input {
-  font-family: monospace;
+  font-family: var(--ui-font);
 }
 
 .sb-standalone fieldset {
@@ -476,20 +544,14 @@ body.sb-standalone.sb-page {
   padding: 0 0.3em;
 }
 
-/* Phones. The desktop layout assumes a 720px reading column with room to spare
-   for side-by-side rows; on a 375px screen the page padding and the card's own
-   3em swallow a third of the width before any content is drawn, and every
-   `display: flex` row here is unwrapped, so the header and the input+button
-   rows spill past the card's edge. */
 @media only screen and (max-width: 600px) {
   body.sb-standalone.sb-page {
     padding: 0.75rem;
   }
 
-  .sb-standalone .floating-island,
-  .sb-standalone.sb-page #root {
-    padding: 1.25rem;
-    margin-block: 0.5rem;
+  .sb-standalone .floating-island {
+    padding: 0;
+    margin-block: 0;
   }
 
   body.sb-standalone {
@@ -635,7 +697,7 @@ body.sb-standalone .sb-git-page {
 
   textarea {
     width: 100%;
-    font-family: var(--editor-monospace-font, monospace);
+    font-family: var(--ui-font);
   }
 
   dl {
@@ -662,20 +724,10 @@ body.sb-standalone.sb-page:has(.sb-spaces-header) {
 }
 
 body.sb-standalone .sb-space-settings {
-  .sb-settings-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-block: 1.5rem 2rem;
-    h1 { margin: 0.25rem 0 0; overflow-wrap: anywhere; }
-    p { margin: 0; color: var(--subtle-color); font-size: 0.9rem; }
-    .sb-button { flex-shrink: 0; }
-  }
   .sb-settings-layout {
     display: grid;
-    grid-template-columns: 170px minmax(0, 1fr);
-    gap: 2rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
     align-items: start;
   }
   .sb-settings-sidebar {

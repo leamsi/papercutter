@@ -81,5 +81,5 @@ test("the login page's styles actually load", async ({ page }) => {
   // the accent colour, so a stylesheet that never loads still fails.
   await expect
     .poll(() => button.evaluate((el) => getComputedStyle(el).backgroundColor))
-    .toBe("rgb(70, 76, 252)"); // --ui-accent-color #464cfc
+    .toBe("rgb(53, 105, 184)"); // --ui-accent-color #3569b8
 });

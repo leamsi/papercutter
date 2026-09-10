@@ -8,9 +8,16 @@ use std::sync::{Arc, RwLock};
 use crate::multi::config::Binding;
 use crate::multi::instance::SpaceInstance;
 
+pub(crate) fn runtime_host(id: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = format!("{:x}", Sha256::digest(id.as_bytes()));
+    format!("{}.{}.runtime.localhost", &digest[..32], &digest[32..])
+}
+
 pub struct RoutingTable {
     pub instances: HashMap<String, Arc<SpaceInstance>>,
     hosts: HashMap<String, Arc<SpaceInstance>>,
+    runtime_hosts: HashMap<String, Arc<SpaceInstance>>,
     /// (normalized prefix, instance), sorted longest-first.
     prefixes: Vec<(String, Arc<SpaceInstance>)>,
 }
@@ -18,6 +25,7 @@ pub struct RoutingTable {
 impl RoutingTable {
     pub fn build(instances: HashMap<String, Arc<SpaceInstance>>) -> Self {
         let mut hosts = HashMap::new();
+        let mut runtime_hosts = HashMap::new();
         let mut prefixes = Vec::new();
         for inst in instances.values() {
             match &inst.config.binding {
@@ -26,6 +34,7 @@ impl RoutingTable {
                     // Host matching is case-insensitive (DNS is); store the key
                     // lowercased and lowercase the request host at resolve time.
                     hosts.insert(host.to_ascii_lowercase(), inst.clone());
+                    runtime_hosts.insert(runtime_host(&inst.id), inst.clone());
                 }
             }
         }
@@ -33,8 +42,13 @@ impl RoutingTable {
         Self {
             instances,
             hosts,
+            runtime_hosts,
             prefixes,
         }
+    }
+
+    pub(crate) fn resolve_runtime(&self, host: &str) -> Option<Arc<SpaceInstance>> {
+        self.runtime_hosts.get(host).cloned()
     }
 
     /// Resolve a main-listener request. `host` is the raw Host header (may
@@ -100,7 +114,6 @@ mod tests {
                 members: Default::default(),
                 read_only: false,
                 shell: Default::default(),
-                runtime_api: false,
                 index_page: "index".into(),
                 description: String::new(),
                 theme_color: String::new(),
@@ -117,6 +130,7 @@ mod tests {
             router: None,
             revisions: None,
             runtime: None,
+            runtime_authorizer: None,
         })
     }
 

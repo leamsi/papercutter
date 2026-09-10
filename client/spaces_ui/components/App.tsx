@@ -7,8 +7,8 @@ import {
 } from "../../logout.ts";
 import { useServerName } from "../server_name.ts";
 import type { ComponentType } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
-import { Alert, Button } from "@silverbulletmd/silverbullet/ui";
+import { useEffect, useState } from "preact/hooks";
+import { Alert, Button, SectionNav } from "@silverbulletmd/silverbullet/ui";
 import { formatApiError, getSession } from "../api.ts";
 import {
   NavigateProvider,
@@ -121,7 +121,6 @@ export function App() {
       setCanForceLogout(error instanceof LogoutSyncError);
     }
   }
-  const tabs = useRef<HTMLElement>(null);
   useEffect(() => {
     const unregister = registerLogoutParticipant(async () => {});
     const restore = (event: PageTransitionEvent) => {
@@ -135,18 +134,6 @@ export function App() {
       unregister();
     };
   }, []);
-  useEffect(() => {
-    const nav = tabs.current;
-    const current = nav?.querySelector('[aria-current="page"]');
-    if (!nav || !current) return;
-    const viewport = nav.getBoundingClientRect();
-    const selected = current.getBoundingClientRect();
-    if (selected.left < viewport.left) {
-      nav.scrollLeft -= viewport.left - selected.left;
-    } else if (selected.right > viewport.right) {
-      nav.scrollLeft += selected.right - viewport.right;
-    }
-  }, [auth.phase, route.screen]);
 
   // One delegated listener rather than a link component: every in-app link is
   // a real <a href> that works without JS, and this upgrades them in place.
@@ -212,84 +199,99 @@ export function App() {
   const onAdminTab = route.screen === "admin";
   return (
     <NavigateProvider value={navigate}>
-      <div class="sb-spaces-header">
-        <div class="sb-spaces-header-left">
+      <div class="sb-management">
+        <header class="sb-management-header">
           <a class="sb-wordmark" href={spacesUrl("/")}>
             <img src="assets/logo-dock-96x96.png" alt="" />
             <span title={serverName}>{serverName}</span>
           </a>
-          {/* The active tab is what names the current screen — the list screens
-              dropped their headings rather than repeat it — so it carries
-              `aria-current` and not just a highlight class. */}
-          <nav ref={tabs} class="sb-tabs" aria-label="Sections">
-            {auth.admin && (
-              <>
-                <a
-                  class={`sb-tab ${onSpacesTab ? "sb-active" : ""}`}
-                  aria-current={onSpacesTab ? "page" : undefined}
-                  href={spacesUrl("/")}
-                >
-                  Spaces
-                </a>
-                <a
-                  class={`sb-tab ${onUsersTab ? "sb-active" : ""}`}
-                  aria-current={onUsersTab ? "page" : undefined}
-                  href={spacesUrl("/users")}
-                >
-                  Users
-                </a>
-                <a
-                  class={`sb-tab ${onAdminTab ? "sb-active" : ""}`}
-                  aria-current={onAdminTab ? "page" : undefined}
-                  href={spacesUrl("/admin")}
-                >
-                  Admin
-                </a>
-              </>
-            )}
-          </nav>
-        </div>
-        <SpaceProfileMenu
-          username={auth.username}
-          admin={auth.admin}
-          routeKey={`${location.pathname}${location.search}`}
-          onUnauthorized={onUnauthorized}
-          onLogout={() => logOut()}
-        />
-      </div>
-      {logoutError && (
-        <Alert variant="error">
-          {logoutError}
-          {canForceLogout && (
-            <>
-              <p>
-                Synchronization did not finish. Retry logout, or force logout to
-                discard unsynchronized edits.
-              </p>
-              <Button onClick={() => logOut()}>Retry logout</Button>
-              <Button onClick={() => logOut(true)}>Force logout</Button>
-            </>
+          <SpaceProfileMenu
+            username={auth.username}
+            admin={auth.admin}
+            routeKey={`${location.pathname}${location.search}`}
+            onUnauthorized={onUnauthorized}
+            onLogout={() => logOut()}
+          />
+          {logoutError && (
+            <Alert variant="error" class="sb-management-notice">
+              {logoutError}
+              {canForceLogout && (
+                <>
+                  <p>
+                    Synchronization did not finish. Retry logout, or force
+                    logout to discard unsynchronized edits.
+                  </p>
+                  <Button onClick={() => logOut()}>Retry logout</Button>
+                  <Button onClick={() => logOut(true)}>Force logout</Button>
+                </>
+              )}
+            </Alert>
           )}
-        </Alert>
-      )}
-      {(() => {
-        const screen = SCREENS[route.screen];
-        if (!screen || (screen.admin && !auth.admin)) {
-          return (
-            <div>
-              <h1>Not found</h1>
-              <p>This page does not exist.</p>
-              <p>
-                <a href={spacesUrl("/")}>Return to spaces</a>
-              </p>
-            </div>
+        </header>
+        <aside class="sb-management-sidebar">
+          <SectionNav
+            label="Sections"
+            collapse={false}
+            active={
+              onSpacesTab
+                ? "spaces"
+                : onAdminTab
+                  ? "admin"
+                  : onUsersTab
+                    ? "users"
+                    : "profile"
+            }
+            navClass="sb-management-nav"
+            itemClass="sb-management-nav-item"
+            items={[
+              { id: "spaces", label: "Spaces", href: spacesUrl("/") },
+              ...(auth.admin
+                ? [
+                    {
+                      id: "users",
+                      label: "Users",
+                      href: spacesUrl("/users"),
+                    },
+                  ]
+                : []),
+              {
+                id: "profile",
+                label: "Profile",
+                href: spacesUrl("/profile"),
+              },
+              ...(auth.admin
+                ? [
+                    {
+                      id: "admin",
+                      label: "Admin",
+                      href: spacesUrl("/admin"),
+                    },
+                  ]
+                : []),
+            ]}
+            onSelect={() => {}}
+          />
+        </aside>
+        {(() => {
+          const screen = SCREENS[route.screen];
+          if (!screen || (screen.admin && !auth.admin)) {
+            return (
+              <div class="sb-management-main">
+                <h1>Not found</h1>
+                <p>This page does not exist.</p>
+                <p>
+                  <a href={spacesUrl("/")}>Return to spaces</a>
+                </p>
+              </div>
+            );
+          }
+          const View = screen.view;
+          const view = (
+            <View route={route} auth={auth} onUnauthorized={onUnauthorized} />
           );
-        }
-        const View = screen.view;
-        return (
-          <View route={route} auth={auth} onUnauthorized={onUnauthorized} />
-        );
-      })()}
+          return <div class="sb-management-main">{view}</div>;
+        })()}
+      </div>
     </NavigateProvider>
   );
 }

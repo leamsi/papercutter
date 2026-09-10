@@ -19,6 +19,7 @@ export function ProfileAvatar(
       // A failed profile request should never claim you're signed in or out.
       return null;
     }
+    size = Math.max(26, size);
     if (profile.status === "signed-out") {
       return (
         <span

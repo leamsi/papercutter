@@ -160,6 +160,7 @@ pub(crate) async fn launch_browser(
         .user_data_dir(profile)
         .window_size(800, 600)
         .no_sandbox()
+        .arg(("host-resolver-rules", "MAP *.runtime.localhost 127.0.0.1"))
         .args([
             "disable-dev-shm-usage",
             "disable-extensions",

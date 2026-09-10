@@ -14,34 +14,6 @@
 @use "page_widget";
 @use "view_content";
 
-@font-face {
-  font-family: "iA-Mono";
-  src: url("iAWriterMonoS-Regular.woff2");
-  font-weight: normal;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: "iA-Mono";
-  src: url("iAWriterMonoS-Bold.woff2");
-  font-weight: bold;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: "iA-Mono";
-  src: url("iAWriterMonoS-Italic.woff2");
-  font-weight: normal;
-  font-style: italic;
-}
-
-@font-face {
-  font-family: "iA-Mono";
-  src: url("iAWriterMonoS-BoldItalic.woff2");
-  font-weight: bold;
-  font-style: italic;
-}
-
 html,
 body {
   margin: 0;
@@ -68,14 +40,14 @@ body {
   width: 100%;
   margin-top: 10px;
   border: 1px solid var(--editor-widget-background-color);
-  border-radius: 5px;
+  border-radius: 4px;
 }
 
 .sb-top-iframe {
   width: 100%;
   margin-top: 10px;
   border: 1px solid var(--editor-widget-background-color);
-  border-radius: 5px;
+  border-radius: 4px;
 }
 
 #sb-main {
@@ -160,9 +132,9 @@ body {
 .sb-modal {
   position: absolute;
   border: var(--modal-border-color) 1px solid;
-  border-radius: 8px;
+  border-radius: 4px;
   overflow: hidden;
-  box-shadow: rgba(0, 0, 0, 0.35) 0px 20px 20px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
 
   // Not `visibility: hidden`: the panel focuses its own filter input as it
   // activates, and an element in a visibility-hidden subtree can't take

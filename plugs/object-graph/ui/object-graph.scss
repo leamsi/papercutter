@@ -8,8 +8,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    Helvetica, Arial, sans-serif;
+  font-family: var(--ui-font);
   font-size: 14px;
 
   // Chrome colors (background, text, borders, sections, hover, accent) come
@@ -229,7 +228,7 @@ html, body { height: 100%; background: var(--ui-surface-background-color); color
 .gv-object-section .gv-object-title-link:hover { text-decoration: underline; }
 .gv-object-section .gv-object-body {
   margin: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--ui-font);
   font-size: 11px;
   line-height: 1.45;
   white-space: pre-wrap;
@@ -291,7 +290,7 @@ html, body { height: 100%; background: var(--ui-surface-background-color); color
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
   padding: 5px 8px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--ui-font);
   font-size: 12px;
   color: var(--ui-surface-color);
   pointer-events: none;
@@ -308,7 +307,7 @@ html, body { height: 100%; background: var(--ui-surface-background-color); color
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
   padding: 6px 8px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--ui-font);
   font-size: 12px;
   color: var(--ui-surface-color);
   pointer-events: none;
@@ -319,7 +318,7 @@ html, body { height: 100%; background: var(--ui-surface-background-color); color
   margin-bottom: 4px;
 }
 .gv-edge-tooltip-snippet {
-  font-family: ui-monospace, Menlo, monospace;
+  font-family: var(--ui-font);
   font-size: 11px;
   color: var(--ui-surface-color);
   white-space: pre-wrap;
@@ -442,7 +441,7 @@ html, body { height: 100%; background: var(--ui-surface-background-color); color
 .gv-object-body {
   margin: 0;
   padding: 10px 12px;
-  font-family: ui-monospace, Menlo, monospace;
+  font-family: var(--ui-font);
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;

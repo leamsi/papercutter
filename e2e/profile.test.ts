@@ -52,7 +52,11 @@ test.afterAll(async () => {
 
 test.beforeEach(async ({ page }) => {
   await login(page, ADMIN_USER, ADMIN_PASSWORD);
-  await expect(page.locator(".sb-tab.sb-active")).toHaveText("Spaces");
+  await expect(
+    page
+      .getByRole("navigation", { name: "Sections", exact: true })
+      .locator('[aria-current="page"]'),
+  ).toHaveText("Spaces");
 });
 
 async function login(

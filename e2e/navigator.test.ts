@@ -3146,7 +3146,7 @@ test.describe("built-in views", () => {
     });
     expect(modalMetrics).toEqual({
       rowHeightToken: "36px",
-      rootFontSize: "16px",
+      rootFontSize: "13px",
       rootOverflow: "hidden",
       rowPadding: "8px 8px 8px 8px",
       rowGap: "6px",
@@ -3165,7 +3165,7 @@ test.describe("built-in views", () => {
       chipFontSize: "10px",
       chipLineHeight: "10px",
       hintPadding: "3px 5px 3px 5px",
-      hintFontSize: "16px",
+      hintFontSize: "13px",
       inputPadding: "0px 0px 0px 0px",
       inputBorderWidth: "0px",
       inputSelectable: true,
@@ -3252,9 +3252,6 @@ test.describe("built-in views", () => {
       actionHeight: "22px",
     });
 
-    // Folder rows head a section of the tree and are drawn as its header; the
-    // selection is the only highlight a row ever takes, and it re-points every
-    // dimmed foreground so nothing stays dim on top of the accent fill.
     const bands = await sbPage.evaluate(() => {
       const root = document.querySelector(
         "#sb-main .sb-nav-root-lhs",
@@ -3275,8 +3272,8 @@ test.describe("built-in views", () => {
       };
     });
     expect(bands).toEqual({
-      dualBanded: true,
-      folderBanded: true,
+      dualBanded: false,
+      folderBanded: false,
       pageBanded: false,
       folderIsHeavier: true,
       folderKeepsPageColor: true,
@@ -3286,11 +3283,10 @@ test.describe("built-in views", () => {
       .locator("[data-path='Diagrams']")
       .evaluate((el) => getComputedStyle(el).backgroundColor);
     await tree.locator("[data-path='Diagrams']").hover();
-    expect(
-      await tree
-        .locator("[data-path='Diagrams']")
-        .evaluate((el) => getComputedStyle(el).backgroundColor),
-    ).toBe(resting);
+    const hovered = await tree
+      .locator("[data-path='Diagrams']")
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(hovered).not.toBe(resting);
 
     await tree.locator("[data-path='Diagrams'] .sb-nav-primary").click();
     await expect(
@@ -3308,17 +3304,13 @@ test.describe("built-in views", () => {
         mutedIsSelectionForeground:
           row.getPropertyValue("--sb-nav-muted").trim() ===
           row.getPropertyValue("--modal-selected-option-color").trim(),
-        differsFromUnselected:
-          row.color !==
-          getComputedStyle(root.querySelector("[data-path='Projects/Alpha']")!)
-            .color,
+        background: row.backgroundColor,
       };
     });
-    expect(selected).toEqual({
-      banded: false,
-      mutedIsSelectionForeground: true,
-      differsFromUnselected: true,
-    });
+    expect(selected.banded).toBe(false);
+    expect(selected.mutedIsSelectionForeground).toBe(true);
+    expect(selected.background).not.toBe(hovered);
+    expect(selected.background).not.toBe(resting);
 
     // Opens as a modal by default; pin it to the right sidebar to reach the
     // docked empty-state styling this asserts on.

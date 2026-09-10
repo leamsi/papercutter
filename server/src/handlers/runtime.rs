@@ -1,6 +1,6 @@
 //! `/.runtime/{lua,lua_script,logs}` — bridge HTTP to the Lua `RuntimeBackend`.
 //! When no backend is configured the runtime API is "not enabled" and every
-//! endpoint returns 503 (the per-space runtime gate).
+//! endpoint returns 503.
 
 use std::sync::Arc;
 use std::time::Duration;

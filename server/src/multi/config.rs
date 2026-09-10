@@ -155,9 +155,6 @@ impl CommitTiming {
     }
 }
 
-fn default_true() -> bool {
-    true
-}
 fn default_index_page() -> String {
     "index".into()
 }
@@ -263,8 +260,6 @@ pub struct SpaceConfig {
     pub read_only: bool,
     #[serde(default)]
     pub shell: ShellSettings,
-    #[serde(default = "default_true")]
-    pub runtime_api: bool,
     #[serde(default = "default_index_page")]
     pub index_page: String,
     #[serde(default = "default_description")]
@@ -301,8 +296,6 @@ impl SpaceConfig {
         self.revisions_commit.clone().unwrap_or_default()
     }
 
-    /// Folds a legacy `public` flag into `access` and drops it, so everything
-    /// downstream reads one field and every save writes the new shape.
     pub fn normalize(&mut self) {
         if self.access.is_none() {
             self.access = Some(match self.legacy_public {
@@ -311,6 +304,7 @@ impl SpaceConfig {
             });
         }
         self.legacy_public = None;
+        self.extra.remove("runtimeApi");
     }
 }
 
@@ -578,22 +572,27 @@ mod tests {
     }
 
     #[test]
-    fn runtime_api_defaults_on_and_honours_an_explicit_false() {
-        let c = MultiConfig::from_json(
-            r#"{
-              "id-on":  { "name": "On",  "binding": { "prefix": "/on" } },
-              "id-off": { "name": "Off", "binding": { "prefix": "/off" }, "runtimeApi": false }
-            }"#,
-        )
-        .unwrap();
-        assert!(
-            c.spaces["id-on"].runtime_api,
-            "an absent runtimeApi defaults to on"
-        );
-        assert!(
-            !c.spaces["id-off"].runtime_api,
-            "an explicit false stays off"
-        );
+    fn legacy_space_runtime_api_is_ignored_and_member_permissions_survive() {
+        for legacy in [true, false] {
+            let input = serde_json::json!({
+                "id": {
+                    "name": "Notes", "binding": { "prefix": "/notes" },
+                    "runtimeApi": legacy,
+                    "members": {
+                        "writer": { "role": "write", "runtimeApi": true },
+                        "opted-out": { "role": "write", "runtimeApi": false },
+                        "reader": { "role": "read" }
+                    }
+                }
+            });
+            let config = MultiConfig::from_json(&input.to_string()).unwrap();
+            let output: serde_json::Value =
+                serde_json::from_str(&config.to_json_string().unwrap()).unwrap();
+            assert!(output["id"].get("runtimeApi").is_none());
+            assert_eq!(output["id"]["members"]["writer"]["runtimeApi"], true);
+            assert_eq!(output["id"]["members"]["opted-out"]["runtimeApi"], false);
+            assert_eq!(output["id"]["members"]["reader"]["runtimeApi"], false);
+        }
     }
 
     #[test]

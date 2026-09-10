@@ -1,3 +1,4 @@
+import { AuthHeader } from "./components/AuthHeader.tsx";
 import { useServerName } from "./server_name.ts";
 import { SignedOut } from "./components/SignedOut.tsx";
 import { managerUrl } from "../manager_navigation.ts";
@@ -229,21 +230,24 @@ function CentralLogin({ attempt }: { attempt: string }) {
 }
 const params = new URLSearchParams(location.search);
 render(
-  <div class="center">
-    <div class="flow floating-island">
-      {location.pathname === "/.auth/central/signed-out" ? (
-        <SignedOut
-          requireRevocation
-          onContinue={() => {
-            void managerUrl("/login").then((url) => location.replace(url));
-          }}
-        />
-      ) : params.has("resume") ? (
-        <CentralUnlock resume={params.get("resume")!} />
-      ) : (
-        <CentralLogin attempt={params.get("attempt") || ""} />
-      )}
+  <>
+    <AuthHeader logo="assets/logo-dock-96x96.png" />
+    <div class="center">
+      <div class="flow floating-island">
+        {location.pathname === "/.auth/central/signed-out" ? (
+          <SignedOut
+            requireRevocation
+            onContinue={() => {
+              void managerUrl("/login").then((url) => location.replace(url));
+            }}
+          />
+        ) : params.has("resume") ? (
+          <CentralUnlock resume={params.get("resume")!} />
+        ) : (
+          <CentralLogin attempt={params.get("attempt") || ""} />
+        )}
+      </div>
     </div>
-  </div>,
+  </>,
   document.getElementById("root")!,
 );

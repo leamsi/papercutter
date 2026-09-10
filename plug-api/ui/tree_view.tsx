@@ -27,6 +27,7 @@ export type TreeViewProps = {
   tree: TreeNode;
   expanded: Set<string>;
   selectedPath?: string;
+  currentPath?: string;
   phrase?: string;
   showEmpty: boolean;
   separator: string;
@@ -51,6 +52,7 @@ export function TreeView({
   tree,
   expanded,
   selectedPath,
+  currentPath,
   phrase,
   showEmpty,
   separator,
@@ -219,6 +221,7 @@ export function TreeView({
           depth={0}
           expanded={expanded}
           selectedPath={selectedPath}
+          currentPath={currentPath}
           hover={hover}
           dropTarget={dropTarget}
           draggable={canDrag}
@@ -245,6 +248,7 @@ function TreeItem({
   depth,
   expanded,
   selectedPath,
+  currentPath,
   hover,
   dropTarget,
   draggable,
@@ -265,6 +269,7 @@ function TreeItem({
   depth: number;
   expanded: Set<string>;
   selectedPath?: string;
+  currentPath?: string;
   hover: HoverTracker;
   dropTarget?: string;
   draggable: boolean;
@@ -307,6 +312,7 @@ function TreeItem({
         }
         style={{ paddingLeft: `${depth * 1.2}rem` }}
         data-path={node.path}
+        aria-current={currentPath === node.path ? "page" : undefined}
         draggable={draggable}
         tabIndex={focusableRows ? 0 : undefined}
         onKeyDown={
@@ -368,6 +374,7 @@ function TreeItem({
               depth={depth + 1}
               expanded={expanded}
               selectedPath={selectedPath}
+              currentPath={currentPath}
               hover={hover}
               dropTarget={dropTarget}
               draggable={draggable}

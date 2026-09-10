@@ -13,7 +13,7 @@ const SECTION_FIELDS = {
   general: ["name", "binding", "folder", "indexPage"],
   access: ["access", "members", "readOnly"],
   revisions: ["revisions", "revisionsCommit"],
-  advanced: ["shell", "runtimeApi"],
+  advanced: ["shell"],
 } as const;
 
 export function settingsPayload(

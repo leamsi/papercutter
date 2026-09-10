@@ -39,6 +39,7 @@ export function usePanelEvents({
   set: PanelSetters;
   publish: () => void;
 }): {
+  currentName: string;
   readOnly: boolean;
   mobile: boolean;
   /** The debounced source re-run, for the commands that want one promptly
@@ -49,6 +50,7 @@ export function usePanelEvents({
   // the way to the server. Re-derived whenever the editor reloads, which is
   // what a forced read-only toggle does.
   const [readOnly, setReadOnly] = useState(false);
+  const [currentName, setCurrentName] = useState(() => client.currentName());
   // Below the mobile breakpoint a sidebar dock is a full-width drawer over the
   // editor, so it behaves like the modal: it closes once you pick something,
   // and it has no edge to drag.
@@ -148,6 +150,7 @@ export function usePanelEvents({
     refresh.current = triggerRefresh;
 
     const contentLoaded = (pageRef: unknown) => {
+      setCurrentName(String((pageRef as any)?.name ?? pageRef));
       void syncReadOnly();
       const current = viewRef.current;
       if (current?.meta.expansionScope === "page") {
@@ -217,5 +220,5 @@ export function usePanelEvents({
     activate.current(activation);
   }, [activation]);
 
-  return { readOnly, mobile, refresh };
+  return { currentName, readOnly, mobile, refresh };
 }

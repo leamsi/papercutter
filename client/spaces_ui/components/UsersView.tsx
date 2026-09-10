@@ -2,10 +2,13 @@ import { localDateString } from "@silverbulletmd/silverbullet/lib/dates";
 import {
   Alert,
   Badge,
+  ButtonLink,
+  SlidersIcon,
   Button,
   Checkbox,
   Input,
   Select,
+  SectionNav,
 } from "@silverbulletmd/silverbullet/ui";
 import { useEffect, useState } from "preact/hooks";
 import {
@@ -63,8 +66,9 @@ export function UserList({
   const { users, loaded, error } = useUserList(onUnauthorized);
   return (
     <div>
-      {/* No heading: this screen is only ever reached from the tab bar, which
-          already names it. See SpaceList for the non-admin case. */}
+      <header class="sb-management-heading">
+        <h1>Users</h1>
+      </header>
       <SaveConfirmation scope="users" />
       {error && <Alert variant="error">{error}</Alert>}
       {!loaded && <p>Loading…</p>}
@@ -108,12 +112,15 @@ export function UserList({
                       )}
                     </td>
                     <td>
-                      {/* Same destination as the name — an explicit control
-                          for anyone who doesn't read the name as clickable,
-                          mirroring the spaces list. */}
-                      <a class="sb-button sb-user-edit" href={href}>
-                        Edit
-                      </a>
+                      <ButtonLink
+                        variant="icon"
+                        class="sb-user-edit"
+                        href={href}
+                        aria-label={`Settings for ${name}`}
+                        title={`Settings for ${name}`}
+                      >
+                        <SlidersIcon size={18} aria-hidden="true" />
+                      </ButtonLink>
                     </td>
                   </tr>
                 );
@@ -375,40 +382,27 @@ export function UserDetail({
       <header class="sb-settings-heading">
         <div>
           <h1>
-            {username} {isSelf && <Badge>you</Badge>}
-            {user.loginMethod === "sso" && <Badge>SSO</Badge>}
-            {user.disabled && <Badge>disabled</Badge>}
+            {username}{" "}
+            <span class="sb-badge-group">
+              {isSelf && <Badge>you</Badge>}
+              {user.loginMethod === "sso" && <Badge>SSO</Badge>}
+              {user.disabled && <Badge>disabled</Badge>}
+            </span>
           </h1>
         </div>
       </header>
       <div class="sb-settings-layout">
-        <nav class="sb-settings-sidebar" aria-label="User settings">
-          {Object.entries(sections).map(([key, label]) => (
-            <a
-              key={key}
-              href={sectionUrl(key)}
-              aria-current={section === key ? "page" : undefined}
-            >
-              {label}
-            </a>
-          ))}
-        </nav>
-        <div class="sb-settings-mobile">
-          <label for="user-settings-section">Settings section</label>
-          <Select
-            id="user-settings-section"
-            value={section}
-            onChange={(event) =>
-              navigate(sectionUrl(event.currentTarget.value))
-            }
-          >
-            {Object.entries(sections).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </Select>
-        </div>
+        <SectionNav
+          horizontal
+          label="User settings"
+          active={section}
+          items={Object.entries(sections).map(([id, label]) => ({
+            id,
+            label,
+            href: sectionUrl(id),
+          }))}
+          onSelect={(id) => navigate(sectionUrl(id))}
+        />
         <div class="sb-settings-content">
           <SaveConfirmation scope="users" />
           {error && <Alert variant="error">{error}</Alert>}
@@ -487,7 +481,6 @@ export function UserDetail({
               </label>
             </section>
             <section hidden={section !== "profile"}>
-              <h2>Profile</h2>
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
@@ -553,7 +546,6 @@ export function UserDetail({
               </section>
             )}
             <section hidden={section !== "tokens"}>
-              <h2>API tokens</h2>
               {tokenNames.length === 0 && <p>No tokens.</p>}
               {tokenNames.length > 0 && (
                 <ul class="sb-token-list">

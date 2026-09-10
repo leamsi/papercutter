@@ -56,10 +56,61 @@ pub fn build_main_router(
             manager.clone(),
             manager_origin,
         ))
+        .layer(middleware::from_fn_with_state(
+            manager.clone(),
+            runtime_origin,
+        ))
         .with_state(MainState {
             manager,
             spaces_mounted,
         })
+}
+
+async fn runtime_origin(
+    State(manager): State<Arc<MultiManager>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let host = crate::auth::request_host(req.headers());
+    let host = host
+        .split(':')
+        .next()
+        .unwrap_or("")
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
+    if !host.ends_with(".runtime.localhost") {
+        return next.run(req).await;
+    }
+    let Some(instance) = manager.registry().current().resolve_runtime(&host) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let context = crate::auth::AuthContext {
+        method: req.method(),
+        path: req.uri().path(),
+        query: req.uri().query(),
+        headers: req.headers(),
+    };
+    if crate::auth::cookie_value(
+        req.headers(),
+        &crate::auth::headless_cookie_name(&instance.id),
+    )
+    .is_none()
+        || !instance
+            .runtime_authorizer
+            .as_ref()
+            .is_some_and(|auth| auth.is_authorized(&context))
+        || context.path == "/.spaces"
+        || context.path.starts_with("/.spaces/")
+    {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let Some(router) = &instance.router else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    match router.clone().oneshot(req).await {
+        Ok(response) => response,
+        Err(never) => match never {},
+    }
 }
 
 fn primary_host_matches(primary: &str, headers: &HeaderMap) -> bool {
@@ -287,7 +338,6 @@ mod tests {
             members: Default::default(),
             read_only: false,
             shell: Default::default(),
-            runtime_api: false,
             index_page: "index".into(),
             description: String::new(),
             theme_color: "#e1e1e1".into(),

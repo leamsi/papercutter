@@ -67,6 +67,7 @@ const ForceGraph = ForceGraphImpl as unknown as () => (
 ) => ForceGraphInstance;
 
 type Theme = {
+  font: string;
   bg: string;
   nodeDim: string;
   label: string;
@@ -96,6 +97,7 @@ function readTheme(): Theme {
     cs.getPropertyValue(n).trim() || fallback;
   return {
     bg: v("--gv-bg", "#ffffff"),
+    font: cs.fontFamily,
     nodeDim: v("--gv-node-dim", "#9e4705"),
     label: v("--gv-label", "#333"),
     labelDim: v("--gv-label-dim", "#676767"),
@@ -710,7 +712,7 @@ export class GraphCanvas extends Component<Props, State> {
     if (showLabel) {
       const fontPx = isSelected ? 13 : 11;
       const fontSize = fontPx / scale;
-      ctx.font = `${isSelected ? "600 " : ""}${fontSize}px sans-serif`;
+      ctx.font = `${isSelected ? "600 " : ""}${fontSize}px ${t.font}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       const name = displayName(node.title);
@@ -824,7 +826,7 @@ export class GraphCanvas extends Component<Props, State> {
       ctx.translate(mx, my);
       ctx.rotate(angle);
       const fontSize = 10 / scale;
-      ctx.font = `${fontSize}px sans-serif`;
+      ctx.font = `${fontSize}px ${t.font}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
       ctx.lineWidth = 3 / scale;

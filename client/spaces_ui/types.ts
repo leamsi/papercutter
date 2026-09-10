@@ -87,7 +87,6 @@ export type SpaceInfo = {
   members: Record<string, MemberEntry>;
   readOnly: boolean;
   shell: { enabled: boolean; whitelist: string[] };
-  runtimeApi: boolean;
   revisions?: RevisionsMode;
   gitSync?: GitSyncConfig;
   revisionsCommit?: CommitTiming;

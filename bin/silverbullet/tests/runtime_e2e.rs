@@ -15,10 +15,32 @@ use std::time::{Duration, Instant};
 /// so the server never leaks even if an assertion panics.
 struct Server(Child);
 
-impl Drop for Server {
-    fn drop(&mut self) {
+impl Server {
+    fn stop(&mut self) {
+        if self.0.try_wait().ok().flatten().is_some() {
+            return;
+        }
+        #[cfg(unix)]
+        {
+            let _ = Command::new("kill")
+                .args(["-TERM", &self.0.id().to_string()])
+                .status();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while Instant::now() < deadline {
+                if self.0.try_wait().ok().flatten().is_some() {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
         let _ = self.0.kill();
         let _ = self.0.wait();
+    }
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
@@ -45,8 +67,7 @@ fn wait_until(
 
 /// Kill the child, drain its captured output, and panic with diagnostics.
 fn dump_and_panic(server: &mut Server, msg: &str) -> ! {
-    let _ = server.0.kill();
-    let _ = server.0.wait();
+    server.stop();
     let mut out = String::new();
     if let Some(mut s) = server.0.stdout.take() {
         let _ = s.read_to_string(&mut out);
@@ -146,4 +167,87 @@ fn runtime_api_evaluates_lua_against_headless_chrome() {
     assert_eq!(v, serde_json::json!({ "result": 2 }));
 
     drop(server);
+}
+
+#[test]
+fn host_bound_runtime_boots_core_and_reads_its_space() {
+    if !chrome_available_or_skip("host_bound_runtime_e2e") {
+        return;
+    }
+    let root = tempfile::tempdir().unwrap();
+    let users = silverbullet_server::multi::users::UserStore::create_empty(root.path()).unwrap();
+    users
+        .create_user("keeper", "fixture-password", true, Default::default())
+        .unwrap();
+    let token = users.create_token("keeper", "smoke-test").unwrap();
+    let folder = root.path().join("notes");
+    std::fs::create_dir(&folder).unwrap();
+    std::fs::write(folder.join("Welcome.md"), "# Fictional runtime notes\n").unwrap();
+    std::fs::write(root.path().join("spaces.json"), serde_json::json!({
+        "host-smoke": {"name": "Notes", "folder": "notes", "binding": {"host": "notes.example.test"}, "indexPage": "Welcome"}
+    }).to_string()).unwrap();
+    let port = free_port();
+    let child = Command::new(env!("CARGO_BIN_EXE_silverbullet"))
+        .arg(root.path())
+        .arg("-p")
+        .arg(port.to_string())
+        .arg("-L")
+        .arg("127.0.0.1")
+        .env("SB_DISABLE_SERVICE_WORKER", "1")
+        .env("SB_CHROME_DATA_DIR", root.path().join("chrome-data"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut server = Server(child);
+    let base = format!("http://127.0.0.1:{port}");
+    let http = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .unwrap();
+    wait_until(
+        Duration::from_secs(20),
+        || {
+            http.get(format!("{base}/.instance"))
+                .send()
+                .is_ok_and(|response| response.status().is_success())
+        },
+        &mut server,
+        "server did not start",
+    );
+    let mut result = String::new();
+    wait_until(
+        Duration::from_secs(45),
+        || match http
+            .post(format!("{base}/.runtime/lua"))
+            .header("host", "notes.example.test")
+            .bearer_auth(&token)
+            .body("space.readPage('Welcome')")
+            .send()
+        {
+            Ok(response) if response.status().is_success() => {
+                result = response.text().unwrap();
+                true
+            }
+            _ => false,
+        },
+        &mut server,
+        "host-bound Core runtime did not boot",
+    );
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&result).unwrap(),
+        serde_json::json!({"result": "# Fictional runtime notes\n"})
+    );
+    let response = http
+        .put(format!("{base}/.spaces/api/admin/server-config"))
+        .bearer_auth(&token)
+        .header("content-type", "application/json")
+        .body(r#"{"runtimeApi":false}"#)
+        .send()
+        .unwrap();
+    assert!(
+        response.status().is_success(),
+        "runtime shutdown: {}",
+        response.status()
+    );
 }

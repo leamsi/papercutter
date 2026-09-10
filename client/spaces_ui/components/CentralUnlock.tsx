@@ -1,4 +1,9 @@
-import { Alert, Button, Input } from "@silverbulletmd/silverbullet/ui";
+import {
+  Alert,
+  Button,
+  Field,
+  PasswordInput,
+} from "@silverbulletmd/silverbullet/ui";
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
   base64Decode,
@@ -274,21 +279,19 @@ export function CentralUnlock({ resume }: { resume: string }) {
               It stays on this device and is separate from your provider
               account.
             </p>
-            <label for="local-passphrase">Local encryption passphrase</label>
-            <Input
-              id="local-passphrase"
-              type="password"
-              required
-              autoComplete={existing ? "current-password" : "new-password"}
-              value={phrase}
-              onInput={(event) => setPhrase(event.currentTarget.value)}
-            />
+            <Field label="Local encryption passphrase">
+              <PasswordInput
+                id="local-passphrase"
+                required
+                autoComplete={existing ? "current-password" : "new-password"}
+                value={phrase}
+                onInput={(event) => setPhrase(event.currentTarget.value)}
+              />
+            </Field>
             {!existing && (
-              <>
-                <label for="local-passphrase-confirm">Confirm passphrase</label>
-                <Input
+              <Field label="Confirm passphrase">
+                <PasswordInput
                   id="local-passphrase-confirm"
-                  type="password"
                   required
                   autoComplete="new-password"
                   value={confirmation}
@@ -296,7 +299,7 @@ export function CentralUnlock({ resume }: { resume: string }) {
                     setConfirmation(event.currentTarget.value)
                   }
                 />
-              </>
+              </Field>
             )}
             <div class="row">
               <Button type="submit" variant="primary">

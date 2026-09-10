@@ -4,28 +4,22 @@ references:
 - bin/silverbullet/src/server.rs
 - bin/sb/src/commands/query.rs
 ---
-
-The Runtime API lets you interact with SilverBullet programmatically over HTTP: evaluate Lua expressions and run scripts from the command line, scripts, or external tools.
+The Runtime API lets you interact with a SilverBullet client programmatically via HTTP.
 
 Requests are evaluated via Chrome DevTools Protocol (CDP) in a headless Chrome instance, which does the actual execution so all results reflect the live client state.
 
 > **note** Note
 > The [[Features/CLI]] provides a convenient command-line interface for the Runtime API — evaluate Lua, run scripts, open a REPL, and more, without writing raw HTTP requests.
 
-> **note** Note
-> The Runtime API is not available in read-only mode (`SB_READ_ONLY`).
-
 # Setup
 The Runtime API is enabled automatically when Chrome, Chromium, or Chromium headless shell is detected on your system — no configuration needed. Auto-detection prefers headless shell when it is available on `PATH`.
 
-If Chrome isn't auto-detected, set the path explicitly:
+If Chrome is not auto-detected, for some reason, set the path explicitly:
 ```
 SB_CHROME_PATH=/usr/bin/chromium
 ```
 
-Headless shell uses less memory by omitting Chrome’s browser UI while keeping the web platform used by SilverBullet. You can select it explicitly with `SB_CHROME_PATH=/path/to/chrome-headless-shell` (Alpine Linux calls the executable `chromium-headless-shell`). The runtime also uses memory-oriented V8 settings and disables unused address-bar UI in regular headless Chrome. These changes preserve the full client, per-user/space isolation, and native profile storage; runtimes are not stopped automatically when idle.
-
-In single-instance mode, set `SB_RUNTIME_API=0` to disable the Runtime API. In multi-space mode this variable is ignored: use the **Enable runtime API** toggle in the administrator’s **Server** tab. Each space retains its own runtime setting and each writer has an independent **Runtime API** permission in the access grid. Runtime permission is unavailable to readers. Existing writers default to enabled unless explicitly opted out; new spaces default on when Chrome is detected and the server toggle is enabled.
+In single-instance mode, set `SB_RUNTIME_API=0` to disable the Runtime API. In multi-space mode this variable is ignored: use the **Enable runtime API** toggle in the administrator’s **Server** tab. Each writer has an independent **Runtime API** permission in the space’s access grid. Existing writers default to enabled unless explicitly opted out.
 
 # Docker setup
 Use the `-runtime-api` Docker image variant, which includes Chromium headless shell:
@@ -73,15 +67,6 @@ curl -d 'local pages = query[[from tags.page limit 3 select table.select(_, "nam
 return pages' \
      http://localhost:3000/.runtime/lua_script
 # => {"result":[{"name":"index"},{"name":"Projects"},{"name":"TODO"}]}
-```
-
-## Screenshot
-`GET /.runtime/screenshot`
-
-Captures the current viewport of the headless Chrome instance as a PNG image.
-
-```bash
-curl -o screenshot.png http://localhost:3000/.runtime/screenshot
 ```
 
 ## Console logs
@@ -147,9 +132,4 @@ Set `SB_CHROME_SHOW=1` to run Chrome with a visible window — useful for watchi
 Headless Chrome spawns several processes (browser, network, storage, and renderer) for each active user and space pair. Additional runtimes therefore cost a whole browser, not just a tab. Browsers start lazily so unused runtime permissions consume no Chrome processes.
 
 ## Managing runtimes
-
 Server administrators can open **Admin → Runtimes** to see each instantiated runtime's space, user, status, CPU, estimated memory, and profile disk usage. The list refreshes while visible and includes stopped runtimes with retained profiles. Viewing it does not start Chrome.
-
-**Stop** cancels execution and stops Chrome, retaining its profile and client index. The next authorized runtime request starts Chrome again with a fresh credential for the same user and space. **Reset** also deletes the profile and removes the entry; the next request creates a fresh profile and rebuilds the index. Neither action changes permissions. A reset that cannot finish cleanup remains unavailable until Reset succeeds. Removing a user's permissions still invalidates credentials and removes retained runtime data.
-
-CPU includes Chrome's child processes; 100% represents one fully used logical core. Memory sums resident memory across those processes and may count shared pages more than once. Profile disk usage measures browser files, excluding the space's notes. Measurements that cannot be obtained appear as unavailable. Profiles retained by Stop do not persist across a server restart.

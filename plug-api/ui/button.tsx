@@ -47,3 +47,15 @@ export function Button({
     </button>
   );
 }
+
+export type ButtonLinkProps = Omit<JSX.IntrinsicElements["a"], "class"> & {
+  variant?: ButtonVariant;
+  class?: string;
+};
+export function ButtonLink({
+  variant = "default",
+  class: extra,
+  ...props
+}: ButtonLinkProps) {
+  return <a {...props} class={cx(VARIANT_CLASS[variant], extra)} />;
+}

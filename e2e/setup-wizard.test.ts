@@ -151,5 +151,5 @@ test("the setup wizard's styles actually load", async ({ page, sbServer }) => {
   const bg = await button.evaluate(
     (el) => getComputedStyle(el).backgroundColor,
   );
-  expect(bg).toBe("rgb(70, 76, 252)"); // --ui-accent-color #464cfc
+  expect(bg).toBe("rgb(53, 105, 184)"); // --ui-accent-color #3569b8
 });

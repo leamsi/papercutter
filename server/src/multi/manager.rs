@@ -756,7 +756,6 @@ mod tests {
             members: Default::default(),
             read_only: false,
             shell: Default::default(),
-            runtime_api: false,
             index_page: "index".into(),
             description: String::new(),
             theme_color: "#e1e1e1".into(),

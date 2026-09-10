@@ -53,7 +53,11 @@ test.beforeEach(async ({ page }) => {
   await page.getByLabel("Username").fill(ADMIN_USER);
   await page.getByLabel("Password", { exact: true }).fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page.locator(".sb-tab.sb-active")).toHaveText("Spaces");
+  await expect(
+    page
+      .getByRole("navigation", { name: "Sections", exact: true })
+      .locator('[aria-current="page"]'),
+  ).toHaveText("Spaces");
 });
 
 test("runtime metrics, stop, reset, and errors refresh the list", async ({

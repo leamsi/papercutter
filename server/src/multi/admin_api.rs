@@ -312,7 +312,6 @@ enum CreateLoginMethod {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CreateBody {
-    runtime_api: Option<bool>,
     #[serde(default = "default_true")]
     seed_index: bool,
     #[serde(flatten)]
@@ -327,12 +326,7 @@ async fn handle_create(
     let CreateBody {
         seed_index,
         mut config,
-        runtime_api,
     } = body;
-    config.runtime_api = runtime_api.unwrap_or(
-        state.runtime_availability == crate::runtime::RuntimeAvailability::Available
-            && manager.runtime_enabled(),
-    );
     config.git_sync = None;
     match run_blocking(move || Ok(manager.create(config, seed_index))).await {
         Ok(Ok(id)) => Json(json!({ "id": id })).into_response(),
@@ -1417,7 +1411,6 @@ mod tests {
             members: Default::default(),
             read_only: false,
             shell: Default::default(),
-            runtime_api: false,
             index_page: "index".into(),
             description: String::new(),
             theme_color: "#e1e1e1".into(),

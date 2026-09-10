@@ -1272,9 +1272,7 @@ test("Space peeks at a header without leaving the outline sidebar", async ({
   await expectNavInputFocused(sbPage, ".sb-nav-root-rhs");
 });
 
-test("the outline drops the tree's folder bands; the space tree keeps them", async ({
-  sbPage,
-}) => {
+test("outline and space tree folders use flat surfaces", async ({ sbPage }) => {
   await navigateViaPagePicker(sbPage, "Outline Page");
   const outline = await openOutline(sbPage, ".sb-nav-root-rhs");
   const band = (frame: ReturnType<typeof navFrame>, path: string) =>
@@ -1299,7 +1297,7 @@ test("the outline drops the tree's folder bands; the space tree keeps them", asy
   await expect(tree.locator("[data-path='Projects']")).toBeVisible({
     timeout: 20_000,
   });
-  expect(await band(tree, "Projects")).not.toBe("none");
+  expect(await band(tree, "Projects")).toBe("none");
 });
 
 test("the outline re-sources for the page it is opened on", async ({

@@ -53,7 +53,11 @@ test.beforeEach(async ({ page }) => {
   await page.getByLabel("Username").fill(ADMIN_USER);
   await page.getByLabel("Password", { exact: true }).fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page.locator(".sb-tab.sb-active")).toHaveText("Spaces");
+  await expect(
+    page
+      .getByRole("navigation", { name: "Sections", exact: true })
+      .locator('[aria-current="page"]'),
+  ).toHaveText("Spaces");
 });
 
 /** Call an admin API endpoint using the given page's (admin) session cookie. */
@@ -189,6 +193,13 @@ test("the profile button names the signed-in account", async ({ page }) => {
   await expect(trigger.locator(".sb-profile-avatar-signed-in")).toHaveText(
     "AL",
   );
+  const avatar = trigger.locator(".sb-profile-avatar-signed-in");
+  const dimensions = await avatar.boundingBox();
+  expect(dimensions).not.toBeNull();
+  expect(dimensions!.width).toBe(dimensions!.height);
+  expect(dimensions!.width).toBeGreaterThanOrEqual(26);
+  await expect(avatar).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(avatar).toHaveCSS("border-top-width", "1px");
   await expect(trigger).toHaveAttribute("aria-haspopup", "menu");
   await expect(trigger).toHaveAttribute("aria-expanded", "false");
 
@@ -568,4 +579,17 @@ test("keyboard interaction with the profile dropdown does not edit the note", as
   await expect(profileTab).toHaveURL(`${base}/.spaces/profile`);
   expect(await page.locator(".cm-content").innerText()).toBe(before);
   await profileTab.close();
+});
+
+test("profile menu items use the loaded UI font", async ({ page }) => {
+  await gotoAsAda(page, "/writer-menu");
+  await profileTrigger(page).click();
+  const item = page.getByRole("button", { name: "Edit profile", exact: true });
+  await expect(item).toBeVisible();
+  await expect(item).toHaveCSS("font-family", /iA-Mono/);
+  expect(
+    await item.evaluate(
+      async () => (await document.fonts.load('13px "iA-Mono"')).length,
+    ),
+  ).toBeGreaterThan(0);
 });

@@ -8,12 +8,19 @@
     <title>Authorize access — {{ space_name }}</title>
   </head>
   <body class="sb-standalone">
+    <header class="sb-auth-header">
+      <div class="sb-auth-brand">
+        <img src="{{ host_prefix | safe }}/.client/logo.png" alt="" />
+        <span>SilverBullet</span>
+      </div>
+      <span class="sb-auth-host">{{ space_name }}</span>
+    </header>
     <div class="center">
       <main class="floating-island flow">
         <h1>Authorize access</h1>
         {% if device_flow and not user_code %}
         <form method="get" action="{{ host_prefix }}/.auth/device">
-          <label>Code from your terminal <input name="user_code" required autocomplete="off" /></label>
+          <label>Code from your terminal <input class="sb-input" name="user_code" required autocomplete="off" /></label>
           <button type="submit" class="sb-button-primary">Continue</button>
         </form>
         {% else %}

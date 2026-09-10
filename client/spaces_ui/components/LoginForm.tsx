@@ -2,7 +2,9 @@ import { useState } from "preact/hooks";
 import {
   Alert,
   Button,
-  Checkbox,
+  CheckboxField,
+  Field,
+  PasswordInput,
   Input,
 } from "@silverbulletmd/silverbullet/ui";
 
@@ -44,7 +46,6 @@ export function LoginForm({
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [revealed, setRevealed] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [encrypt, setEncrypt] = useState(initialClientEncryption);
 
@@ -62,7 +63,8 @@ export function LoginForm({
         });
       }}
     >
-      <h1>{title}</h1>
+      <h1>Log in</h1>
+      <p class="sb-auth-description">Continue to {title}.</p>
       {error && <Alert variant="error">{error}</Alert>}
       {providerLabel && onProvider && (
         <>
@@ -82,8 +84,7 @@ export function LoginForm({
           <div role="separator">or use a local account</div>
         </>
       )}
-      <div>
-        <label for="username">Username</label>
+      <Field label="Username">
         <Input
           id="username"
           name="username"
@@ -94,53 +95,33 @@ export function LoginForm({
           value={username}
           onInput={(event) => setUsername(event.currentTarget.value)}
         />
-      </div>
-      <div>
-        <label for="password">Password</label>
-        <div class="password-field">
-          <Input
-            id="password"
-            name="password"
-            type={revealed ? "text" : "password"}
-            autocomplete="current-password"
-            value={password}
-            onInput={(event) => setPassword(event.currentTarget.value)}
-          />
-          <Button
-            id="togglePassword"
-            aria-label={revealed ? "Hide password" : "Show password"}
-            onClick={() => setRevealed((shown) => !shown)}
-          >
-            {revealed ? "Hide" : "Show"}
-          </Button>
-        </div>
-      </div>
+      </Field>
+      <Field label="Password">
+        <PasswordInput
+          id="password"
+          toggleId="togglePassword"
+          name="password"
+          autocomplete="current-password"
+          value={password}
+          onInput={(event) => setPassword(event.currentTarget.value)}
+        />
+      </Field>
       {rememberMeDays !== undefined && (
-        <div class="checkbox-wrapper">
-          <Checkbox
-            id="rememberMe"
-            checked={rememberMe}
-            onChange={(event) => setRememberMe(event.currentTarget.checked)}
-          />
-          <label for="rememberMe">Remember me ({rememberMeDays} days)</label>
-        </div>
+        <CheckboxField
+          id="rememberMe"
+          label={`Remember me (${rememberMeDays} days)`}
+          checked={rememberMe}
+          onChange={(event) => setRememberMe(event.currentTarget.checked)}
+        />
       )}
       {clientEncryption && (
-        <div>
-          <div class="checkbox-wrapper">
-            <Checkbox
-              id="clientEncryption"
-              checked={encrypt}
-              onChange={(event) => setEncrypt(event.currentTarget.checked)}
-            />
-            <label for="clientEncryption">
-              Encrypt local data on this device
-            </label>
-          </div>
-          {clientEncryptionHint && encrypt && (
-            <span class="sb-help-text">{clientEncryptionHint}</span>
-          )}
-        </div>
+        <CheckboxField
+          id="clientEncryption"
+          label="Encrypt local data on this device"
+          checked={encrypt}
+          onChange={(event) => setEncrypt(event.currentTarget.checked)}
+          hint={encrypt ? clientEncryptionHint : undefined}
+        />
       )}
       <div style="--space: 1.8rem">
         <Button type="submit" variant="primary" disabled={busy}>

@@ -101,6 +101,16 @@ pub fn validate(
                         format!("{id}.binding"),
                         "host must be a bare hostname (no port, no slashes)",
                     );
+                } else if host
+                    .trim_end_matches('.')
+                    .to_ascii_lowercase()
+                    .ends_with(".runtime.localhost")
+                {
+                    err(
+                        &mut errors,
+                        format!("{id}.binding"),
+                        "hosts ending in .runtime.localhost are reserved for the Runtime API",
+                    );
                 } else if let Some(other) = seen_hosts.insert(host.to_ascii_lowercase(), id.clone())
                 {
                     err(
@@ -183,7 +193,6 @@ mod tests {
             members: Default::default(),
             read_only: false,
             shell: Default::default(),
-            runtime_api: false,
             index_page: "index".into(),
             description: String::new(),
             theme_color: "#e1e1e1".into(),
@@ -449,6 +458,28 @@ mod tests {
             errs.iter().any(|e| e.field.ends_with(".binding")),
             "{errs:?}"
         );
+    }
+
+    #[test]
+    fn runtime_localhost_bindings_are_reserved() {
+        let dir = tempfile::tempdir().unwrap();
+        for host in [
+            "notes.runtime.localhost",
+            "NOTES.RUNTIME.LOCALHOST.",
+            "notes.runtime.localhost..",
+        ] {
+            let c = cfg(vec![(
+                "a",
+                space("Notes", Binding::Host { host: host.into() }),
+            )]);
+            let errors = validate(&c, dir.path(), &users(&[]));
+            assert!(
+                errors
+                    .iter()
+                    .any(|error| error.field == "a.binding" && error.message.contains("reserved")),
+                "{host}: {errors:?}"
+            );
+        }
     }
 
     #[test]

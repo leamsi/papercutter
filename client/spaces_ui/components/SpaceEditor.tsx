@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
 } from "preact/hooks";
-import { Alert, Select } from "@silverbulletmd/silverbullet/ui";
+import { Alert, SectionNav } from "@silverbulletmd/silverbullet/ui";
 import { adminApi, formatApiError } from "../api.ts";
 import { spaceUrl } from "../bindings.ts";
 import { setNavigationGuard, useNavigate } from "../navigation.ts";
@@ -101,15 +101,21 @@ export function SpaceEditor({
     [id, navigate],
   );
 
-  if (!loaded) return <p>Loading…</p>;
+  if (!loaded)
+    return <p class="sb-management-main sb-management-status">Loading…</p>;
   if (notFound)
     return (
-      <>
+      <div class="sb-management-main sb-management-status">
         <h1>Space not found</h1>
         <a href={spacesUrl("/")}>Return to spaces</a>
-      </>
+      </div>
     );
-  if (error) return <Alert variant="error">{error}</Alert>;
+  if (error)
+    return (
+      <div class="sb-management-main sb-management-status">
+        <Alert variant="error">{error}</Alert>
+      </div>
+    );
   const form = (
     <SpaceForm
       id={id}
@@ -146,35 +152,18 @@ export function SpaceEditor({
         </a>
       </header>
       <div class="sb-settings-layout">
-        <nav class="sb-settings-sidebar" aria-label="Space settings">
-          {Object.entries(SPACE_SECTIONS).map(([key, label]) => (
-            <a
-              key={key}
-              href={sectionUrl(key as SpaceSection)}
-              aria-current={section === key ? "page" : undefined}
-              data-dirty={isDirty(key as SpaceSection) || undefined}
-            >
-              {label}
-            </a>
-          ))}
-        </nav>
-        <div class="sb-settings-mobile">
-          <label for="settings-section">Settings section</label>
-          <Select
-            id="settings-section"
-            value={section}
-            onChange={(event) =>
-              navigate(sectionUrl(event.currentTarget.value as SpaceSection))
-            }
-          >
-            {Object.entries(SPACE_SECTIONS).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-                {isDirty(key as SpaceSection) ? " •" : ""}
-              </option>
-            ))}
-          </Select>
-        </div>
+        <SectionNav
+          horizontal
+          label="Space settings"
+          active={section}
+          items={Object.entries(SPACE_SECTIONS).map(([id, label]) => ({
+            id,
+            label,
+            href: sectionUrl(id as SpaceSection),
+            dirty: isDirty(id as SpaceSection),
+          }))}
+          onSelect={(id) => navigate(sectionUrl(id as SpaceSection))}
+        />
         <div class="sb-settings-content">
           {form}
           {visitedGit && (

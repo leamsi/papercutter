@@ -53,7 +53,6 @@ fn synthesize(config: &Config, shell_env: ShellConfig) -> SpaceConfig {
             enabled: !config.read_only && shell_env.enabled,
             whitelist: shell_env.whitelist,
         },
-        runtime_api: true,
         index_page: config.index_page.clone(),
         description: config.space_description.clone(),
         theme_color: config.theme_color.clone(),
@@ -275,6 +274,5 @@ mod tests {
         assert_eq!(s.theme_color, "#123456");
         assert!(s.log_push);
         assert_eq!(s.folder, ".");
-        assert!(s.runtime_api);
     }
 }

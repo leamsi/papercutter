@@ -172,7 +172,7 @@ impl Fixture {
     fn space(&self, prefix: &str, public: bool) -> String {
         let config: SpaceConfig = serde_json::from_value(json!({
             "name": "Fixture space", "binding": {"prefix": prefix},
-            "access": if public { "write" } else { "none" }, "runtimeApi": true,
+            "access": if public { "write" } else { "none" },
             "revisions": "disabled",
             "members": {
                 "writer-one": {"role": "write"},
@@ -218,10 +218,21 @@ async fn request(
     credential: Option<(&str, String)>,
     body: &str,
 ) -> (StatusCode, Value) {
+    request_at(router, "localhost:3000", method, path, credential, body).await
+}
+
+async fn request_at(
+    router: &Router,
+    host: &str,
+    method: &str,
+    path: &str,
+    credential: Option<(&str, String)>,
+    body: &str,
+) -> (StatusCode, Value) {
     let mut builder = Request::builder()
         .method(method)
         .uri(path)
-        .header("host", "localhost:3000");
+        .header("host", host);
     if let Some((header, value)) = credential {
         builder = builder.header(header, value);
     }
@@ -421,7 +432,6 @@ async fn permission_and_space_revocation_reject_credentials_on_current_and_retai
         "runtime-permission",
         "write-permission",
         "membership",
-        "space-runtime",
         "frozen",
     ] {
         let id = f.space(&format!("/{change}"), change != "membership");
@@ -441,7 +451,6 @@ async fn permission_and_space_revocation_reject_credentials_on_current_and_retai
             "membership" => {
                 config.members.remove("writer-one");
             }
-            "space-runtime" => config.runtime_api = false,
             "frozen" => config.read_only = true,
             _ => unreachable!(),
         }
@@ -465,7 +474,7 @@ async fn permission_and_space_revocation_reject_credentials_on_current_and_retai
             );
         }
         assert_eq!(child.evaluations.load(Ordering::SeqCst), 1);
-        if change == "runtime-permission" || change == "space-runtime" {
+        if change == "runtime-permission" {
             assert_eq!(
                 request(
                     &current,
@@ -770,4 +779,192 @@ async fn restarted_runtime_authenticates_as_the_represented_user() {
     assert!(!f.manager.manage_runtime(&row.instance.id, true).unwrap());
     f.users.set_disabled("writer-one", true).unwrap();
     assert_cookie_revoked(&router, &f.child(after)).await;
+}
+
+#[tokio::test]
+async fn host_bound_runtime_uses_a_private_local_origin() {
+    let f = Fixture::new();
+    let id = f.space("/host", true);
+    let mut config = f.manager.instance(&id).unwrap().config.clone();
+    config.binding = silverbullet_server::multi::config::Binding::Host {
+        host: "notes.example.test".into(),
+    };
+    f.manager.update(&id, config).unwrap();
+    let main = silverbullet_server::multi::dispatch::build_main_router(
+        f.manager.clone(),
+        Some(Router::new()),
+        "fixture".into(),
+    );
+    let (status, value) = request_at(
+        &main,
+        "notes.example.test",
+        "POST",
+        "/.runtime/lua",
+        Some(f.bearer("writer-one")),
+        "host runtime",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{value}");
+    let child = f.child(value["result"].as_u64().unwrap() as usize);
+    assert!(child.server_url.starts_with("http://"));
+    assert!(child.server_url.ends_with(".runtime.localhost:3000"));
+    let host = child.server_url.strip_prefix("http://").unwrap();
+    for name in ["reader", "opted-out"] {
+        assert_eq!(
+            request_at(
+                &main,
+                "notes.example.test",
+                "POST",
+                "/.runtime/lua",
+                Some(f.bearer(name)),
+                "denied"
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+    }
+    for credential in [
+        None,
+        Some(f.bearer("writer-one")),
+        Some(f.bearer("keeper")),
+        Some(("cookie", format!("{}=invalid", headless_cookie_name(&id)))),
+    ] {
+        for path in ["/", "/.fs/Test.md", "/.spaces/api/server-config"] {
+            assert_eq!(
+                request_at(&main, host, "GET", path, credential.clone(), "")
+                    .await
+                    .0,
+                StatusCode::FORBIDDEN,
+                "{path}"
+            );
+        }
+    }
+    let second = f.space("/other", false);
+    let other = f.child(
+        f.evaluate(&f.router(&second), "writer-one", "other runtime")
+            .await,
+    );
+    assert_eq!(
+        request_at(
+            &main,
+            host,
+            "GET",
+            "/",
+            Some(("cookie", other.cookie.clone())),
+            ""
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let other_token = other.cookie.split_once('=').unwrap().1;
+    assert_eq!(
+        request_at(
+            &main,
+            host,
+            "GET",
+            "/",
+            Some((
+                "cookie",
+                format!("{}={other_token}", headless_cookie_name(&id))
+            )),
+            ""
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        request_at(
+            &main,
+            host,
+            "PUT",
+            "/.fs/Test.md",
+            Some(("cookie", child.cookie.clone())),
+            "host-bound contents"
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        request_at(&main, "notes.example.test", "GET", "/.fs/Test.md", None, "")
+            .await
+            .1,
+        json!("host-bound contents")
+    );
+    assert_eq!(
+        request_at(
+            &main,
+            host,
+            "GET",
+            "/.spaces/api/server-config",
+            Some(("cookie", child.cookie.clone())),
+            ""
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        request_at(
+            &main,
+            "unknown.runtime.localhost:3000",
+            "GET",
+            "/",
+            None,
+            ""
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    f.manager
+        .set_server_config(None, None, Some(false))
+        .unwrap();
+    assert_eq!(
+        request_at(
+            &main,
+            host,
+            "GET",
+            "/.fs/Test.md",
+            Some(("cookie", child.cookie.clone())),
+            ""
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    f.manager.set_server_config(None, None, Some(true)).unwrap();
+    let fresh = f.child(f.evaluate(&f.router(&id), "writer-one", "reenabled").await);
+    assert_eq!(
+        request_at(
+            &main,
+            host,
+            "GET",
+            "/.fs/Test.md",
+            Some(("cookie", fresh.cookie.clone())),
+            ""
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let mut config = f.manager.instance(&id).unwrap().config.clone();
+    config.members.get_mut("writer-one").unwrap().runtime_api = false;
+    f.manager.update(&id, config).unwrap();
+    assert_eq!(
+        request_at(
+            &main,
+            host,
+            "GET",
+            "/.fs/Test.md",
+            Some(("cookie", fresh.cookie.clone())),
+            ""
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
 }

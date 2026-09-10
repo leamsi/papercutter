@@ -98,7 +98,9 @@ test("the Space Manager fits a phone viewport on every screen", async ({
   await page.getByLabel("Password", { exact: true }).fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Log in" }).click();
 
-  await expect(page.getByRole("link", { name: "My Notes" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "My Notes /notes", exact: true }),
+  ).toBeVisible();
   await expectFits(page);
 
   for (const path of [
@@ -137,7 +139,11 @@ test("the tabs and profile menu fit the mobile header", async ({ page }) => {
       const tops = [...range.getClientRects()].map((r) => Math.round(r.top));
       return new Set(tops).size;
     };
-    const tabs = [...document.querySelectorAll(".sb-tab")];
+    const tabs = [
+      ...document.querySelectorAll(
+        'nav[aria-label="Sections"] .sb-section-link',
+      ),
+    ];
     return {
       tabLines: tabs.map(linesOf),
       tabTops: [
@@ -146,7 +152,7 @@ test("the tabs and profile menu fit the mobile header", async ({ page }) => {
     };
   });
 
-  expect(header.tabLines).toEqual([1, 1, 1]);
+  expect(header.tabLines).toEqual([1, 1, 1, 1]);
   expect(header.tabTops).toHaveLength(1);
   await page.getByRole("button", { name: "Profile menu", exact: true }).click();
   await expect(page.locator(".sb-anchored-menu")).toBeVisible();
@@ -233,4 +239,21 @@ test("the setup wizard fits a phone viewport", async ({ page }) => {
     wizardProc.kill();
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("space settings icons remain visible beside their row target on mobile", async ({
+  page,
+}) => {
+  await page.goto(`${base}/.spaces/`);
+  await page.getByLabel("Username").fill(ADMIN_USER);
+  await page.getByLabel("Password", { exact: true }).fill(ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "Log in" }).click();
+  const action = page.getByRole("link", { name: "Settings for My Notes" });
+  await expect(action).toBeVisible();
+  const icon = await action.locator("svg").boundingBox();
+  const button = await action.boundingBox();
+  const row = await action.locator("..").boundingBox();
+  expect(icon?.width).toBeGreaterThanOrEqual(16);
+  expect(button?.height).toBeGreaterThanOrEqual(44);
+  expect(row!.height).toBeLessThan(110);
 });

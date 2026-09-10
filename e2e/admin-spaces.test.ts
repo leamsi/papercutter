@@ -59,8 +59,11 @@ test.beforeEach(async ({ page }) => {
   await page.getByLabel("Username").fill(ADMIN_USER);
   await page.getByLabel("Password", { exact: true }).fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Log in" }).click();
-  // The list screens have no heading — the active tab names them instead.
-  await expect(page.locator(".sb-tab.sb-active")).toHaveText("Spaces");
+  await expect(
+    page
+      .getByRole("navigation", { name: "Sections", exact: true })
+      .locator('[aria-current="page"]'),
+  ).toHaveText("Spaces");
 });
 
 /** Create a space directly via the admin API (full-config POST) and return its id. */
@@ -115,7 +118,7 @@ test("editing a space preserves fields the form does not manage", async ({
   await page.goto(`${base}/.spaces`);
   // The name opens the space itself; the admin-only Edit control at the end
   // of the row is the durable edit route.
-  await page.getByRole("link", { name: "Edit" }).click();
+  await page.getByRole("link", { name: "Settings for Work" }).click();
   await expect(page).toHaveURL(`${base}/.spaces/${encodeURIComponent(id)}`);
   await page.getByLabel("Name").fill("Renamed");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
@@ -145,7 +148,7 @@ test("saving an existing space stays on its settings with confirmation", async (
   await expect(page).toHaveURL(`${base}/.spaces/${encodeURIComponent(id)}`);
   await expect(page.getByRole("status")).toHaveText("Saved");
   await expect(
-    page.getByRole("heading", { name: "Feedback Renamed" }),
+    page.getByRole("heading", { name: "Feedback Renamed", exact: true }),
   ).toBeVisible();
 });
 
@@ -282,14 +285,13 @@ test("a non-admin sees only their spaces and no admin affordances", async ({
 
   await expect(page.locator(".sb-space-list li")).toHaveCount(1);
   await expect(page.locator("text=Members Only")).toBeVisible();
-  const tabs = page.locator(".sb-tabs");
+  const tabs = page.getByRole("navigation", { name: "Sections", exact: true });
   await expect(
     page.getByRole("button", { name: "Profile menu", exact: true }),
   ).toBeVisible();
-  await expect(tabs.getByRole("link", { name: "Spaces" })).toHaveCount(0);
+  await expect(tabs.getByRole("link", { name: "Spaces" })).toHaveCount(1);
   await expect(tabs.getByRole("link", { name: "Users" })).toHaveCount(0);
-  await expect(page.locator("text=Create space")).toHaveCount(0);
-  // No tab names this screen "Spaces", so the heading still does.
+  await expect(page.getByRole("link", { name: "Add space" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Spaces" })).toBeVisible();
 
   // Typing an admin URL yields the not-found screen, not the user list.
@@ -346,6 +348,13 @@ test("settings sections preserve drafts and save only the visible group", async 
   });
   await page.goto(`${base}/.spaces/${encodeURIComponent(id)}`);
   const navigation = page.getByRole("navigation", { name: "Space settings" });
+  await expect(page.locator(".sb-management-sidebar")).toHaveCount(1);
+  await expect(
+    page
+      .getByRole("navigation", { name: "Sections", exact: true })
+      .getByRole("link"),
+  ).toHaveText(["Spaces", "Users", "Profile", "Admin"]);
+  await expect(navigation).toHaveClass(/sb-tabs/);
   await expect(navigation.getByRole("link")).toHaveText([
     "General",
     "Access",
@@ -353,6 +362,9 @@ test("settings sections preserve drafts and save only the visible group", async 
     "Advanced",
   ]);
   await page.getByLabel("Name", { exact: true }).fill("Draft notebook");
+  await expect(
+    navigation.getByRole("link", { name: "General", exact: true }),
+  ).toHaveAttribute("data-dirty", "true");
   await navigation.getByRole("link", { name: "Advanced" }).click();
   await expect(page.getByLabel("Name", { exact: true })).toBeHidden();
   await page.getByLabel("Enable shell commands").check();
@@ -370,13 +382,9 @@ test("settings sections preserve drafts and save only the visible group", async 
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("Saved");
   await page.goBack();
-  await expect(
-    page.getByRole("heading", { name: "Advanced", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByLabel("Enable shell commands")).toBeVisible();
   await page.reload();
-  await expect(
-    page.getByRole("heading", { name: "Advanced", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByLabel("Enable shell commands")).toBeVisible();
 });
 
 test("mobile settings use a section selector without horizontal overflow", async ({
@@ -390,7 +398,7 @@ test("mobile settings use a section selector without horizontal overflow", async
   await page.goto(`${base}/.spaces/${encodeURIComponent(id)}`);
   await page.getByLabel("Settings section").selectOption("access");
   await expect(
-    page.getByRole("heading", { name: "Access", exact: true }),
+    page.getByRole("group", { name: "Who has access", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("navigation", { name: "Space settings" }),
@@ -529,12 +537,16 @@ test("Admin defaults to Server and preserves Authentication links", async ({
   await expect(
     page.getByRole("heading", { name: "Admin", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".sb-tab.sb-active")).toHaveText("Admin");
+  await expect(
+    page
+      .getByRole("navigation", { name: "Sections", exact: true })
+      .locator('[aria-current="page"]'),
+  ).toHaveText("Admin");
   await sections.getByRole("link", { name: "Authentication" }).click();
   await expect(page).toHaveURL(`${base}/.spaces/admin?section=authentication`);
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Authentication", exact: true }),
+    page.getByRole("button", { name: "Set up SSO", exact: true }),
   ).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(sections).toBeHidden();
@@ -653,4 +665,110 @@ test("access grid preserves permission dependencies and saved grants", async ({
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("Saved");
   expect((await fetchSpaceViaApi(page, id)).members?.morgan).toBeUndefined();
+});
+
+test("Spaces filtering supports keyboard targeting without opening until Enter", async ({
+  page,
+}) => {
+  await createSpaceViaApi(page, {
+    name: "Keyboard Cedar",
+    binding: { prefix: "/keyboard-cedar" },
+  });
+  await createSpaceViaApi(page, {
+    name: "Keyboard Maple",
+    binding: { prefix: "/keyboard-maple" },
+  });
+  await page.reload();
+  const filter = page.getByRole("textbox", { name: "Filter spaces" });
+  await expect(filter).toBeVisible({ timeout: 3000 });
+  await filter.fill("Keyboard");
+  const rows = page.locator(".sb-management-row");
+  await expect(rows).toHaveCount(2);
+  const managerUrl = page.url();
+  await expect(rows.nth(0)).toHaveAttribute("data-target", "true");
+  await filter.press("ArrowDown");
+  await expect(rows.nth(1)).toHaveAttribute("data-target", "true");
+  await filter.press("ArrowUp");
+  await expect(rows.nth(0)).toHaveAttribute("data-target", "true");
+  const settings = rows
+    .nth(1)
+    .getByRole("link", { name: "Settings for Keyboard Maple" });
+  await settings.focus();
+  await expect(rows.nth(1)).toHaveAttribute("data-target", "true");
+  await expect(rows.nth(0)).not.toHaveAttribute("data-target", "true");
+  const firstLink = rows.nth(0).locator(".sb-space-link");
+  await firstLink.focus();
+  await firstLink.press("ArrowDown");
+  await expect(rows.nth(1)).toHaveAttribute("data-target", "true");
+  expect(page.url()).toBe(managerUrl);
+  await firstLink.press("Escape");
+  await expect(filter).toHaveValue("");
+  await filter.fill("no matching space");
+  await expect(rows).toHaveCount(0);
+  await filter.press("Enter");
+  expect(page.url()).toBe(managerUrl);
+  await filter.press("Escape");
+  await expect(filter).toHaveValue("");
+  await filter.fill("Keyboard Maple");
+  await rows
+    .first()
+    .getByRole("link", { name: "Settings for Keyboard Maple" })
+    .press("Enter");
+  await expect(page.getByLabel("Name", { exact: true })).toBeVisible();
+  await page.goBack();
+  await filter.fill("Keyboard Maple");
+  await expect(
+    rows.first().getByRole("link", { name: "Settings for Keyboard Maple" }),
+  ).toBeVisible();
+  await filter.press("Enter");
+  await expect(page).toHaveURL(/\/keyboard-maple\//);
+});
+
+test("main page titles align and Spaces does not move when its list loads", async ({
+  page,
+}) => {
+  const sections = page.getByRole("navigation", {
+    name: "Sections",
+    exact: true,
+  });
+  const positions: { x: number; y: number }[] = [];
+  for (const name of ["Spaces", "Users", "Profile", "Admin"]) {
+    await sections.getByRole("link", { name, exact: true }).click();
+    const heading = page.getByRole("heading", { name, exact: true });
+    await expect(heading).toBeVisible();
+    await expect(page.getByText("Loading…", { exact: true })).toBeHidden();
+    await page.evaluate(() => document.fonts.ready);
+    const box = await heading.boundingBox();
+    expect(box).not.toBeNull();
+    positions.push({ x: box!.x, y: box!.y });
+  }
+  for (const position of positions) {
+    expect(Math.abs(position.x - positions[0].x)).toBeLessThan(0.5);
+    expect(Math.abs(position.y - positions[0].y)).toBeLessThan(0.5);
+  }
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/.spaces/api/spaces", async (route) => {
+    await pending;
+    await route.continue();
+  });
+  try {
+    await sections.getByRole("link", { name: "Spaces", exact: true }).click();
+    await expect(
+      page.getByRole("link", { name: "Add space", exact: true }),
+    ).toBeVisible();
+    const heading = page.getByRole("heading", { name: "Spaces", exact: true });
+    const filter = page.getByRole("textbox", { name: "Filter spaces" });
+    const before = [await heading.boundingBox(), await filter.boundingBox()];
+    release();
+    await expect(page.getByText("Loading…", { exact: true })).toBeHidden();
+    expect([await heading.boundingBox(), await filter.boundingBox()]).toEqual(
+      before,
+    );
+  } finally {
+    release();
+    await page.unroute("**/.spaces/api/spaces");
+  }
 });

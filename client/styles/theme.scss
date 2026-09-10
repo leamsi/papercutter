@@ -1,7 +1,10 @@
+@use "fonts";
+
 @use "tokens";
 
 html {
   --ui-accent-text-color: var(--ui-accent-color);
+  --text-field-focus-color: color-mix(in srgb, var(--ui-accent-color) 45%, var(--ui-surface-border-color));
   --highlight-color: rgba(255, 255, 0, 0.5);
   --link-color: #0330cb;
   --link-missing-color: #9e4705;
@@ -17,15 +20,15 @@ html {
   --ui-surface-background-color: var(--root-background-color);
   --ui-surface-color: var(--root-color);
   --ui-surface-subtle-color: var(--subtle-color);
-  --ui-surface-border-color: #ddd;
+  --ui-surface-border-color: #d8dce1;
   --ui-surface-section-background-color: var(--subtle-background-color);
   --ui-surface-hover-background-color: var(--subtle-background-color);
 
   --root-background-color: #fff;
-  --root-color: inherit;
+  --root-color: #20252d;
 
   --top-color: inherit;
-  --top-background-color: #e1e1e1;
+  --top-background-color: #eee;
   --top-border-color: #cacaca;
   --top-sync-error-color: var(--top-color);
   --top-sync-error-background-color: #fdf8cb;
@@ -33,27 +36,27 @@ html {
   --top-unsaved-color: #5e5e5e;
   --top-loading-color: #7a7a7a;
 
-  --panel-background-color: #fff;
-  --panel-border-color: #fff;
+  --panel-background-color: #f6f7f8;
+  --panel-border-color: var(--ui-surface-border-color);
 
   --bhs-background-color: #fff;
   --bhs-border-color: rgb(193, 193, 193);
 
   --modal-color: inherit;
   --modal-background-color: #fff;
-  --modal-border-color: rgb(108, 108, 108);
+  --modal-border-color: var(--ui-surface-border-color);
   --modal-backdrop-color: transparent;
   --modal-header-label-color: var(--ui-accent-text-color);
   --modal-help-background-color: #eee;
   --modal-help-color: #555;
-  --modal-selected-option-background-color: var(--ui-accent-color);
-  --modal-selected-option-color: var(--ui-accent-contrast-color);
+  --modal-selected-option-background-color: color-mix(in srgb, var(--ui-accent-color) 12%, var(--modal-background-color));
+  --modal-selected-option-color: var(--root-color);
   --modal-hint-background-color: #212476;
   --modal-hint-color: #eee;
   --modal-hint-inactive-background-color: #e1e1e1;
   --modal-hint-inactive-color: #111;
   --modal-description-color: #6b6b6b;
-  --modal-selected-option-description-color: #e6e6e6;
+  --modal-selected-option-description-color: var(--subtle-color);
 
   --notifications-background-color: inherit;
   --notifications-border-color: rgb(41, 41, 41);
@@ -61,14 +64,14 @@ html {
   --notification-error-background-color: rgb(255, 84, 84);
   --notification-warning-background-color: rgb(255, 213, 79);
 
-  --button-background-color: #eee;
-  --button-hover-background-color: #e0e0e0;
-  --button-color: black;
-  --button-border-color: #6c6c6c;
+  --button-background-color: #f6f7f8;
+  --button-hover-background-color: #edf0f3;
+  --button-color: var(--root-color);
+  --button-border-color: var(--ui-surface-border-color);
   --primary-button-background-color: var(--ui-accent-color);
   --primary-button-hover-background-color: color-mix(in srgb,
       var(--ui-accent-color),
-      black 35%);
+      black 18%);
   --primary-button-color: var(--ui-accent-contrast-color);
   --primary-button-border-color: transparent;
 
@@ -157,10 +160,7 @@ html {
   --editor-panels-bottom-button-active-background-image: linear-gradient(#b4b4b4,
       #d0d3d6);
 
-  --ui-font:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
-    "Segoe UI Symbol", "Noto Color Emoji";
+  --ui-font: "iA-Mono", "Menlo", monospace;
   --editor-font: "iA-Mono", "Menlo";
   --editor-width: 800px;
 
@@ -176,22 +176,21 @@ html {
   --alert-info-background-color: #eaf4fd;
   --alert-info-color: #0b4a7a;
   --alert-info-border-color: #cfe6fb;
-  --badge-background-color: #e8e8ff;
-  --badge-color: #464cfc;
+  --badge-background-color: #edf0f3;
+  --badge-color: #535d69;
 }
 
 html[data-theme="light"] {
   color-scheme: light;
 }
 
-html[data-theme="dark"] {
+@mixin dark-theme {
   color-scheme: dark;
 
-  --ui-accent-color: #464cfc;
+  --ui-accent-color: #79a9f2;
+  --ui-accent-contrast-color: #13243e;
   --ui-accent-text-color: var(--ui-accent-color);
-  --ui-accent-text-color: color-mix(in srgb,
-      var(--ui-accent-color),
-      white 50%);
+
   --highlight-color: rgba(255, 255, 0, 0.5);
   --link-color: #7e99fc;
   --link-missing-color: #9e4705;
@@ -203,13 +202,13 @@ html[data-theme="dark"] {
 
   // Shared panel-surface palette (dark). Only the concrete border needs a
   // dark value; the rest reference tokens that already flip with the theme.
-  --ui-surface-border-color: #444;
+  --ui-surface-border-color: #343b44;
 
   --root-background-color: #111;
-  --root-color: #fff;
+  --root-color: #e9edf2;
 
   --top-color: #fff;
-  --top-background-color: #262626;
+  --top-background-color: #222;
   --top-border-color: rgb(62, 62, 62);
   --top-sync-error-color: var(--top-color);
   --top-sync-error-background-color: #622626;
@@ -217,27 +216,27 @@ html[data-theme="dark"] {
   --top-unsaved-color: #c7c7c7;
   --top-loading-color: #c7c7c7;
 
-  --panel-background-color: #111;
+  --panel-background-color: #191919;
   --panel-border-color: rgb(62, 62, 62);
 
   --bhs-background-color: #111;
   --bhs-border-color: rgb(62, 62, 62);
 
-  --modal-color: #ccc;
-  --modal-background-color: #262626;
-  --modal-border-color: #6c6c6c;
+  --modal-color: var(--root-color);
+  --modal-background-color: #191919;
+  --modal-border-color: var(--ui-surface-border-color);
   --modal-backdrop-color: transparent;
   --modal-header-label-color: var(--ui-accent-text-color);
   --modal-help-background-color: #333;
   --modal-help-color: #ccc;
-  --modal-selected-option-background-color: var(--ui-accent-color);
-  --modal-selected-option-color: #eee;
+  --modal-selected-option-background-color: color-mix(in srgb, var(--ui-accent-color) 12%, var(--modal-background-color));
+  --modal-selected-option-color: var(--root-color);
   --modal-hint-background-color: #212476;
   --modal-hint-color: #eee;
   --modal-hint-inactive-background-color: #353535;
   --modal-hint-inactive-color: #ccc;
   --modal-description-color: #969696;
-  --modal-selected-option-description-color: #e6e6e6;
+  --modal-selected-option-description-color: var(--subtle-color);
 
   --notifications-background-color: #333;
   --notifications-border-color: rgb(197, 197, 197);
@@ -245,14 +244,14 @@ html[data-theme="dark"] {
   --notification-error-background-color: #a32121;
   --notification-warning-background-color: #b8860b;
 
-  --button-background-color: #555;
-  --button-hover-background-color: #777;
-  --button-color: white;
-  --button-border-color: #666;
+  --button-background-color: #20242a;
+  --button-hover-background-color: #292f36;
+  --button-color: var(--root-color);
+  --button-border-color: var(--ui-surface-border-color);
   --primary-button-background-color: var(--ui-accent-color);
   --primary-button-hover-background-color: color-mix(in srgb,
       var(--ui-accent-color),
-      black 35%);
+      black 18%);
   --primary-button-color: var(--ui-accent-contrast-color);
   --primary-button-border-color: transparent;
 
@@ -350,8 +349,18 @@ html[data-theme="dark"] {
   --alert-info-background-color: #14324f;
   --alert-info-color: #8fc4ef;
   --alert-info-border-color: rgba(143, 196, 239, 0.3);
-  --badge-background-color: rgba(70, 76, 252, 0.2);
-  --badge-color: #8b8eff;
+  --badge-background-color: #242a31;
+  --badge-color: #b9c2cd;
+}
+
+html[data-theme="dark"] {
+  @include dark-theme;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]):has(body.sb-standalone) {
+    @include dark-theme;
+  }
 }
 
 html[data-markdown-syntax-rendering="on"] {

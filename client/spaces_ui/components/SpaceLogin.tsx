@@ -1,3 +1,4 @@
+import { AuthHeader } from "./AuthHeader.tsx";
 import { useEffect, useState } from "preact/hooks";
 import { redirectToCentral } from "../central_redirect.ts";
 import {
@@ -175,29 +176,27 @@ export function SpaceLogin({ config }: { config: AuthConfig }) {
     );
 
   return (
-    <div class="center">
-      <div class="flow floating-island">
-        <LoginForm
-          title={
-            <>
-              Login to <img src=".client/logo.png" style="height: 1ch" />{" "}
-              {config.spaceName}
-            </>
-          }
-          error={error}
-          busy={busy}
-          rememberMeDays={config.rememberMeDays}
-          clientEncryption
-          initialClientEncryption={
-            new URLSearchParams(location.search).get("encrypt") === "true" ||
-            !!localStorage.getItem("enableEncryption")
-          }
-          onSubmit={(values) => void submit(values)}
-        />
-        <footer>
-          <a href="https://silverbullet.md">What is SilverBullet?</a>
-        </footer>
+    <>
+      <AuthHeader logo=".client/logo.png" />
+      <div class="center">
+        <div class="flow floating-island">
+          <LoginForm
+            title={config.spaceName}
+            error={error}
+            busy={busy}
+            rememberMeDays={config.rememberMeDays}
+            clientEncryption
+            initialClientEncryption={
+              new URLSearchParams(location.search).get("encrypt") === "true" ||
+              !!localStorage.getItem("enableEncryption")
+            }
+            onSubmit={(values) => void submit(values)}
+          />
+          <footer>
+            <a href="https://silverbullet.md">What is SilverBullet?</a>
+          </footer>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

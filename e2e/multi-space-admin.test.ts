@@ -74,7 +74,7 @@ test("first run: login, create a space, open it, edit a page", async ({
 
   // Empty list -> create a space on its own URL.
   await expect(page.getByText("No spaces yet")).toBeVisible();
-  await page.getByRole("link", { name: "Create space" }).click();
+  await page.getByRole("link", { name: "Add space" }).click();
   await expect(page).toHaveURL(`${base}/.spaces/new`);
   await page.getByLabel("Name").fill("Playground");
   await page.getByLabel("Prefix").fill("/play");
@@ -87,7 +87,7 @@ test("first run: login, create a space, open it, edit a page", async ({
   await page.locator(".sb-access-public select").selectOption("write");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("Saved");
-  await page.getByRole("link", { name: "Spaces", exact: true }).click();
+  await page.getByRole("link", { name: "← All spaces", exact: true }).click();
 
   // It shows up in the list.
   await expect(page.getByText("Playground")).toBeVisible();
@@ -124,14 +124,12 @@ test("user settings sections preserve drafts and confirm successful saves", asyn
   await page.goto(`${base}/.spaces/users/${ADMIN_USER}`);
   const sidebar = page.getByRole("navigation", { name: "User settings" });
   await expect(sidebar).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Profile", exact: true }),
-  ).toBeVisible();
+  await expect(sidebar).toHaveClass(/sb-tabs/);
+  await expect(page.locator(".sb-management-sidebar")).toHaveCount(1);
+  await expect(page.getByLabel("Full name", { exact: true })).toBeVisible();
   await page.getByLabel("Full name", { exact: true }).fill("Morgan Rivers");
   await sidebar.getByRole("link", { name: "API tokens" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Profile", exact: true }),
-  ).toBeHidden();
+  await expect(page.getByLabel("Full name", { exact: true })).toBeHidden();
   await sidebar.getByRole("link", { name: "Profile", exact: true }).click();
   await expect(page.getByLabel("Full name", { exact: true })).toHaveValue(
     "Morgan Rivers",
@@ -169,8 +167,8 @@ test("user settings sections preserve drafts and confirm successful saves", asyn
   ).toBeVisible();
   await page.goBack();
   await expect(
-    page.getByRole("heading", { name: "API tokens", exact: true }),
-  ).toBeVisible();
+    page.getByLabel("Settings section", { exact: true }),
+  ).toHaveValue("tokens");
 });
 
 test("runtime permissions require write and preserve opt-outs across server toggles", async ({
@@ -190,8 +188,7 @@ test("runtime permissions require write and preserve opt-outs across server togg
   const created = await page.request.post(`${admin}/spaces`, {
     data: {
       name: "Runtime permissions",
-      binding: { prefix: "/runtime-permissions" },
-      runtimeApi: true,
+      binding: { host: "runtime-notes.example.test" },
       members: { "runtime-writer": { role: "write" } },
     },
   });
@@ -203,6 +200,11 @@ test("runtime permissions require write and preserve opt-outs across server togg
       json: { ...(await response.json()), runtimeApi: { status: "available" } },
     });
   });
+  await page.goto(`${base}/.spaces/${id}?section=advanced`);
+  await expect(page.getByLabel("Enable shell")).toBeVisible();
+  await expect(
+    page.getByLabel("Enable runtime API", { exact: true }),
+  ).toHaveCount(0);
   await page.goto(`${base}/.spaces/${id}?section=access`);
   const runtime = page.getByLabel("runtime-writer: Runtime API", {
     exact: true,
@@ -244,11 +246,27 @@ test("runtime permissions require write and preserve opt-outs across server togg
   const nextConfig = await (
     await page.request.get(`${admin}/spaces/${nextId}`)
   ).json();
-  expect(nextConfig.runtimeApi).toBe(false);
+  expect(nextConfig).not.toHaveProperty("runtimeApi");
   await serverToggle.check();
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("Server settings saved.");
   await page.goto(`${base}/.spaces/${id}?section=access`);
   await expect(runtime).toBeEnabled();
   await expect(runtime).not.toBeChecked();
+});
+
+test("password reveal preserves the value and does not submit the login form", async ({
+  page,
+}) => {
+  await page.goto(`${base}/.spaces/login`);
+  const password = page.getByLabel("Password", { exact: true });
+  await password.fill("sample-passphrase");
+  const loginUrl = page.url();
+  await page.getByRole("button", { name: "Show password" }).click();
+  await expect(password).toHaveAttribute("type", "text");
+  await expect(password).toHaveValue("sample-passphrase");
+  await expect(page).toHaveURL(loginUrl);
+  await page.getByRole("button", { name: "Hide password" }).click();
+  await expect(password).toHaveAttribute("type", "password");
+  await expect(password).toHaveValue("sample-passphrase");
 });

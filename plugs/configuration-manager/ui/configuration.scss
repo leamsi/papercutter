@@ -1,9 +1,6 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html {
-  /* font-family and base font-size come from .client/components.css so the
-     panel matches Core (var(--ui-font); 16px root like the rest of the app).
-     Don't override them here. */
   /* Chrome colors come from the shared panel-surface palette in
      components.css; these are thin local aliases so existing rules read
      cleanly and follow the user's theme (no hardcoded light/dark copies). */
@@ -29,14 +26,16 @@ html, body { height: 100%; background: var(--cfg-bg); color: var(--cfg-color); }
 #cfg-root {
   display: flex; flex-direction: column; height: 100%;
   overflow: hidden;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 #cfg-header {
-  padding: 16px 20px 0;
+  padding: 20px 24px 0;
   border-bottom: 1px solid var(--cfg-border);
   flex-shrink: 0;
 }
-#cfg-header h1 { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+#cfg-header h1 { font-size: 19px; font-weight: 700; margin-bottom: 16px; padding-right: 32px; }
 
 #cfg-close {
   position: absolute; top: 12px; right: 16px;
@@ -46,11 +45,11 @@ html, body { height: 100%; background: var(--cfg-bg); color: var(--cfg-color); }
 }
 #cfg-close:hover { background: var(--cfg-hover); }
 
-#cfg-content { flex: 1; overflow-y: auto; padding: 20px; }
+#cfg-content { flex: 1; overflow-y: auto; padding: 24px; }
 
 #cfg-footer {
   display: flex; align-items: center; gap: 8px;
-  padding: 12px 20px; border-top: 1px solid var(--cfg-border); flex-shrink: 0;
+  padding: 16px 24px; border-top: 1px solid var(--cfg-border); flex-shrink: 0;
 }
 
 #cfg-edit-config {
@@ -73,7 +72,7 @@ html, body { height: 100%; background: var(--cfg-bg); color: var(--cfg-color); }
 
 .cfg-category { margin-bottom: 24px; }
 .cfg-category-title {
-  font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+  font-size: 14px; font-weight: 600;
   color: var(--cfg-color-muted); margin-bottom: 4px; padding-bottom: 6px;
   border-bottom: 1px solid var(--cfg-border);
 }
@@ -81,11 +80,11 @@ html, body { height: 100%; background: var(--cfg-bg); color: var(--cfg-color); }
   font-size: 12px; color: var(--cfg-color-muted); margin-bottom: 8px;
 }
 
-.cfg-field { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; }
+.cfg-field { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
 .cfg-field + .cfg-field { border-top: 1px solid var(--cfg-border); }
 .cfg-field-info { flex: 1; min-width: 0; }
 .cfg-field-label { font-weight: 500; margin-bottom: 2px; }
-.cfg-field-description { font-size: 12px; color: var(--cfg-color-muted); }
+.cfg-field-description { line-height: 1.65; font-size: 12px; color: var(--cfg-color-muted); }
 .cfg-field-control { flex-shrink: 0; margin-left: 16px; display: flex; align-items: center; }
 
 .cfg-field-reset {
@@ -124,8 +123,8 @@ html, body { height: 100%; background: var(--cfg-bg); color: var(--cfg-color); }
 .cfg-chord { cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
 .cfg-chord:hover { opacity: 0.85; }
 .cfg-chord-key {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
-  padding: 1px 6px; border: 1px solid var(--cfg-input-border); border-radius: 3px;
+  font-family: var(--ui-font); font-size: 12px;
+  padding: 1px 6px; border: 1px solid var(--cfg-input-border); border-radius: 4px;
   background: var(--cfg-input-bg); color: var(--cfg-color);
   box-shadow: inset 0 -1px 0 var(--cfg-border);
 }
@@ -152,7 +151,7 @@ html, body { height: 100%; background: var(--cfg-bg); color: var(--cfg-color); }
 .cfg-shortcut-recording {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 2px 6px; border-radius: 4px;
-  background: var(--cfg-recording-bg); outline: 2px solid var(--cfg-accent);
+  background: var(--cfg-recording-bg); outline: 1px solid var(--cfg-accent);
 }
 .cfg-recording-caret {
   color: var(--cfg-accent); font-weight: bold;
@@ -192,8 +191,7 @@ tr.modified .cfg-reset-btn { visibility: visible; }
   gap: 12px; flex-wrap: wrap;
 }
 .lib-section-header h2 {
-  font-size: 13px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.5px; color: var(--cfg-color-muted);
+  font-size: 14px; font-weight: 600; color: var(--cfg-color-muted);
 }
 .lib-section-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
@@ -242,7 +240,7 @@ html[data-theme="dark"] .lib-badge-pull { background: #1f2a40; color: #89a0e5; }
 .lib-badge-builtin { background: var(--cfg-section-bg); }
 
 .lib-uri {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+  font-family: var(--ui-font); font-size: 11px;
   color: var(--cfg-color-muted); max-width: 260px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
 }
@@ -262,7 +260,7 @@ html[data-theme="dark"] .lib-badge-pull { background: #1f2a40; color: #89a0e5; }
 .lib-group-body { padding: 4px 0 4px 20px; display: flex; flex-direction: column; gap: 8px; }
 
 .lib-card {
-  padding: 10px 12px; border: 1px solid var(--cfg-border); border-radius: 6px;
+  padding: 10px 12px; border: 1px solid var(--cfg-border); border-radius: 4px;
   background: var(--cfg-bg);
 }
 .lib-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -271,7 +269,7 @@ html[data-theme="dark"] .lib-badge-pull { background: #1f2a40; color: #89a0e5; }
 .lib-external:hover { text-decoration: underline; }
 .lib-card-desc { font-size: 13px; color: var(--cfg-color); margin-top: 4px; }
 .lib-card-uri {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+  font-family: var(--ui-font); font-size: 11px;
   color: var(--cfg-color-muted); margin-top: 4px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -289,6 +287,22 @@ html[data-theme="dark"] .lib-badge-pull { background: #1f2a40; color: #89a0e5; }
   text-overflow: ellipsis;
   max-width: 240px;
 }
+
+#cfg-close:focus-visible,
+.cfg-field-reset:focus-visible,
+.cfg-slot-delete:focus-visible,
+.cfg-add-alternate:focus-visible,
+.cfg-reset-btn:focus-visible,
+.lib-icon-btn:focus-visible,
+.lib-link:focus-visible,
+.lib-external:focus-visible,
+#cfg-edit-config:focus-visible {
+  outline: 2px solid var(--cfg-accent);
+  outline-offset: 2px;
+}
+
+#cfg-root .sb-input,
+#cfg-root .sb-select { min-height: 36px; }
 
 @media only screen and (max-width: 600px) {
   #cfg-header { padding: 12px 14px 0; }
@@ -318,3 +332,5 @@ html[data-theme="dark"] .lib-badge-pull { background: #1f2a40; color: #89a0e5; }
 
   #cfg-shortcuts-table { display: block; overflow-x: auto; }
 }
+
+#cfg-root .sb-tab { padding-inline: 14px; }

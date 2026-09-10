@@ -106,7 +106,7 @@ export function NavRoot({
     if (state) setView({ name: state.meta.name, ...state });
   }, []);
 
-  const { readOnly, mobile, refresh } = usePanelEvents({
+  const { currentName, readOnly, mobile, refresh } = usePanelEvents({
     slot,
     client,
     engine,
@@ -406,6 +406,9 @@ export function NavRoot({
             tree={treeDisplay.tree}
             expanded={treeDisplay.effectiveExpanded}
             selectedPath={activeTreeNode?.path}
+            currentPath={
+              view.name === "std.spaceTree" ? currentName : undefined
+            }
             phrase={treeFiltering ? rankPhrase : undefined}
             showEmpty={!canCreate}
             separator={view.meta.hierarchy.separator}

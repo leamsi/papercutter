@@ -252,6 +252,7 @@ pub struct SpaceInstance {
     /// through the space's own router, which they are not nested inside.
     pub revisions: Option<Arc<crate::revisions::RevisionEngine>>,
     pub runtime: Option<Arc<dyn crate::runtime::RuntimeBackend>>,
+    pub(crate) runtime_authorizer: Option<Arc<dyn RequestAuthorizer>>,
 }
 
 /// Resolve a space's folder: empty -> `<root>/spaces/<id>`, `"."` -> `<root>`
@@ -367,6 +368,7 @@ pub fn build_instance(id: &str, config: &SpaceConfig, deps: &InstanceDeps) -> Sp
                 config: config.clone(),
                 prefix,
                 status: InstanceStatus::Running,
+                runtime_authorizer: state.authorizer.clone(),
                 router: Some(crate::build_router(Arc::new(state))),
                 revisions,
                 runtime,
@@ -382,6 +384,7 @@ pub fn build_instance(id: &str, config: &SpaceConfig, deps: &InstanceDeps) -> Sp
                 router: None,
                 revisions: None,
                 runtime: None,
+                runtime_authorizer: None,
             }
         }
     }
@@ -500,21 +503,26 @@ fn try_build_state(
         }
     };
 
-    let runtime = if config.runtime_api && !config.read_only {
-        match &config.binding {
-            Binding::Prefix { .. } => Some(crate::runtime::scoped::ScopedRuntime::new(
-                id.into(),
-                format!("http://127.0.0.1:{}{prefix}", deps.main_port),
-                deps.runtime.clone(),
-                access_policy.clone(),
-                match &deps.auth {
-                    InstanceAuth::Accounts { users, .. } => Some(users.clone()),
-                    _ => None,
-                },
-                deps.runtime_enabled.clone(),
-            )),
-            Binding::Host { .. } => None,
-        }
+    let runtime = if !config.read_only {
+        let server_url = match &config.binding {
+            Binding::Prefix { .. } => format!("http://127.0.0.1:{}{prefix}", deps.main_port),
+            Binding::Host { .. } => format!(
+                "http://{}:{}",
+                crate::multi::registry::runtime_host(id),
+                deps.main_port
+            ),
+        };
+        Some(crate::runtime::scoped::ScopedRuntime::new(
+            id.into(),
+            server_url,
+            deps.runtime.clone(),
+            access_policy.clone(),
+            match &deps.auth {
+                InstanceAuth::Accounts { users, .. } => Some(users.clone()),
+                _ => None,
+            },
+            deps.runtime_enabled.clone(),
+        ))
     } else {
         None
     };
@@ -701,7 +709,6 @@ mod tests {
             members: Default::default(),
             read_only: false,
             shell: Default::default(),
-            runtime_api: false,
             index_page: "index".into(),
             description: String::new(),
             theme_color: "#e1e1e1".into(),
@@ -931,7 +938,6 @@ mod tests {
             members,
             read_only: false,
             shell: Default::default(),
-            runtime_api: false,
             index_page: "index".into(),
             description: String::new(),
             theme_color: "#e1e1e1".into(),

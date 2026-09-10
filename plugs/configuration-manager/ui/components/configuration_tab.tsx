@@ -135,7 +135,9 @@ export function ConfigurationTab() {
   const [search, setSearch] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    inputRef.current?.focus();
+    if (document.activeElement?.getAttribute("role") !== "tab") {
+      inputRef.current?.focus();
+    }
   }, []);
   const query = search.toLowerCase().trim();
   return (

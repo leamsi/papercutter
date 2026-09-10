@@ -1,4 +1,4 @@
-import { Alert, Button, Input } from "@silverbulletmd/silverbullet/ui";
+import { Alert, Button, Input, Field } from "@silverbulletmd/silverbullet/ui";
 import { useEffect, useState } from "preact/hooks";
 import { formatApiError, getProfile, setProfile } from "../api.ts";
 import { SaveConfirmation, useNotification } from "../notifications.tsx";
@@ -46,7 +46,15 @@ export function ProfileView({
     }
   }
 
-  if (!loaded) return <p>Loading…</p>;
+  if (!loaded)
+    return (
+      <>
+        <header class="sb-management-heading">
+          <h1>Profile</h1>
+        </header>
+        <p>Loading…</p>
+      </>
+    );
   if (!profile)
     return <Alert variant="error">{error || "Profile not found"}</Alert>;
 
@@ -60,29 +68,33 @@ export function ProfileView({
         });
       }}
     >
-      <h1>Profile</h1>
+      <header class="sb-management-heading">
+        <h1>Profile</h1>
+      </header>
       <SaveConfirmation scope="profile" />
       {error && <Alert variant="error">{error}</Alert>}
       <p class="sb-help-text">
         Used for revision history and collaboration features.
       </p>
 
-      <label for="profile-full-name">Full name</label>
-      <Input
-        id="profile-full-name"
-        value={fullName}
-        onInput={(event) => {
-          setFullName(event.currentTarget.value);
-        }}
-      />
-      <label for="profile-email">Email</label>
-      <Input
-        id="profile-email"
-        value={email}
-        onInput={(event) => {
-          setEmail(event.currentTarget.value);
-        }}
-      />
+      <Field label="Full name">
+        <Input
+          id="profile-full-name"
+          value={fullName}
+          onInput={(event) => {
+            setFullName(event.currentTarget.value);
+          }}
+        />
+      </Field>
+      <Field label="Email">
+        <Input
+          id="profile-email"
+          value={email}
+          onInput={(event) => {
+            setEmail(event.currentTarget.value);
+          }}
+        />
+      </Field>
       <div class="row">
         <Button type="submit" variant="primary">
           Save

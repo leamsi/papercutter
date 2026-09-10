@@ -328,7 +328,6 @@ mod tests {
                 .collect(),
             read_only: false,
             shell: Default::default(),
-            runtime_api: false,
             index_page: "index".into(),
             description: String::new(),
             theme_color: String::new(),

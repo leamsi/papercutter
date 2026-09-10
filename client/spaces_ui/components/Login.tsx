@@ -1,3 +1,4 @@
+import { AuthHeader } from "./AuthHeader.tsx";
 import { SignedOut } from "./SignedOut.tsx";
 import { redirectToCentral } from "../central_redirect.ts";
 import { useEffect, useState } from "preact/hooks";
@@ -30,42 +31,56 @@ export function Login({
       .catch(() => setChecking(false));
   }, [signedOut]);
 
-  if (signedOut) return <SignedOut onContinue={() => setSignedOut(false)} />;
-
-  if (checking) return <p role="status">Loading sign-in…</p>;
-
   return (
-    <LoginForm
-      title={title}
-      error={error}
-      busy={busy}
-      rememberMeDays={rememberMeDays}
-      clientEncryption
-      clientEncryptionHint="Applied when you open a space, you will be requested to reauthenticate (for secure key exchange)."
-      initialClientEncryption={!!localStorage.getItem("enableEncryption")}
-      onSubmit={({ username, password, rememberMe, clientEncryption }) => {
-        setBusy(true);
-        setError("");
-        // Recorded before the request so the preference survives even if the
-        // login fails and the user retries elsewhere.
-        if (clientEncryption) {
-          localStorage.setItem("enableEncryption", "true");
-        } else {
-          localStorage.removeItem("enableEncryption");
-        }
-        api("POST", "api/login", { username, password, rememberMe })
-          .then((result) => {
-            if (result.status === "ok") onDone(username);
-            else {
-              setError(result.error ?? "Login failed");
-              setBusy(false);
-            }
-          })
-          .catch(() => {
-            setError("Could not reach the server — check your connection.");
-            setBusy(false);
-          });
-      }}
-    />
+    <>
+      <AuthHeader logo="assets/logo-dock-96x96.png" />
+      <div class="sb-auth-content flow">
+        {signedOut ? (
+          <SignedOut onContinue={() => setSignedOut(false)} />
+        ) : checking ? (
+          <p role="status">Loading sign-in…</p>
+        ) : (
+          <LoginForm
+            title={title}
+            error={error}
+            busy={busy}
+            rememberMeDays={rememberMeDays}
+            clientEncryption
+            clientEncryptionHint="Applied when you open a space, you will be requested to reauthenticate (for secure key exchange)."
+            initialClientEncryption={!!localStorage.getItem("enableEncryption")}
+            onSubmit={({
+              username,
+              password,
+              rememberMe,
+              clientEncryption,
+            }) => {
+              setBusy(true);
+              setError("");
+              // Recorded before the request so the preference survives even if the
+              // login fails and the user retries elsewhere.
+              if (clientEncryption) {
+                localStorage.setItem("enableEncryption", "true");
+              } else {
+                localStorage.removeItem("enableEncryption");
+              }
+              api("POST", "api/login", { username, password, rememberMe })
+                .then((result) => {
+                  if (result.status === "ok") onDone(username);
+                  else {
+                    setError(result.error ?? "Login failed");
+                    setBusy(false);
+                  }
+                })
+                .catch(() => {
+                  setError(
+                    "Could not reach the server — check your connection.",
+                  );
+                  setBusy(false);
+                });
+            }}
+          />
+        )}
+      </div>
+    </>
   );
 }

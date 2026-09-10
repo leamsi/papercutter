@@ -23,9 +23,9 @@
   min-width: 180px;
   background: var(--modal-background-color);
   border: 1px solid var(--modal-border-color);
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 4px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
 .sb-dock-menu-item {
@@ -35,7 +35,7 @@
   width: 100%;
   padding: 6px 8px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 4px;
   background: transparent;
   cursor: pointer;
   font-family: var(--ui-font);
@@ -48,10 +48,18 @@
 }
 
 .sb-dock-menu-current {
-  background: var(--ui-accent-color);
-  color: var(--ui-accent-contrast-color);
+  background: transparent;
+  color: var(--modal-color);
+  box-shadow: inset 3px 0 var(--ui-accent-color);
+  border-radius: 0;
 }
 
 .sb-dock-menu-item.sb-dock-menu-current:hover {
-  background: var(--ui-accent-color);
+  background: var(--subtle-background-color);
+}
+
+.sb-dock-menu-item:focus-visible {
+  outline: none;
+  background: var(--modal-selected-option-background-color);
+  color: var(--modal-selected-option-color);
 }

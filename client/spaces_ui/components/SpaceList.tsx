@@ -1,16 +1,15 @@
 import { useEffect, useState } from "preact/hooks";
-import { Alert } from "@silverbulletmd/silverbullet/ui";
+import {
+  Alert,
+  Input,
+  SlidersIcon,
+  ButtonLink,
+} from "@silverbulletmd/silverbullet/ui";
 import { api, formatApiError } from "../api.ts";
 import { bindingLabel, spaceEntryUrl } from "../bindings.ts";
 import { spacesUrl } from "../routes.ts";
 import type { VisibleSpace } from "../types.ts";
 
-/**
- * The landing screen for *every* authenticated account, so it reads the
- * account-scoped `api/spaces` rather than the admin listing: an ordinary
- * member sees the spaces it may open, an admin additionally gets an Edit
- * control per row and the create button.
- */
 export function SpaceList({
   admin,
   onUnauthorized,
@@ -22,6 +21,53 @@ export function SpaceList({
   const [encryptedLogin, setEncryptedLogin] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
+  const [filter, setFilter] = useState("");
+  const [target, setTarget] = useState(-1);
+  const filtered = spaces.filter((space) =>
+    `${space.name} ${bindingLabel(space.binding)}`
+      .toLocaleLowerCase()
+      .includes(filter.trim().toLocaleLowerCase()),
+  );
+
+  const handleKey = (event: KeyboardEvent) => {
+    if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey)
+      return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setFilter("");
+      setTarget(-1);
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const next =
+        filtered.length === 0
+          ? -1
+          : event.key === "ArrowDown"
+            ? Math.min(target + 1, filtered.length - 1)
+            : target < 0
+              ? filtered.length - 1
+              : Math.max(target - 1, 0);
+      setTarget(next);
+      if ((event.currentTarget as HTMLElement).tagName === "LI") {
+        document
+          .getElementById(`space-row-${next}`)
+          ?.querySelector<HTMLAnchorElement>(".sb-space-link")
+          ?.focus();
+      }
+    } else if (
+      event.key === "Enter" &&
+      filtered[target] &&
+      !(event.target as HTMLElement).closest(".sb-space-edit")
+    ) {
+      event.preventDefault();
+      location.assign(spaceEntryUrl(filtered[target].binding, encryptedLogin));
+    }
+  };
+
+  useEffect(() => {
+    document
+      .getElementById(`space-row-${target}`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [target]);
 
   useEffect(() => {
     const encrypt = !!localStorage.getItem("enableEncryption");
@@ -48,12 +94,26 @@ export function SpaceList({
 
   return (
     <div>
-      {/* Admins reach this screen through the tab bar, which already names it;
-          a heading repeating "Spaces" directly under the active tab is pure
-          duplication. Non-admins have a tab bar too (Profile), but no tab of
-          theirs says "Spaces" -- so the heading is still what labels this
-          screen for them. */}
-      {!admin && <h1>Spaces</h1>}
+      <header class="sb-management-heading">
+        <h1>Spaces</h1>
+        {admin && (
+          <a class="sb-button sb-button-primary" href={spacesUrl("/new")}>
+            Add space
+          </a>
+        )}
+      </header>
+      <Input
+        class="sb-management-filter"
+        aria-label="Filter spaces"
+        aria-controls="spaces-list"
+        placeholder="Filter spaces…"
+        value={filter}
+        onInput={(event) => {
+          setFilter(event.currentTarget.value);
+          setTarget(0);
+        }}
+        onKeyDown={handleKey}
+      />
       {error && <Alert variant="error">{error}</Alert>}
       {!loaded && <p>Loading…</p>}
       {loaded && spaces.length === 0 && (
@@ -63,40 +123,42 @@ export function SpaceList({
             : "You don't have access to any spaces yet."}
         </p>
       )}
-      <ul class="sb-space-list">
-        {spaces.map((space) => (
-          <li key={space.id}>
+      {loaded && spaces.length > 0 && filtered.length === 0 && (
+        <p>No matching spaces.</p>
+      )}
+      <ul id="spaces-list" class="sb-space-list sb-management-list">
+        {filtered.map((space, index) => (
+          <li
+            key={space.id}
+            id={`space-row-${index}`}
+            class="sb-management-row"
+            onFocus={() => setTarget(index)}
+            onKeyDown={handleKey}
+            data-target={target === index ? "true" : undefined}
+          >
             <a
-              class="sb-space-link"
+              class="sb-space-link sb-management-row-target"
               href={spaceEntryUrl(space.binding, encryptedLogin)}
             >
-              {space.name}
-            </a>
-            <a
-              href={spaceEntryUrl(space.binding, encryptedLogin)}
-              target="_blank"
-              rel="noopener"
-            >
-              {bindingLabel(space.binding)}
+              <span class="sb-management-row-main">{space.name}</span>
+              <span class="sb-management-row-detail">
+                {bindingLabel(space.binding)}
+              </span>
             </a>
             {admin && (
-              <a
-                class="sb-button sb-space-edit"
+              <ButtonLink
+                variant="icon"
+                class="sb-space-edit"
                 href={spacesUrl(`/${encodeURIComponent(space.id)}`)}
+                aria-label={`Settings for ${space.name}`}
+                title={`Settings for ${space.name}`}
               >
-                Edit
-              </a>
+                <SlidersIcon size={16} aria-hidden="true" />
+              </ButtonLink>
             )}
           </li>
         ))}
       </ul>
-      {loaded && admin && (
-        <div class="row">
-          <a class="sb-button sb-button-primary" href={spacesUrl("/new")}>
-            Create space
-          </a>
-        </div>
-      )}
     </div>
   );
 }

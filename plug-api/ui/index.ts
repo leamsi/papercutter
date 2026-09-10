@@ -64,3 +64,13 @@ export type {
   RowState,
   RowStates,
 } from "./tree_types.ts";
+
+export { Sliders as SlidersIcon } from "preact-feather";
+export { SectionNav } from "./section_nav.tsx";
+export type { SectionItem, SectionNavProps } from "./section_nav.tsx";
+export { Field, CheckboxField } from "./field.tsx";
+export type { FieldProps, CheckboxFieldProps } from "./field.tsx";
+export { PasswordInput } from "./password_input.tsx";
+export type { PasswordInputProps } from "./password_input.tsx";
+export { ButtonLink } from "./button.tsx";
+export type { ButtonLinkProps } from "./button.tsx";
