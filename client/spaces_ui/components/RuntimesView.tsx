@@ -103,13 +103,11 @@ export function RuntimesView({
   }, []);
   return (
     <div>
-      <p class="sb-help-text">
-        CPU 100% means one fully used logical core. Memory estimates resident
-        usage and may count shared pages more than once. Profile disk usage
-        excludes notes. Stop retains the profile; Reset deletes it. The next
-        authorized request can start a new runtime.
-      </p>
       {error && <Alert variant="error">{error}</Alert>}
+      <p class="sb-help-text">
+        This page lists currently active Runtime API users.
+      </p>
+
       {loadError && <Alert variant="error">{loadError}</Alert>}
       {rows === null && !loadError && <p>Loading…</p>}
       {rows?.length === 0 && <p>No runtimes have been started.</p>}
@@ -122,8 +120,8 @@ export function RuntimesView({
                 <th>User</th>
                 <th>Status</th>
                 <th>CPU</th>
-                <th>Memory (estimate)</th>
-                <th>Profile disk</th>
+                <th>Memory</th>
+                <th>Index size</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -166,6 +164,11 @@ export function RuntimesView({
               ))}
             </tbody>
           </table>
+          <p class="sb-help-text">
+            Memory usage is an estimate. "Stop" stops the client, "Reset" stops
+            and deletes the index. The next Runtime API request can start a new
+            runtime.
+          </p>
         </div>
       )}
     </div>
