@@ -31,7 +31,7 @@ By default all your pages are synced, but [[Concepts/Document]] are not. They ar
 
     config.set("sync.documents", true)
 
-In addition, you can fine-tune what files you do _not_ want to sync using [gitignore](https://git-scm.com/docs/gitignore) syntax assigned to the `sync.ignore` option, which accepts either a single string, or a list of strings:
+In addition, you can fine-tune what files you do _not_ want to sync using [gitignore](https://git-scm.com/docs/gitignore) pattern syntax assigned to the `sync.ignore` option, which accepts either a single string, or a list of strings. The space folder's actual `.gitignore` file is not read:
 
     config.set("sync.ignore", {
       -- Don't sync PDFs and MP4 files

@@ -11,7 +11,7 @@ SilverBullet is partially configured via environment variables. This page gives 
 # General configuration
 
 * `SB_INDEX_PAGE`: Sets the default page to load, defaults to `index`.
-* `SB_SPACE_IGNORE`: Ignore certain path patterns based on a .gitignore style format, e.g. `SB_SPACE_IGNORE="IgnoreMe/*"`.
+* `SB_SPACE_IGNORE`: Hide paths from SilverBullet using gitignore-style patterns, e.g. `SB_SPACE_IGNORE="IgnoreMe/*"`. The space folder's actual `.gitignore` file is not read.
 * `SB_HTTP_LOGGING`: Set to any value to enable HTTP logging
 * `SB_LOG_PUSH`: Set to any value to ask clients to push their logs to the server (for debugging purposes)
 * `SB_DISABLE_SERVICE_WORKER`: Set to any value to disable the client-side service worker for all clients. In this mode, [[Features/Sync]] is disabled (so your space is not copied into the browser) and the app will not function when offline. All loads and saves will go directly to the server. 
