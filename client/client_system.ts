@@ -412,6 +412,7 @@ export class ClientSystem {
       "Now loading space scripts, custom styles and rebuilding editor state",
     );
     await this.loadLuaScripts();
+    await restoreDocks();
     await this.client.loadCustomStyles();
     this.client.rebuildEditorState();
   }
