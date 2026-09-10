@@ -17,9 +17,9 @@ on:
         default: "main"
         type: string
       base_image:
-        description: "Base SilverBullet image (e.g. zefhemel/silverbullet:v2)"
+        description: "Base SilverBullet slim image (e.g. zefhemel/silverbullet:edge-slim)"
         required: true
-        default: "zefhemel/silverbullet:v2"
+        default: "zefhemel/silverbullet:edge-slim"
 
 env:
   WEBSITE_IMAGE: zefhemel/silverbullet-website

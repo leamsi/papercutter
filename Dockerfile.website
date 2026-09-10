@@ -1,5 +1,5 @@
 # Docker image deployed to silverbullet.md
-ARG BASE_IMAGE=zefhemel/silverbullet:v2
+ARG BASE_IMAGE=zefhemel/silverbullet:edge-slim
 FROM ${BASE_IMAGE}
 
 ENV SB_INDEX_PAGE=SilverBullet

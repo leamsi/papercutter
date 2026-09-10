@@ -1,7 +1,7 @@
 # CI supplies static musl binaries, so multi-arch buildx only assembles layers.
 #
-# This is the BASE variant: no Chromium, so `/.runtime/*` returns 503.
-# `Dockerfile.runtime-api` layers Chromium on top to enable the runtime API.
+# This is the SLIM variant: no Chromium, so `/.runtime/*` returns 503.
+# `Dockerfile.runtime-api` layers Chromium on top to create the default image.
 #
 # Published by `.github/workflows/ci.yml`.
 

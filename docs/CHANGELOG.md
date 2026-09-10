@@ -1,10 +1,6 @@
----
-pageDecoration.tree.priority: 100
----
 An attempt at documenting the changes/new features introduced in each release.
 
 ## Edge
-Whenever a commit is pushed to the `main` branch, within ~10 minutes, it will be released as a docker image with the `:v2` tag, and a binary in the [edge release](https://github.com/silverbulletmd/silverbullet/releases/tag/edge). If you want to live on the bleeding edge of SilverBullet goodness (or regression) this is where to do it.
 
 * Significant **visual refresh**:
   * Doubling down on the monospace fonts. This is a more “techy” tool and it seems fitting..
@@ -12,13 +8,14 @@ Whenever a commit is pushed to the `main` branch, within ~10 minutes, it will be
   * There are probably still issues, this will need some time
 * Significant **multi-space server upgrade and revamp**:
   * Profile menu giving access to profile editing, list of all spaces, login, logout
-  * Read/Write permissions per user
+  * Read/Write/Runtime API permissions per user
   * SSO user creation asks for email before suggesting a username.
   * Public space support (no auth)
   * Admin tab:
     * [[Features/Single Sign-On]] (Google Workspace Auth, Pocket ID, other OIDC provider support) support
     * Configurable Server name (used in headers)
     * Runtime management showing space/user, CPU, memory, and profile disk usage, with Stop and Reset controls.
+  * **Breaking**: _shell commands are now off unless a space explicitly enables them_.
 * Significant steps towards a more [[Features/Collaboration|Collaborative Future]]:
   * **Near real-time sync**: changes made to pages are now synced (and will appear in other clients) within ~2-3s.
   * **Near real-time content updates**: if multiple clients/process edit the same page, SilverBullet will do its best to reconcile those changes with local ones. In cases of unresolvable conflicts a new _conflict widget_ will show helping you to resolve the conflict.
@@ -30,15 +27,13 @@ Whenever a commit is pushed to the `main` branch, within ~10 minutes, it will be
   * Every user gets a **Profile** page ([[Features/Authentication#Accounts]]) to set their own full name and email.
   * The editor learns who the space's people are from a new `/.accounts` endpoint, which replaces `/.profile`: it reports every account with access to the space, with the current user marked, and never an email address.
   * The `revisions.authorEmailDomain` config option is gone: synthesized commit author emails now always use the `silverbullet.local` domain. (The old implementation depended on the [[Features/Runtime API]] and silently fell back to the default anyway when that was unavailable.)
+* Docker images:
+  * Default images (`:latest`, `:edge` now default to have the runtime API enabled, and are larger due to including a Chromium build, use the new `:latest-slim` and `:edge-slim` images for the version without Chromium)
 * **Completely revamped [[Features/Navigator]] and dockable panel UX (includes a file tree!):** one configurable navigation UI that presents any object collection as a fuzzy-filterable list **or tree**, either as a modal or as a sidebar. A lot of views have been rebuilt on this. Oh yeah: ${widgets.commandButton("Navigate: Tree")} 🤯
   * **Unified docking:** every navigator view now has a single, consistent notion of where it lives: `"modal"`, `"lhs"`/`"rhs"` sidebar, or, new, `"page-top"`/`"page-bottom"` (rendered as an in-document widget). You can move all of them, and those docking positions persist between reloads.
   * The Table of Contents, Linked Mentions, Linked Tasks are now movable, dockable widgets rather than fixed page decorations.
   * **Markdown-content views:** `view.define` defines a view that renders a markdown document instead of a list of rows, through the very same pipeline.
   * **New [[Concepts/Page Decoration|page decorations]] for the tree:** `icon` gives a page its own (Feather) icon wherever the navigator draws one, `tree.priority` floats a page above its siblings in the otherwise alphabetical space tree (a priority reorders one level only — pin a folder through the folder's own page), and `tree.hide` keeps a page out of the tree alone. `hide` now also hides a page from the tree, not just from the page picker and completions.
-* [[Features/Space Manager|Multi-space]] mode:
-  * **Breaking**: _shell commands are now off unless a space explicitly enables them_. From a security perspective, this should have been the default all along, but... yeah. Better late than never. This will affect users using the Git library (that uses the [[API/shell]] API), you can _re-enable_ this feature by editing the space in the [[Features/Space Manager]] and enabling shell access.
-  * The [[Features/Runtime API]] has a server-wide toggle under **Server** and an independent per-user permission in each space’s access grid. Runtime permission requires Write access and defaults on for existing writers unless explicitly disabled. Both prefix-bound and host-bound spaces support runtime execution; there is no separate per-space switch. `SB_RUNTIME_API` applies only to single-instance mode.
-  * Spaces now have three [[Features/Space Manager#Access|access levels]] configurable per user.
 * **[[Concepts/Link|Wiki links]] now resolve by page name, not just by full path (think: Obsidian compatibility).** A `[[Note]]` link resolves to `some/folder/Note` when that name is unique in the space, matching how Obsidian resolves links, so an Obsidian-authored space works in SilverBullet without rewriting every link. See [[Architecture/ADR/011 Link Resolution by Name]] for reasoning. The `linkWriteFormat` option decides how SilverBullet writes the links it generates (auto complete, rename backlink rewriting), it defaults to `full-path`, so generated links keep spelling out the whole path.
 * Fix: a linked-mention snippet that contained a `![[transclusion]]` inlined the entire target page into the Linked Mentions widget -- frontmatter first, rendered as garbage. Snippets now show such a mention as a plain link, and a transcluded page's frontmatter no longer leaks into rendered widget content. (Triggers a full space reindex on upgrade.)
 * Fix: better blockquote rendering:

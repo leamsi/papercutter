@@ -6,7 +6,7 @@ references:
 ---
 Docker is a convenient and secure way to install server applications either locally or on a server you control.
 
-Conveniently, SilverBullet is published as a [docker image on GHCR](https://github.com/silverbulletmd/silverbullet/pkgs/container/silverbullet). The image comes in a few flavors:
+Conveniently, SilverBullet is published as a [docker image on GHCR](https://github.com/silverbulletmd/silverbullet/pkgs/container/silverbullet). The image supports a few architectures:
 
 * 64-bit Intel
 * 64-bit ARM (e.g. for Raspberry Pis and Apple Silicon macs)
@@ -18,8 +18,10 @@ Conveniently, SilverBullet is published as a [docker image on GHCR](https://gith
 # Release channels
 Every release version of SilverBullet is tagged with its version number, but there are two release channels you can use:
 
-* `:latest` always points to the latest _release_
-* `:v2` always points to the latest _edge build_ (the last commit to `main`), use this if you want to live on the bleeding edge.
+* `:latest` always points to the latest _release_.
+* `:edge` always points to the latest _edge build_ (the last commit to `main`). (The legacy `:v2` tag points to the same image.)
+
+The default image includes Chromium and enables the [[Features/Runtime API]]. For the smaller image without Chromium, use `:edge-slim` instead of `:edge` or legacy `:v2`, `:latest-slim` instead of `:latest`, or append `-slim` to a version such as `:2.11.0-slim`.
 
 # Container
 * The container binds to port `3000`, so be sure to port-map that, e.g. via `-p 3000:3000` (note: the first `3000` is the external port)
@@ -68,7 +70,7 @@ docker compose logs -f
 ```
 
 ## Upgrading
-To upgrade, change the specific version you point to in your `compose.yml` file (not necessary when using `:latest` or `:v2`) and then:
+To upgrade, change the specific version you point to in your `compose.yml` file (not necessary when using `:latest`, `:edge`, or the legacy `:v2`) and then:
 
 ```shell
 docker compose pull
@@ -111,4 +113,4 @@ If you would like to install additional packages into your docker container (e.g
 In practice, you’ll likely want to put `apk add` commands install the (Alpine) packages you would like to install.
 
 # What next
-After your container is running, head over to `http://localhost:3000` (or whatever port you have configured) and proceed to [[Guides/Getting Started]].
+After your container is running, head over to `http://localhost:3000` (or whatever port you have configured) to setup your server.

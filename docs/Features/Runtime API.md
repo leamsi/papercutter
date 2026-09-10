@@ -22,11 +22,11 @@ SB_CHROME_PATH=/usr/bin/chromium
 In single-instance mode, set `SB_RUNTIME_API=0` to disable the Runtime API. In multi-space mode this variable is ignored: use the **Enable runtime API** toggle in the administrator’s **Server** tab. Each writer has an independent **Runtime API** permission in the space’s access grid. Existing writers default to enabled unless explicitly opted out.
 
 # Docker setup
-Use the `-runtime-api` Docker image variant, which includes Chromium headless shell:
+The default Docker image includes Chromium headless shell, so no special image variant is required:
 ```yaml
 services:
   silverbullet:
-    image: ghcr.io/silverbulletmd/silverbullet:latest-runtime-api
+    image: ghcr.io/silverbulletmd/silverbullet:latest
     environment:
       - SB_USER=me:secret        # optional
       - SB_AUTH_TOKEN=mytoken    # optional, for API auth
@@ -36,9 +36,9 @@ services:
       - "3000:3000"
 ```
 
-The `-runtime-api` image stores isolated temporary Chrome profiles under `/space/.chrome-data`. A new runtime receives a fresh profile and rebuilds its client index; profiles are removed on Reset, permission revocation, or server shutdown. Administrative Stop retains the profile for reuse within the current server lifetime.
+The image stores isolated temporary Chrome profiles under `/space/.chrome-data`. A new runtime receives a fresh profile and rebuilds its client index; profiles are removed on Reset, permission revocation, or server shutdown. Administrative Stop retains the profile for reuse within the current server lifetime.
 
-The base Docker image (`ghcr.io/silverbulletmd/silverbullet`) does **not** include a browser and is smaller.
+Use a `-slim` tag such as `latest-slim` if you do not need the Runtime API and want a smaller image without Chromium. The old `-runtime-api` tags remain available as compatibility aliases for the default image.
 
 # Endpoints
 
@@ -69,6 +69,12 @@ return pages' \
 # => {"result":[{"name":"index"},{"name":"Projects"},{"name":"TODO"}]}
 ```
 
+## Evaluate console input
+
+`POST /.runtime/lua_script` with `X-SilverBullet-Lua-Mode: repl` parses input as an expression first, then as a statement block if expression parsing fails. It executes the chosen form exactly once; execution errors do not trigger a second attempt. Scope and result conversion follow the script endpoint, including returning only the first Lua return value.
+
+Before sending this header, check the authenticated `GET /.runtime/logs?limit=1` response for `X-SilverBullet-Lua-Modes: repl`. Older servers ignore unknown request headers, so callers must check support before submitting input. Plain script requests without the mode header retain their existing behavior.
+
 ## Console logs
 `GET /.runtime/logs`
 
@@ -77,7 +83,8 @@ Returns recent console log entries from the headless browser.
 | Query parameter | Description |
 |---|---|
 | `limit` | Maximum number of entries to return (default: 100, server retains up to 1000) |
-| `since` | Unix millisecond timestamp — only return entries newer than this |
+| `since` | Unix millisecond timestamp — only return entries newer than this; takes precedence over `cursor` |
+| `cursor` | Opaque cursor returned by a prior response; receives subsequent entries without timestamp collisions |
 
 ```bash
 curl http://localhost:3000/.runtime/logs?limit=5
@@ -92,6 +99,8 @@ curl http://localhost:3000/.runtime/logs?limit=5
   ]
 }
 ```
+
+Responses also include `cursor` (an opaque string, or null when unavailable) and `dropped` (boolean). Pass the cursor back on subsequent requests without `since`. A cursor identifies both the runtime generation and log position. `dropped: true` means the runtime changed or entries are no longer available; the response contains the available recent entries and a fresh cursor. Older servers may omit both fields. The CLI console uses cursor polling when available and overlapping snapshots for older servers.
 
 Each entry has:
 * `level` — one of `log`, `info`, `warn`, `error`, `debug`

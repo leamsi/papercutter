@@ -96,26 +96,19 @@ make test
 ```
 
 ### Docker
-Multi-arch (amd64 + arm64 + arm/v7) Docker images are published to Docker Hub
-and the GitHub Container Registry. The **edge** channel is rebuilt on every push
-to `main`; **stable** images come from git tags:
+Multi-arch (amd64 + arm64 + arm/v7) Docker images are published to Docker Hub and the GitHub Container Registry. The **edge** channel is rebuilt on every push to `main`; **stable** images come from git tags:
 
-* `zefhemel/silverbullet:v2` (edge) / `:latest` + `:X.Y.Z` (stable) — the server
-  (Alpine, static musl binary)
-* `…:v2-runtime-api` (edge) / `:latest-runtime-api` + `:X.Y.Z-runtime-api`
-  (stable) — the same, plus Chromium for the server-side Lua runtime
-  (`/.runtime/*`)
+* `zefhemel/silverbullet:edge` (also `:v2`) / `:latest` + `:X.Y.Z` — the server with Chromium for the server-side Lua runtime (`/.runtime/*`). The old `-runtime-api` tags remain as compatibility aliases.
+* `…:edge-slim` / `:latest-slim` + `:X.Y.Z-slim` — the smaller server image without Chromium or the runtime API.
 
-Both images are mirrored to `ghcr.io/silverbulletmd/silverbullet` under the same
-tags.
+There is no `:v2-slim` alias; deployments moving from the legacy `:v2` image to slim should use `:edge-slim`.
+
+Both images are mirrored to `ghcr.io/silverbulletmd/silverbullet` under the same tags.
 
 To run one:
 
 ```shell
-docker run -p 3000:3000 -v <PATH-TO-YOUR-SPACE>:/space zefhemel/silverbullet:v2
+docker run -p 3000:3000 -v <PATH-TO-YOUR-SPACE>:/space zefhemel/silverbullet:edge
 ```
 
-These are built by `.github/workflows/ci.yml`, which cross-compiles the binary
-natively (`cargo build --target` with installed musl cross-toolchains) and copies
-it into a small Alpine image.
-
+These are built by `.github/workflows/ci.yml`, which cross-compiles the binary natively (`cargo build --target` with installed musl cross-toolchains) and copies it into a small Alpine image.
