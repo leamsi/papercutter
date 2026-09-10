@@ -73,18 +73,7 @@ echo 'local x = 40; return x + 2' | sb lua-script
 ```
 
 ## `repl`
-Open an interactive Lua REPL with multi-line support.
-
-```bash
-sb repl
-```
-
-Special commands inside the REPL:
-* `.exit` or `Ctrl-D` — exit
-* `.script` / `.end` — enter/exit multi-line script mode
-* `.timeout <seconds>` — change request timeout
-
-The REPL automatically detects incomplete expressions (unclosed brackets, blocks) and waits for more input.
+Open a full-screen Lua console (Experimental)
 
 ## `logs`
 Show console logs from the headless browser client.

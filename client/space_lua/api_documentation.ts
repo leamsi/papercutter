@@ -11,7 +11,7 @@ function compareNames(a: LuaFunctionInfo, b: LuaFunctionInfo): number {
   return aName < bName ? -1 : aName > bName ? 1 : 0;
 }
 
-function signature(info: LuaFunctionInfo): string {
+export function functionSignature(info: LuaFunctionInfo): string {
   const parameters = (info.parameters ?? [])
     .map((parameter) => `${parameter.name}${parameter.optional ? "?" : ""}`)
     .join(", ");
@@ -47,7 +47,7 @@ function renderFunction(
   const lines = [`## ${info.name ?? "<anonymous>"}`, ""];
   const signatures = info.signatures?.length
     ? info.signatures
-    : [signature(info)];
+    : [functionSignature(info)];
   for (const value of signatures) lines.push(`\`${value}\``);
 
   if (info.deprecated) {

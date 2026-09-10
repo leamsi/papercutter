@@ -1,9 +1,3 @@
-import { waitForLogout } from "./logout_state.ts";
-import {
-  logoutInProgress,
-  registerLogoutParticipant,
-  saveCurrentEditor,
-} from "./logout.ts";
 import type {
   CompletionContext,
   CompletionResult,
@@ -31,6 +25,7 @@ import type {
   EnrichedClickEvent,
   SlashCompletions,
 } from "@silverbulletmd/silverbullet/type/client";
+import type { IndexQueueBody } from "@silverbulletmd/silverbullet/type/datastore";
 import type {
   FileMeta,
   PageMeta,
@@ -57,9 +52,16 @@ import type { KvPrimitives } from "./data/kv_primitives.ts";
 import { DataStoreMQ } from "./data/mq.datastore.ts";
 import { ObjectIndex } from "./data/object_index.ts";
 import { MainUI } from "./editor_ui.tsx";
+import { setGitSyncStreamConnected } from "./git_sync_status.ts";
 import { isValidEditor } from "./lib/command_filters.ts";
 import { isMobileDevice } from "./lib/mobile.ts";
 import { timedSpan } from "./lib/perf.ts";
+import {
+  logoutInProgress,
+  registerLogoutParticipant,
+  saveCurrentEditor,
+} from "./logout.ts";
+import { waitForLogout } from "./logout_state.ts";
 import { open as openNavigatorView } from "./navigator/navigator.ts";
 import {
   REVISIONS_CHANGED_EVENT,
@@ -67,8 +69,6 @@ import {
   SYNC_ERROR,
   SYNC_PAUSED,
 } from "./navigator/views/revisions.ts";
-import { setGitSyncStreamConnected } from "./git_sync_status.ts";
-import { shouldFlashSyncNotification } from "./sync_notification.ts";
 import { PathPageNavigator, parseRefFromURI } from "./navigator.ts";
 import { EventHook } from "./plugos/hooks/event.ts";
 import {
@@ -76,13 +76,14 @@ import {
   type RealtimeFsEventOrigin,
 } from "./realtime_events.ts";
 import { Space } from "./space.ts";
+import { LuaBudgetStopped } from "./space_lua/budget.ts";
 import { evalStatement } from "./space_lua/eval.ts";
 import {
   parseExpressionString,
   parseBlock as parseLua,
 } from "./space_lua/parse.ts";
 import type { LuaCollectionQuery } from "./space_lua/query_collection.ts";
-import { LuaBudgetStopped } from "./space_lua/budget.ts";
+import { evalLuaRepl } from "./space_lua/repl.ts";
 import {
   LuaEnv,
   LuaRuntimeError,
@@ -97,8 +98,8 @@ import {
   type ChangedFile,
   EventedSpacePrimitives,
 } from "./spaces/evented_space_primitives.ts";
-import type { IndexQueueBody } from "@silverbulletmd/silverbullet/type/datastore";
 import { HttpSpacePrimitives } from "./spaces/http_space_primitives.ts";
+import { shouldFlashSyncNotification } from "./sync_notification.ts";
 import type { Command, PaletteCommand } from "./types/command.ts";
 import type {
   BootConfig,
@@ -138,6 +139,7 @@ export type SBRuntime = {
   ready?: boolean;
   evalLua?: (expr: string) => Promise<unknown>;
   evalLuaScript?: (script: string) => Promise<unknown>;
+  evalLuaRepl?: (code: string) => Promise<unknown>;
 };
 
 declare global {
@@ -783,6 +785,8 @@ export class Client {
     globalThis.sbRuntime.evalLua = (expr: string) =>
       evalLuaCode(`return ${expr}`);
     globalThis.sbRuntime.evalLuaScript = evalLuaCode;
+    globalThis.sbRuntime.evalLuaRepl = (code: string) =>
+      evalLuaRepl(code, spaceLuaEnv.env);
 
     // Signal readiness after widgets are fully ready (index complete +
     // editor state rebuild settled). Waiting on the widget-ready
@@ -1508,7 +1512,8 @@ export class Client {
   public async postServiceWorkerMessage(message: ServiceWorkerTargetMessage) {
     const registration = await navigator.serviceWorker.getRegistration();
     if (!registration?.active) {
-      console.warn("No active service worker, skipping message:", message.type);
+      // This causes too much noise
+      // console.warn("No active service worker, skipping message:", message.type);
       return;
     }
     registration.active.postMessage(message);
