@@ -6,7 +6,7 @@ references:
 SilverBullet is partially configured via environment variables. This page gives a comprehensive overview of all configuration options. You can set these ad-hoc when running the SilverBullet server, or e.g. in your [[Install/Docker|docker-compose file]].
 
 > **note** Single-space vs. multi-space
-> The environment variables below configure a **single-space** server. A fresh install pointed at an empty folder instead runs the [[Features/Space Manager|setup wizard]] and stores per-space settings in `spaces.json` — the variables marked _single-space only_ below don’t apply there. Setting any of them (or passing `--single`) selects single-space mode. See [[Features/Space Manager#Boot modes]].
+> The environment variables below configure a **single-space** server. A fresh install pointed at an empty folder instead runs the [[Space Manager|setup wizard]] and stores per-space settings in `spaces.json` — the variables marked _single-space only_ below don’t apply there. Setting any of them (or passing `--single`) selects single-space mode. See [[Space Manager#Boot modes]].
 
 # General configuration
 
@@ -14,7 +14,7 @@ SilverBullet is partially configured via environment variables. This page gives 
 * `SB_SPACE_IGNORE`: Hide paths from SilverBullet using gitignore-style patterns, e.g. `SB_SPACE_IGNORE="IgnoreMe/*"`. The space folder's actual `.gitignore` file is not read.
 * `SB_HTTP_LOGGING`: Set to any value to enable HTTP logging
 * `SB_LOG_PUSH`: Set to any value to ask clients to push their logs to the server (for debugging purposes)
-* `SB_DISABLE_SERVICE_WORKER`: Set to any value to disable the client-side service worker for all clients. In this mode, [[Features/Sync]] is disabled (so your space is not copied into the browser) and the app will not function when offline. All loads and saves will go directly to the server. 
+* `SB_DISABLE_SERVICE_WORKER`: Set to any value to disable the client-side service worker for all clients. In this mode, [[Sync]] is disabled (so your space is not copied into the browser) and the app will not function when offline. All loads and saves will go directly to the server.
 * `SB_FS_WATCH`: Controls how the server detects files changed on disk by other programs, for the whole server instance. `auto` (default) watches the space folder natively and pushes changes to open clients, so an externally edited page updates in the editor within moments. `poll` scans for changes instead — use it when the space lives on a network mount (NFS/SMB) where writes from *other* machines produce no native file-system events. `off` disables watching entirely: clients fall back to checking for changes periodically, as they did before this existed.
 * `SB_FS_POLL_INTERVAL`: How often `SB_FS_WATCH=poll` scans, in whole seconds (default `30`). Only consulted in poll mode. Each scan re-checks every file in the space, so a short interval is expensive on a large space or a network mount; lower it only if you need external edits picked up faster than the default. Values that are not a positive whole number are ignored with a warning.
 
@@ -26,10 +26,10 @@ SilverBullet is partially configured via environment variables. This page gives 
 
 # Authentication
 > **note** Note
-> The **credentials** here configure a **single-space** server. In multi-space mode, accounts live in `users.json` and access is per space, so setting `SB_USER` alongside a `spaces.json` is an error — see [[Features/Authentication]]. The lockout and session-duration variables apply in **both** modes: in multi-space mode they are server-wide, matching the session, which spans every space.
+> The **credentials** here configure a **single-space** server. In multi-space mode, accounts live in `users.json` and access is per space, so setting `SB_USER` alongside a `spaces.json` is an error — see [[Authentication]]. The lockout and session-duration variables apply in **both** modes: in multi-space mode they are server-wide, matching the session, which spans every space.
 
 * `SB_USER` (single-space only): Sets single-user credentials, e.g. `SB_USER=pete:1234` allows you to login with username “pete” and password “1234”.
-* `SB_AUTH_TOKEN` (single-space only): Enables `Authorization: Bearer <token>` style authentication on the [[HTTP API]]. In multi-space mode this is replaced by per-account [[Features/Space Manager#API tokens|API tokens]].
+* `SB_AUTH_TOKEN` (single-space only): Enables `Authorization: Bearer <token>` style authentication on the [[HTTP API]]. In multi-space mode this is replaced by per-account [[Space Manager#API tokens|API tokens]].
 * `SB_LOCKOUT_LIMIT`: Specifies the number of failed login attempt before locking the user out (for a `SB_LOCKOUT_TIME` specified amount of seconds), defaults to `10`
 * `SB_LOCKOUT_TIME`: Specifies the amount of time (in seconds) a client will be blocked until attempting to log back in, defaults to `60`.
 * `SB_REMEMBER_ME_HOURS`: Sets the session duration in hours when "Remember me" is checked during login, defaults to 7 days. Sessions where "Remember me" was left unchecked always last one week.
@@ -38,12 +38,12 @@ SilverBullet is partially configured via environment variables. This page gives 
 * `SB_READ_ONLY`: If you want to run the SilverBullet client and server in read-only mode (you get the full SilverBullet client, but all edit functionality and commands are disabled), you can do this by setting this environment variable to a non-empty value. Upon the server start a full space index will happen, after which all write operations will be disabled.
 
 # Spaces and accounts
-Hosting more than one space is is configured through `spaces.json`, `users.json`, and the admin UI rather than environment variables — see [[Features/Space Manager]].
+Hosting more than one space is is configured through `spaces.json`, `users.json`, and the admin UI rather than environment variables — see [[Space Manager]].
 
 To force the classic single-space server on an empty folder, pass `--single` (or set any of the single-space `SB_*` variables above).
 
 # Runtime API
-* `SB_RUNTIME_API`: In single-instance mode, the [[Features/Runtime API]] is enabled when Chrome/Chromium is detected; set to `0` or `false` to disable. Multi-space mode ignores this variable and uses the **Server** tab’s runtime toggle and each space’s permissions. Runtime access requires Write access.
+* `SB_RUNTIME_API`: In single-instance mode, the [[Runtime API]] is enabled when Chrome/Chromium is detected; set to `0` or `false` to disable. Multi-space mode ignores this variable and uses the **Server** tab’s runtime toggle and each space’s permissions. Runtime access requires Write access.
 * `SB_CHROME_PATH`: Optional explicit path to the Chrome, Chromium, or headless-shell binary. Falls back to the `CHROMIUM_PATH` environment variable (pre-set in the default Docker image), then auto-detection, which prefers headless shell on `PATH`.
 * `SB_CHROME_SHOW`: Set to any non-empty value to run Chrome with a visible window instead of headless (useful for debugging). Requires full Chrome/Chromium; auto-detection skips headless shell in this mode.
 * `SB_CHROME_DATA_DIR`: Parent directory for isolated temporary Chrome profiles, defaulting to `.chrome-data` inside the server root. Each user and space runtime receives a fresh profile, removed on shutdown. Profiles are not reused across restarts.
@@ -51,11 +51,11 @@ To force the classic single-space server on an empty folder, pass `--single` (or
 
 # Security
 > **note** Note
-> These variables configure authentication for a **single-space** server. In [[Features/Space Manager|multi-space]] mode, these options are enabled at a per-space level from the UI
+> These variables configure authentication for a **single-space** server. In [[Space Manager|multi-space]] mode, these options are enabled at a per-space level from the UI
 
-See [[Security]] for the trust model behind these settings, and [[Deployment/Security Profiles]] for which combination fits your deployment.
+See [[Security]] for the trust model behind these settings, and [[Security Profiles]] for which combination fits your deployment.
 
-* `SB_SHELL_BACKEND`: Enable/disable running of shell commands from plugs, defaults to `local` (enabled), set to `off` to disable. It is only enabled when using a local folder for [[#Storage]]. Unlike the other variables in this section, this one still applies in [[Features/Space Manager|multi-space]] mode, where it acts as a server-wide kill switch: setting it to `off` disables shell commands for **every** space regardless of that space's own setting. It can only ever disable — it will not enable the shell for a space that has it turned off.
+* `SB_SHELL_BACKEND`: Enable/disable running of shell commands from plugs, defaults to `local` (enabled), set to `off` to disable. It is only enabled when using a local folder for [[#Storage]]. Unlike the other variables in this section, this one still applies in [[Space Manager|multi-space]] mode, where it acts as a server-wide kill switch: setting it to `off` disables shell commands for **every** space regardless of that space's own setting. It can only ever disable — it will not enable the shell for a space that has it turned off.
 * `SB_SHELL_WHITELIST`: Allow only a specific list of shell commands (just the first command name, not arguments). When not set, allows all shell commands. Example: `SB_SHELL_WHITELIST="git pandoc"`
 
 # Docker

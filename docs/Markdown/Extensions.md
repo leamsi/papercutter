@@ -5,10 +5,10 @@ references:
 ---
 In addition to supporting [[Markdown/Basics|markdown basics]] as standardized by [CommonMark](https://commonmark.org/), SilverBullet relies on the following extensions:
 
-* [[Concepts/Link]]
-* [[Concepts/Frontmatter]] and [[Concepts/Attribute]]
+* [[Link]]
+* [[Frontmatter]] and [[Attribute]]
 * [[Markdown/Fenced Code Block]]
-* [[Concepts/Transclusion]] syntax
+* [[Transclusions]] syntax
 * [[Markdown/Admonition]]
 * [[Markdown/Hashtags]]
 * [[Markdown/Anchor]]

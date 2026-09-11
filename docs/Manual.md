@@ -12,7 +12,7 @@ ${embed.youtube "https://www.youtube.com/watch?v=Of7zE0AVApc"}
 ${embed.youtube "https://www.youtube.com/watch?v=cH9cs8fowhY"}
 ${embed.youtube "https://youtu.be/qkLJ3viVq8I"}
 # Getting started
-Start with [[Install]], followed by [[Guides/Getting Started]]. These will walk through the basics.
+Start with [[Install]], followed by [[Getting Started]]. These will walk through the basics.
 
 # Guides
 Practical walkthroughs for common workflows:
@@ -20,78 +20,78 @@ ${query[[from g = index.pages("guide") select templates.pageItem(g)]]}
 
 # Installation and deployment
 * [[Install]]: Installation instructions for various setups
-* [[Features/Authentication]]: Securing your instance
+* [[Authentication]]: Securing your instance
 * [[Security]]: the trust model behind multi-space deployments
-* [[Deployment/Security Profiles]]: which deployment shape fits your situation
+* [[Security Profiles]]: which deployment shape fits your situation
 * [[TLS]]: the part where we walk through options to expose SilverBullet via HTTPS.
 * [[Troubleshooting]]: When things don't go as planned
-* [[Features/CLI]]: Command-line interface for interacting with SilverBullet
+* [[CLI]]: Command-line interface for interacting with SilverBullet
 
 For additional guides, check out [our community guides](https://community.silverbullet.md/c/guides/6).
 
 # Core Concepts
 These are the core concepts used in SilverBullet (also see the [[Glossary]]):
-* [[Concepts/Space]]
-* [[Concepts/Page]] (and [[Concepts/Meta Page]])
-  * [[Concepts/Frontmatter]]
-* [[Concepts/Link]]
-* [[Concepts/Document]]
-* [[Concepts/Folder]]
-* [[Concepts/Library]]
-* [[Features/Collaboration]]
-* [[Features/Revisions]]
+* [[Space]]
+* [[Page]] (and [[Meta Page]])
+  * [[Frontmatter]]
+* [[Link]]
+* [[Document]]
+* [[Folder]]
+* [[Library]]
+* [[Collaboration]]
+* [[Revisions]]
 
 # User interface
 SilverBullet’s UI is minimalist by design. Let’s look at the few UI elements and how to use them.
 
-* The [[Concepts/Top Bar]] contains:
-  * [[Features/Page Namer]]
-  * [[Concepts/Index Page]] (the home button)
-  * [[Features/Page Picker]]
-  * [[Features/Command Palette]]
-* The main [[Features/Editor]] component contains your currently selected page’s text
+* The [[Top Bar]] contains:
+  * [[Page Namer]]
+  * [[Index Page]] (the home button)
+  * [[Page Picker]]
+  * [[Command Palette]]
+* The main [[Editor]] component contains your currently selected page’s text
 
 # Editing and Formatting
-* Content is written using [[Markdown]] and rendered using [[Features/Live Preview]]
+* Content is written using [[Markdown]] and rendered using [[Live Preview]]
   * Markdown [[Markdown/Basics]]
   * Markdown [[Markdown/Extensions]]
-    * [[Concepts/Link]]
+    * [[Link]]
     * [[Markdown/Admonition]]
-    * [[Concepts/Task]]
+    * [[Task]]
     * [[Markdown/Syntax Highlighting]]
     * [[Markdown/Comment]]
     * [[Markdown/Fenced Code Block]]
-* [[Concepts/Slash Command]]
-* [[Concepts/Outline]]
-* [[Features/Completion]]
+* [[Slash Command]]
+* [[Outlines]]
+* [[Completion]]
 
 # Navigation
 The main ways to roam your space, beside following page links, are:
 
-* [[Features/Page Picker]]
-* [[Features/Meta Picker]]
-* [[Features/Tag Picker]]
-* [[Features/Full Text Search]]
+* [[Page Picker]]
+* [[Meta Picker]]
+* [[Tag Picker]]
+* [[Full Text Search]]
 
 # Advanced topics
 * [[Object]]
-  * [[Concepts/Frontmatter]]
-  * [[Concepts/Attribute]]
+  * [[Frontmatter]]
+  * [[Attribute]]
 * [[Space Lua]]
   * [[Space Lua/Standard Library]]
   * [[Space Lua/Integrated Query]]
   * [[Space Lua/DOM]]
   * [[Space Lua/JavaScript Interop]]
-* [[Concepts/Template]]
-* [[Features/Virtual Pages]]
-* [[Concepts/Library]]
+* [[Template]]
+* [[Virtual Pages]]
+* [[Library]]
 * [[Troubleshooting]]
 
 # Customization
-* [[Features/Configuration Manager]]
-* [[Concepts/Keyboard Shortcuts]]
-* [[Concepts/Page Decoration]]
-* [[Concepts/Space Style]]
+* [[Configuration Manager]]
+* [[Keyboard Shortcuts]]
+* [[Page Decorations]]
+* [[Space Style]]
 
 # Extending SilverBullet
 SilverBullet’s implementation is built on three things:
@@ -100,7 +100,7 @@ SilverBullet’s implementation is built on three things:
 * A lot of core functionality is implemented in [[Plugs]].
 * An increasing amount of additional functionality is now being implemented in “native” [[Space Lua]].
 
-See [[Features/Extensions]] for an overview.
+See [[Extensions]] for an overview.
 
 # Contributing
 SilverBullet is free and open-source software. You can contribute to

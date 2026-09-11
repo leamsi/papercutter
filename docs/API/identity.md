@@ -5,7 +5,7 @@ references:
 - plugs/index/identity.ts
 ---
 
-APIs to define [[Concepts/Identity|identities]] — the names you can address with `@name`, whether you're addressing them (see [[Concepts/Recipient]]) or crediting them (see [[Concepts/Authorship]]).
+APIs to define [[Identity|identities]] — the names you can address with `@name`, whether you're addressing them (see [[Recipient]]) or crediting them (see [[Authorship]]).
 
 # API
 ## identity.define(def)
@@ -28,4 +28,4 @@ identity.define {
 }
 ```
 
-Both now complete after `@`, and mentions of them are collected in the [[Concepts/Recipient#The Mention Inbox|Mention Inbox]] like any other.
+Both now complete after `@`, and mentions of them are collected in the [[Recipient#The Mention Inbox|Mention Inbox]] like any other.

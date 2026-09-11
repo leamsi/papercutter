@@ -6,7 +6,7 @@ references:
 - client/codemirror/html_element.ts
 ---
 
-SilverBullet supports embedding raw HTML tags inside your markdown — both **inline** (mid-paragraph, in headings, in table cells) and **block-level** (HTML on its own lines). As with other [[Features/Live Preview]] features, it is rendered live in the editor when the cursor is outside the tag, and falls back to raw source when the cursor enters it. Markdown inside the HTML tag is parsed and rendered too.
+SilverBullet supports embedding raw HTML tags inside your markdown — both **inline** (mid-paragraph, in headings, in table cells) and **block-level** (HTML on its own lines). As with other [[Live Preview]] features, it is rendered live in the editor when the cursor is outside the tag, and falls back to raw source when the cursor enters it. Markdown inside the HTML tag is parsed and rendered too.
 
 This is a power-user feature, use it carefully. Rendered HTML is **sanitized** for safety: event-handler attributes (`onclick`, `onerror`, …), `<script>`, `<iframe>`, `<object>`, `<embed>` and `<base>` tags, and `javascript:`/`data:` URLs in link/source attributes are stripped before rendering.
 
@@ -36,4 +36,4 @@ Inner **markdown** with [[Markdown]] links works too.
 * Unmatched tags (e.g. an `<u>` with no closing `</u>`) render as literal text.
 * Block-level HTML blocks terminate at the first blank line (per CommonMark). If you want a `<details>` (or any structured HTML block) to wrap markdown content, keep the entire block contiguous — no blank lines between the opening and closing tag.
 * HTML is **sanitized** before rendering: event-handler attributes, `<script>`, `<iframe>`, `<object>`, `<embed>` and `<base>` tags, and `javascript:`/`data:` link schemes are stripped.
-* [[Concepts/Space Style]] can be used to style these HTML tags
+* [[Space Style]] can be used to style these HTML tags

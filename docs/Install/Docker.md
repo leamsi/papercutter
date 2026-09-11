@@ -21,7 +21,7 @@ Every release version of SilverBullet is tagged with its version number, but the
 * `:latest` always points to the latest _release_.
 * `:edge` always points to the latest _edge build_ (the last commit to `main`). (The legacy `:v2` tag points to the same image.)
 
-The default image includes Chromium and enables the [[Features/Runtime API]]. For the smaller image without Chromium, use `:edge-slim` instead of `:edge` or legacy `:v2`, `:latest-slim` instead of `:latest`, or append `-slim` to a version such as `:2.11.0-slim`.
+The default image includes Chromium and enables the [[Runtime API]]. For the smaller image without Chromium, use `:edge-slim` instead of `:edge` or legacy `:v2`, `:latest-slim` instead of `:latest`, or append `-slim` to a version such as `:2.11.0-slim`.
 
 # Container
 * The container binds to port `3000`, so be sure to port-map that, e.g. via `-p 3000:3000` (note: the first `3000` is the external port)

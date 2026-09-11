@@ -3,7 +3,7 @@ references:
 - client/markdown_parser/parser.ts
 - client/markdown_renderer/markdown_render.ts
 ---
-The idea of markdown is that you write plain text with some additional markup that even without further processing (like rendering it to HTML, or [[Features/Live Preview]]) you could just read and understand. It was inspired by conventions used in plain-text e-mails, before e-mail supported rich formatting.
+The idea of markdown is that you write plain text with some additional markup that even without further processing (like rendering it to HTML, or [[Live Preview]]) you could just read and understand. It was inspired by conventions used in plain-text e-mails, before e-mail supported rich formatting.
 
 # Basic markup
 To write markdown, you just write text. But then to emphasize something you can add `_underscores_` around a phrase to make look _italic_, or `**asterisks**` to make it **bold**. You can also use `~~tildes~~` for ~~strikethrough~~ and `==double equals==` for ==highlighting==.
@@ -38,7 +38,7 @@ When you click the checkbox, it will toggle its state and replace the ` ` inside
 * [TO DO] This task is still to be done
 
 # Headers
-Markdown supports various levels of headings, which generally are created by prefixing a line with one or more `#`. The more `#`‘s the deeper the header nesting. 
+Markdown supports various levels of headings, which generally are created by prefixing a line with one or more `#`. The more `#`‘s the deeper the header nesting.
 
 # Quotes
 You can use block quotes by prefixing lines with `>`:
