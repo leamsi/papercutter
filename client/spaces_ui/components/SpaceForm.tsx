@@ -114,7 +114,7 @@ export function SpaceForm({
     (initial?.shell.whitelist ?? []).join(" "),
   );
   const [revisions, setRevisions] = useState<RevisionsMode>(
-    initial?.revisions ?? "disabled",
+    initial?.revisions ?? "managed",
   );
   const [revisionsCommit, setRevisionsCommit] = useState<CommitTiming>(
     initial?.revisionsCommit ?? { quietSecs: 30, maxIntervalSecs: 300 },

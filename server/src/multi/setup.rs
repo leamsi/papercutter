@@ -196,16 +196,15 @@ pub fn run_setup(
         // Run after creation so canonicalization can resolve the full path.
         let folder_field = relativize_folder_field(root, &folder_field);
 
-        // Build a fresh SpaceConfig through Deserialize so every field
-        // (index_page, description, theme_color, shell, ...) picks up the
-        // same defaults a hand-typed spaces.json entry would get, rather
-        // than duplicating those defaults here.
+        // Build through Deserialize so shared fields retain the same defaults
+        // as hand-written config, then apply the new-space revisions policy.
         let mut cfg: SpaceConfig = serde_json::from_value(serde_json::json!({
             "name": first.name,
             "binding": binding,
         }))
         .map_err(|e| err("", format!("internal error building space config: {e}")))?;
         cfg.folder = folder_field;
+        cfg.revisions = silverbullet_server_common::RevisionsMode::Managed;
         cfg.normalize();
         debug_assert!(cfg.access() == SpaceAccess::None);
         debug_assert!(cfg.members.is_empty());
@@ -309,6 +308,11 @@ mod tests {
         assert!(matches!(&space.binding, Binding::Prefix { prefix } if prefix == "/"));
         assert_eq!(space.access(), SpaceAccess::None);
         assert!(space.members.is_empty());
+        assert!(!space.shell.enabled);
+        assert_eq!(
+            space.revisions,
+            silverbullet_server_common::RevisionsMode::Managed
+        );
 
         let folder = resolve_folder(dir.path(), id, &space.folder);
         assert_eq!(
