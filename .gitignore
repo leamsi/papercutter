@@ -31,7 +31,8 @@ playwright-report
 tmp
 .idea
 .opencode
-AGENTS.md
+# PaperCutter: AGENTS.md is tracked here (unlike upstream, which ignores it)
+# so the fork's development guide ships with the repo.
 
 # Rust workspace build artifacts (Cargo.lock is intentionally tracked — this
 # workspace produces binaries)
