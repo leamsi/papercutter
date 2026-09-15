@@ -58,7 +58,7 @@ build-for-local-docker:
 	rustup target add $(LOCAL_TRIPLE)
 	npm run build
 	cargo build --release -j $(CARGO_JOBS) -p silverbullet --target $(LOCAL_TRIPLE)
-	cp target/$(LOCAL_TRIPLE)/release/silverbullet $(LOCAL_DOCKER_BIN)
+	mv target/$(LOCAL_TRIPLE)/release/silverbullet $(LOCAL_DOCKER_BIN)
 
 # Build each Linux target once for both Docker binaries and release archives.
 build-linux-ci: build-for-docker
