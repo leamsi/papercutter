@@ -1,4 +1,4 @@
-.PHONY: build build-e2e build-for-docker build-linux-ci docker build-server-releases build-server-releases-macos build-server-releases-freebsd build-cli-releases-rust build-cli-releases-freebsd build-cli-releases-rust-macos clean check fmt test test-e2e test-e2e-all test-e2e-release test-e2e-oidc bench generate website install uninstall bundle build-rs build-rs-cli run-rs
+.PHONY: build build-e2e build-for-docker build-for-local-docker build-linux-ci docker build-server-releases build-server-releases-macos build-server-releases-freebsd build-cli-releases-rust build-cli-releases-freebsd build-cli-releases-rust-macos clean check fmt test test-e2e test-e2e-all test-e2e-release test-e2e-oidc bench generate website install uninstall bundle build-rs build-rs-cli run-rs
 
 build:
 	npm run build
@@ -34,6 +34,31 @@ build-for-docker:
 	cp target/x86_64-unknown-linux-musl/release/silverbullet silverbullet-amd64
 	cargo build --release -p silverbullet --target armv7-unknown-linux-musleabihf
 	cp target/armv7-unknown-linux-musleabihf/release/silverbullet silverbullet-arm
+
+# Build only the local machine's arch binary for a local `docker compose build`
+# (upstream's Dockerfile just copies `silverbullet-<arch>` into Alpine; the
+# multi-arch binaries normally come from CI). Needs the matching musl
+# cross-toolchain: on x86_64 install `musl-tools`, on aarch64 `gcc-aarch64-linux-gnu`.
+LOCAL_ARCH := $(shell uname -m)
+ifeq ($(LOCAL_ARCH),x86_64)
+LOCAL_TRIPLE := x86_64-unknown-linux-musl
+LOCAL_DOCKER_BIN := silverbullet-amd64
+else ifeq ($(LOCAL_ARCH),aarch64)
+LOCAL_TRIPLE := aarch64-unknown-linux-musl
+LOCAL_DOCKER_BIN := silverbullet-arm64
+else
+$(error unsupported local arch: $(LOCAL_ARCH) — extend build-for-local-docker in the Makefile)
+endif
+
+# On RAM-starved hosts parallel rustc jobs get OOM-killed (SIGKILL), so default
+# to a single cargo job; override with e.g. `make build-for-local-docker CARGO_JOBS=4`.
+CARGO_JOBS ?= 1
+
+build-for-local-docker:
+	rustup target add $(LOCAL_TRIPLE)
+	npm run build
+	cargo build --release -j $(CARGO_JOBS) -p silverbullet --target $(LOCAL_TRIPLE)
+	cp target/$(LOCAL_TRIPLE)/release/silverbullet $(LOCAL_DOCKER_BIN)
 
 # Build each Linux target once for both Docker binaries and release archives.
 build-linux-ci: build-for-docker
