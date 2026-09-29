@@ -233,7 +233,10 @@ fn text_attributes(repo: &Path, path: &str) -> Option<usize> {
     .ok()?;
     let parts: Vec<_> = out.split(|b| *b == 0).collect();
     let mut size = 7;
-    for triple in parts.chunks_exact(3) {
+    // PaperCutter: `as_chunks` instead of `chunks_exact` — clippy 1.98
+    // (chunks_exact_to_as_chunks); revert to upstream's form at the next sync
+    // if upstream has adopted it.
+    for triple in parts.as_chunks::<3>().0 {
         let name = std::str::from_utf8(triple[1]).ok()?;
         let value = std::str::from_utf8(triple[2]).ok()?;
         match name {
@@ -274,9 +277,9 @@ fn complete_markers(body: &str, size: usize) -> bool {
 
 fn marker_remains(body: &str) -> bool {
     body.lines().any(|line| {
-        [b'<', b'=', b'>', b'|']
-            .iter()
-            .any(|b| marker(line.trim_start(), 3, *b))
+        // PaperCutter: byte str instead of a byte-char array — clippy 1.98
+        // (byte_char_slices); same as upstream's intent, differently spelled.
+        b"<=>|".iter().any(|b| marker(line.trim_start(), 3, *b))
     })
 }
 
