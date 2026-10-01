@@ -29,5 +29,10 @@ ADD ./docker-entrypoint.sh /docker-entrypoint.sh
 COPY silverbullet-${TARGETARCH} /silverbullet
 RUN chmod +x /silverbullet /docker-entrypoint.sh
 
+# PaperCutter: Add chromium for the chromium-runtime-api
+RUN apk add --no-cache chromium-headless-shell
+# The Rust server's Chrome discovery reads CHROMIUM_PATH (see ChromeConfig).
+ENV CHROMIUM_PATH=/usr/bin/chromium-headless-shell
+
 # Extra args (e.g. `--single`) are passed to the server. The data folder can only be set via SB_FOLDER.
 ENTRYPOINT ["/sbin/tini", "--", "/docker-entrypoint.sh"]
