@@ -10,14 +10,13 @@ import { RESERVED_KEYS } from "./lua_views.ts";
 import type { NavigatorHook, Row, SourceCtx, ViewMeta } from "./types.ts";
 import { anchorPicker } from "./views/anchors.ts";
 import { commandPalette } from "./views/commands.ts";
+import { pagePicker } from "./views/pages.ts";
 import {
-  pageHistoryView,
-  spaceLogView,
   gitConflictsView,
   gitStatusView,
+  pageHistoryView,
+  spaceLogView,
 } from "./views/revisions.ts";
-import { pagePicker } from "./views/pages.ts";
-import { headerPicker } from "./views/headers.ts";
 import { spaceTreeView } from "./views/space_tree.ts";
 import { tagPicker } from "./views/tags.ts";
 import type { BuiltinView } from "./views/types.ts";
@@ -32,7 +31,9 @@ async function isReadOnly(): Promise<boolean> {
 const views: Record<string, BuiltinView<any>> = {
   "std.pages": pagePicker,
   "std.anchors": anchorPicker,
-  "std.headers": headerPicker,
+  // PaperCutter: "std.headers" is deliberately absent -- the header picker
+  // is a Space Lua view now (libraries/Library/Std/Widgets/Header Picker.md),
+  // like "std.toc".
   "std.tags": tagPicker,
   "std.commands": commandPalette,
   "std.spaceTree": spaceTreeView,

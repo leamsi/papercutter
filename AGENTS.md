@@ -30,7 +30,8 @@ upstream:
    of every markdown header across the space, ordered by page recency (the
    current page's headers first, then recently opened pages, then by header
    position). Headers of meta/template pages and pages hidden from
-   navigation are excluded.
+   navigation are excluded. Implemented in **pure Space Lua** as a
+   `view.define` (see §4) — it docks like any other view.
 3. **Header autocomplete** — typing `[[` or `[..](` offers headers from
    across the space (like ZK's LSP), not just page names.
 
@@ -77,18 +78,21 @@ with Preact. The old Go server and `go.mod` are gone — any guide mentioning
     abstraction: any collection of rows shown as a fuzzy-filterable list or
     tree, in a modal or docked panel. Builtin views are registered in
     `client/navigator/builtins.ts` under reserved names (`std.pages`,
-    `std.anchors`, `std.headers` ← PaperCutter, `std.tags`, `std.commands`,
+    `std.anchors`, `std.tags`, `std.commands`,
     `std.spaceTree`, `std.pageHistory`, `std.spaceLog`, `std.gitConflicts`,
-    `std.gitStatus`). Spaces define their own views in Space Lua via
-    `view.define` (they may not shadow builtin names). `std.toc` (Table of
-    Contents, current page only) is a Lua view in
-    `libraries/Library/Std/Widgets/Widgets.md`, *not* a builtin.
+    `std.gitStatus`). `std.toc` (Table of Contents) and `std.headers`
+    (PaperCutter's Header picker) are *not* built-ins: they are Space Lua
+    views defined in `libraries/Library/Std/Widgets/`. Spaces define their
+    own views in Space Lua via `view.define` (they may not shadow builtin
+    names).
   - A `BuiltinView` (see `client/navigator/views/types.ts`) has `meta`
     (`baseMeta()` supplies defaults), optional `segments`, a `row`
     presentation (`primary`/`description`/`icon`/…), an async `source(ctx)`
     that queries the index, and `onSelect`/`onCreate`/`keymap`. Views fetch
     their own data — there are no `viewState.allDocuments`-style caches
-    anymore.
+    anymore. Built-in TS views are only worth it for core pickers; anything
+    richer (like `std.toc` and PaperCutter's `std.headers`) is a **Space Lua**
+    `view.define` — see `docs/API/view.md` and §5.
   - Picker UX conventions: `refreshOn: INDEX_REFRESH_EVENTS` +
     `refreshOnOpen: true`; `filterFields` keeps the host page matchable;
     Feather icons, kebab-case (`"hash"`, `"anchor"`, `"file-text"`); the page
@@ -141,11 +145,11 @@ These are the files upstream changes will collide with. `git grep -n
 | `plug-api/lib/ref.test.ts` | Fork expectations merged in (`foo.md.md`, `foo.bookmark.md`, `folder/nested.page.md` accepted; `" .foo"` → `" .foo.md"`). |
 | `plugs/editor/complete.ts` | `allHeaders` query + header options appended in `pageComplete()`; wikilink target `written(page)#Header|Header`, markdown-link `<path#Header>` for spaced targets, `recencyToBoost()` by host page. |
 | `plugs/editor/complete.test.ts` | `pageComplete header completions` describe-block (3 tests). |
-| `client/navigator/views/headers.ts` | `std.headers` builtin view (source/rows/onSelect). |
-| `client/navigator/views/headers.test.ts` | 6 tests for the view (mocked syscalls). |
-| `client/navigator/builtins.ts` | Registers `"std.headers": headerPicker`. |
-| `client/editor_commands.ts` | `Navigate: Header Picker` command, `Ctrl-Alt-h`, menu `navigate/2_picker`. |
-| `docs/Navigator.md` | One bullet documenting the Header picker. |
+| `libraries/Library/Std/Widgets/Header Picker.md` | The whole Header picker as a Space Lua `view.define` (`std.headers`): source/recency sort, filter fields, command + `Ctrl-Alt-h` + menu, docks. |
+| `client/navigator/views/headers.test.ts` | 7 tests that eval that page's Space Lua and drive it through the real view registry (rows/select hooks, command chrome, dock meta). |
+| `client/navigator/builtins.ts` | A comment only: `std.headers` is deliberately *not* registered here (it is the Space Lua view). |
+| `client/editor_commands.ts` | A comment only: the `Navigate: Header Picker` command comes from the view's own `view.define`. |
+| `docs/View.md` | One bullet documenting the Header picker. |
 | `README.md` | PaperCutter block at the top (features + TODO), badges removed. |
 | `.gitignore` | `AGENTS.md` un-ignored so this guide is tracked. |
 | `client/reducer.ts` | `update-page-list` meta matching also matches a name equal to its verbatim path: `normalizePath()` appends `.md` to unknown dot-suffixes, so documents named `notes.v2` would never match their meta otherwise. |
@@ -197,12 +201,19 @@ line) and `make check` enforces it.
   `(globalThis as any).syscall("index.indexObjects", pageName, [obj])`. See
   `plugs/editor/complete.test.ts`.
 - Navigator views: `vi.mock("@silverbulletmd/silverbullet/syscalls", ...)`
-  with mock objects declared at top level, then **dynamically import the
-  module under test after the mocks** — `const { headerPicker } = await
-  import("./headers.ts")`. A static `import` is hoisted above the mock
-  consts and blows up with "Cannot access 'index' before initialization".
-  See `client/navigator/views/headers.test.ts` and
+  with mock objects declared at top level (wrap them in `vi.hoisted()` if
+  the static import graph touches the mocked module before the consts
+  initialize), then **dynamically import the module under test after the
+  mocks** — `const { headerPicker } = await import("./headers.ts")`. A static
+  `import` is hoisted above the mock consts and blows up with "Cannot access
+  'index' before initialization".
+  See `client/navigator/registry.test.ts` and
   `client/navigator/builtins.test.ts` for the house style.
+- Space Lua in a library page: `client/navigator/views/headers.test.ts` and
+  `client/capture/quick_note_lua.test.ts` eval the page's real `space-lua`
+  code (`extractSpaceLuaFromPageText` + `parseBlock` + `evalStatement`)
+  against stubbed `view`/`editor`/`index` namespaces, then drive the result
+  (e.g. through `registry.handle`) — the shipped Lua is tested, not a copy.
 - e2e (Playwright) lives in `e2e/`; needs a full build (`make test-e2e`).
   Heavy — usually skip for fork work; unit tests + `make check` catch
   nearly everything.
@@ -213,6 +224,12 @@ line) and `make check` enforces it.
 - A picker/view change → its own file under `client/navigator/views/`,
   registered in `builtins.ts`, opened via a command (`openCommand(name)` from
   `client/navigator/navigator.ts` or `client.openNavigatorView(name)`).
+  **Or, better, pure Space Lua**: a `view.define` in a `#meta` library page
+  (the pattern of `std.toc` in `libraries/Library/Std/Widgets/Widgets.md` and
+  the fork's `Header Picker.md` there). It gets a command, key binding, menu
+  entry, and dock menu for free. If a Lua view must replace a built-in TS
+  view, remove the built-in first: `view.define` refuses builtin names
+  (`registry.ts`).
 - Data for a picker comes from the index: add an object type in
   `plugs/index/` (see `header.ts` as the template) and query it with
   `index.queryLuaObjects(tag, query)`.
@@ -303,6 +320,13 @@ test cases (re-expressed against the new view's `source()`/`onSelect()`).
 The result reads like it was written for the new architecture — that's the
 goal.
 
+The same rule applies when upstream migrates a feature *down* into Space
+Lua: when `std.toc` became a `view.define`, the fork's TS-builtin header
+picker was re-implemented as Space Lua
+(`libraries/Library/Std/Widgets/Header Picker.md`) instead of kept as
+fork-parallel TypeScript — less delta, and it inherits docking, refresh and
+the dock menu for free.
+
 ## 7. Environment gotchas & known (non-)failures
 
 - **Node version**: repo pins **24.13.0**. On Node ≥25,
@@ -326,10 +350,22 @@ goal.
 - **Rust toolchain**: `rust-toolchain.toml` pins `stable`; rustup
   auto-installs but may choke on removed components (`rls-preview`) —
   `rustup component remove --toolchain stable rls-preview` and retry.
-- **Stale `client_bundle/`**: the smoke test
-  (`bin/silverbullet/tests/smoke.rs`) fails with "unresolved placeholder in
-  shell" if the served bundle predates the current client. `npm run build`
-  fixes it.
+- **The release binary EMBEDS the client bundle, it does not serve it from
+  disk**: `bin/silverbullet/src/embed.rs` rust-embeds `client_bundle/client`
+  *and* `client_bundle/base_fs` (the whole Library) at compile time. A browser
+  smoke test after client-side or `libraries/` changes therefore needs
+  `npm run build` **and** `make build-rs`, then a server restart — rebuilding
+  the bundle alone changes nothing the browser sees. (The smoke test
+  `bin/silverbullet/tests/smoke.rs` failing with "unresolved placeholder in
+  shell" is the same trap caught by a test.)
+- **Stale service worker when browser-testing**: the client installs a
+  service worker that caches `/.client/client.js`, so after rebuilding the
+  binary the browser may keep serving the *old* app — which then behaves
+  like your port is broken (old built-in views, no dock menu, old commands).
+  Unregister the SW and clear its cache first
+  (`navigator.serviceWorker.getRegistrations()` + `caches.keys()` from the
+  console, or use a fresh browser profile), then reload. Also: `agent-browser`
+  needs `--args "--no-sandbox"` in this environment.
 - **Disk space**: a full `cargo test` run compiles the whole workspace;
   don't run it inside a second worktree without cleaning `target/` (they're
   ~GBs each, not shared). `target/` alone reached ~20G after one sync. A
@@ -338,8 +374,11 @@ goal.
   environment artifact, not code. Deleting `target/debug/incremental` (~5G)
   and `npm cache clean --force` (~4G) brought enough headroom back.
 - Untracked local noise (`PLAN.md`, `REVIEW.md`, `test_space/`,
-  `.bg-shell/`, `.gsd/`) is yours; biome will flag `.bg-shell/manifest.json`
-  in `fmt:check`. Harmless.
+  `.bg-shell/`, `.gsd/`, `public_version.ts`) is yours; biome will flag
+  `.bg-shell/manifest.json` and `public_version.ts` in `fmt:check`.
+  Harmless. `client/external_merge.test.ts` (upstream, unmodified) also
+  trips two pre-existing `lint/style/useTemplate` infos — pre-existing
+  upstream debt with our biome version, not something the fork broke.
 
 ## 8. Command cheat sheet
 

@@ -13,6 +13,8 @@ Things changed so far:
       captures and file uploads keep working
 * [*] Make search work for markdown titles and subtitles as well as file names
     * added a new Header picker that loads file headers (using in-file order).
+      It is a pure Space Lua view (`Library/Std/Widgets/Header Picker.md`), so
+      it docks like the Table of Contents (sidebar, bottom panel, page dock).
     * Can also be used to navigate the local page
 * [*] Make link autocomplete complete markdown titles and subtitles
     * `[[` and `[..](` auto complete's now include Markdown headers (like
